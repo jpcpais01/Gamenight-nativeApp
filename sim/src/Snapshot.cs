@@ -41,6 +41,7 @@ public sealed class MatchSnapshot
     public readonly Role[] Role = new Role[N];
     public readonly sbyte[] Foot = new sbyte[N];
     public readonly float[] Height = new float[N], Build = new float[N];
+    /// <summary>Skin and hair: indices into TeamData.SkinTones / HairColors (0 if a line-up brings its own colour).</summary>
     public readonly byte[] Skin = new byte[N], Hair = new byte[N], HairStyle = new byte[N];
 
     // ---- ball
@@ -192,8 +193,8 @@ public sealed partial class Match
             s.Foot[i] = (sbyte)p.Foot;
             s.Height[i] = (float)p.Look.Height;
             s.Build[i] = (float)p.Look.Build;
-            s.Skin[i] = (byte)p.Look.Skin;
-            s.Hair[i] = (byte)p.Look.Hair;
+            s.Skin[i] = (byte)Math.Max(0, Array.IndexOf(TeamData.SkinTones, p.Look.Skin));
+            s.Hair[i] = (byte)Math.Max(0, Array.IndexOf(TeamData.HairColors, p.Look.Hair));
             s.HairStyle[i] = (byte)p.Look.HairStyle;
         }
         var b = Ball;
