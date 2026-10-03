@@ -1,0 +1,145 @@
+# Builds a signed release APK on every push to main and publishes it as a GitHub Release.
+# The newest one is always at:
+#   https://github.com/jpcpais01/Gamenight-nativeApp/releases/latest/download/GameNight.apk
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.7.2
+  GODOT_TAG: 4.7.2-stable
+  GODOT_TEMPLATES: 4.7.2.stable.mono
+
+jobs:
+  apk:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # Godot's C# template builds Android as net9.0 and the editor tools as net8.0.
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            9.0.x
+
+      - name: Cache Godot and its Android templates
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_TAG }}-mono-android
+
+      - name: Download Godot (.NET) and the Android export templates
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot && cd ~/godot
+          base=https://github.com/godotengine/godot/releases/download/$GODOT_TAG
+          curl -sSL -o editor.zip "$base/Godot_v${GODOT_TAG}_mono_linux_x86_64.zip"
+          unzip -q editor.zip && rm editor.zip
+          curl -sSL -o templates.tpz "$base/Godot_v${GODOT_TAG}_mono_export_templates.tpz"
+          # Only the Android templates are needed (the full set is 1.2 GB).
+          mkdir templates
+          unzip -q -j templates.tpz 'templates/android_*' 'templates/version.txt' -d templates
+          rm templates.tpz
+
+      - name: Install Godot
+        run: |
+          echo "GODOT=$(ls ~/godot/Godot_v${GODOT_TAG}_mono_linux_x86_64/Godot_v${GODOT_TAG}_mono_linux.x86_64)" >> $GITHUB_ENV
+          mkdir -p ~/.local/share/godot/export_templates/$GODOT_TEMPLATES
+          cp ~/godot/templates/* ~/.local/share/godot/export_templates/$GODOT_TEMPLATES/
+          mkdir -p ~/.config/godot
+          printf '[gd_resource type="EditorSettings" format=3]\n\n[resource]\nexport/android/android_sdk_path = "%s"\nexport/android/java_sdk_path = "%s"\n' \
+            "$ANDROID_HOME" "$JAVA_HOME" > ~/.config/godot/editor_settings-4.7.tres
+
+      - name: Install the Android build template (with GameNight's activity)
+        working-directory: game
+        run: |
+          # What the editor's "Install Android Build Template" does, then our activity over the
+          # template's (it asks Android for the display's highest refresh rate).
+          T=~/.local/share/godot/export_templates/$GODOT_TEMPLATES
+          mkdir -p android/build
+          cp $T/version.txt android/.build_version
+          touch android/build/.gdignore
+          unzip -q -o $T/android_source.zip -d android/build
+          cp android-overlay/GodotApp.java android/build/src/main/java/com/godot/game/GodotApp.java
+
+      - name: Version
+        working-directory: game
+        run: |
+          base=$(sed -n 's/^config\/version="\(.*\)"/\1/p' project.godot)
+          name="${base%.*}.${{ github.run_number }}"
+          echo "APP_VERSION=$name" >> $GITHUB_ENV
+          sed -i "s/^version\/code=.*/version\/code=${{ github.run_number }}/; s/^version\/name=.*/version\/name=\"$name\"/" export_presets.cfg
+
+      - name: Signing key
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          if [ -n "$KEYSTORE_B64" ]; then
+            echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$RUNNER_TEMP/release.keystore" >> $GITHUB_ENV
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=$KEY_ALIAS" >> $GITHUB_ENV
+            echo "::add-mask::$KEYSTORE_PASSWORD"
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=$KEYSTORE_PASSWORD" >> $GITHUB_ENV
+            echo "Signing with the release key from the repository secrets."
+          else
+            # Fallback: the committed sideload key. Builds stay installable and update each other.
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PATH=$GITHUB_WORKSPACE/game/android-signing/sideload.keystore" >> $GITHUB_ENV
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_USER=gamenight" >> $GITHUB_ENV
+            echo "GODOT_ANDROID_KEYSTORE_RELEASE_PASSWORD=gamenight" >> $GITHUB_ENV
+            echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: signing with the sideload key (see README)."
+          fi
+
+      - name: Import and build C#
+        working-directory: game
+        run: |
+          timeout 600 "$GODOT" --headless --path . --import || true
+          dotnet build GameNight.csproj -c ExportRelease
+
+      - name: Export APK
+        working-directory: game
+        run: |
+          mkdir -p ../build
+          "$GODOT" --headless --path . --export-release Android ../build/GameNight.apk 2>&1 | tee ../build/export.log
+          test -s ../build/GameNight.apk
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: export-log
+          path: |
+            build/export.log
+            game/android/build/build/outputs/logs/**
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.APP_VERSION }}
+          name: GameNight ${{ env.APP_VERSION }}
+          target_commitish: ${{ github.sha }}
+          body: |
+            Build ${{ github.run_number }} from ${{ github.sha }}.
+            ${{ github.event.head_commit.message }}
+
+            Install: open this page on the phone and tap GameNight.apk.
+          files: build/GameNight.apk
+          make_latest: true

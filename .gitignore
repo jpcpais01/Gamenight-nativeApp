@@ -1,0 +1,15 @@
+# Godot
+.godot/
+game/android/
+export.cfg
+# .NET
+bin/
+obj/
+*.user
+.vs/
+# Builds
+build/
+*.apk
+*.aab
+*.keystore
+!game/android-signing/sideload.keystore

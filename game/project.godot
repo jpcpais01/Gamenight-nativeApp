@@ -1,0 +1,55 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; since the parameters that go here are not all obvious.
+;
+; Format:
+;   [section] ; section goes between []
+;   param=value ; assign values to parameters
+
+config_version=5
+
+[application]
+
+config/name="GameNight"
+config/version="0.1.0"
+run/main_scene="res://Main.tscn"
+config/features=PackedStringArray("4.7", "C#", "Mobile")
+boot_splash/bg_color=Color(0.054902, 0.0627451, 0.0901961, 1)
+boot_splash/show_image=false
+config/icon="res://icon.svg"
+run/max_fps=0
+
+[display]
+
+window/size/viewport_width=860
+window/size/viewport_height=400
+window/size/window_width_override=1720
+window/size/window_height_override=800
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+window/handheld/orientation=4
+window/vsync/vsync_mode=1
+
+[dotnet]
+
+project/assembly_name="GameNight"
+
+[input_devices]
+
+pointing/emulate_touch_from_mouse=true
+
+[rendering]
+
+renderer/rendering_method="mobile"
+renderer/rendering_method.mobile="mobile"
+textures/canvas_textures/default_texture_filter=0
+anti_aliasing/quality/msaa_3d=0
+anti_aliasing/quality/screen_space_aa=0
+lights_and_shadows/directional_shadow/size=2048
+lights_and_shadows/directional_shadow/size.mobile=2048
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality=0
+lights_and_shadows/directional_shadow/soft_shadow_filter_quality.mobile=0
+lights_and_shadows/positional_shadow/atlas_size=0
+lights_and_shadows/positional_shadow/atlas_size.mobile=0
+environment/defaults/default_clear_color=Color(0.054902, 0.0627451, 0.0901961, 1)
+textures/vram_compression/import_etc2_astc=true
