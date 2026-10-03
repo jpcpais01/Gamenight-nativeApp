@@ -20,8 +20,16 @@ on the phone (on Xiaomi/HyperOS, allow Chrome to install unknown apps the first 
 | `game/Scripts/UI/` | `TouchControls` (joystick + Pass/Through/Kick/Sprint, as in the PWA) and `Hud` (score, clock, fps), drawn by the engine. |
 | `game/Shaders/` | Pitch, players, post pass (outline + grade + dither in one pass), nets, crowd, boards. |
 | `game/android-overlay/` | Our Android activity, copied over Godot's template at build time: it asks Android for the display's highest refresh rate. |
-| `sim/` | The match engine port: a plain C# library with no Godot types (owned by the engine thread). |
+| `sim/` | The match engine: the PWA's `src/sim` ported to a plain C# library (no Godot types), step-for-step identical to the PWA. See [`sim/README.md`](sim/README.md). |
 | `.github/workflows/android.yml` | Builds the signed APK on every push to `main` and publishes it as a Release. |
+
+## The match engine
+
+`sim/GameNight.Sim.csproj` is the PWA's whole simulation (rules, ball physics, AI, keepers, set
+pieces, offside, training drills) in C#. Same seed and inputs give the same match as the PWA,
+every step: `sim/parity/run.sh` checks that against the PWA's own code. `Match.Step(input)` at
+120 Hz, `Match.Write(snapshot)` for flat arrays to draw, or `MatchRunner` to run it on its own
+thread. Details in [`sim/README.md`](sim/README.md).
 
 ## How it renders
 
