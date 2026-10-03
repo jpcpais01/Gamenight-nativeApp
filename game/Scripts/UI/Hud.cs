@@ -1,6 +1,6 @@
 using System;
 using Godot;
-using GameNight.Bridge;
+using GameNight.Sim;
 
 namespace GameNight.UI;
 
@@ -28,16 +28,16 @@ public sealed partial class Hud : Control
 
     public override void _Ready() => _font = ThemeDB.FallbackFont;
 
-    public void Tick(MatchFrame f, double delta)
+    public void Tick(MatchSnapshot f, double delta)
     {
         bool dirty = false;
         string score = $"{f.Score[0]}  -  {f.Score[1]}";
-        string clock = $"{(int)f.Minute}'";
+        string clock = f.ClockLabel;
         string caption = f.Phase switch
         {
-            MatchPhase.Goal => "GOAL!",
-            MatchPhase.HalfTime => "HALF TIME",
-            MatchPhase.FullTime => "FULL TIME",
+            Phase.Goal => "GOAL!",
+            Phase.Halftime => "HALF TIME",
+            Phase.Fulltime => "FULL TIME",
             _ => "",
         };
         if (score != _score || clock != _clock || caption != _caption)

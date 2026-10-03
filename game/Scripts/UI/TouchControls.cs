@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Godot;
-using GameNight.Bridge;
+using GameNight.Sim;
 
 namespace GameNight.UI;
 
@@ -227,7 +227,7 @@ public sealed partial class TouchControls : Control
         Input.Held[i] = true;
         Input.HoldTime[i] = 0;
         _downAt[i] = Time.GetTicksMsec();
-        Input.Events.Add(new ButtonEvent((Btn)i, true, 0, false));
+        Input.Events.Add(ButtonEvent.Down(i));
         QueueRedraw();
     }
 
@@ -236,7 +236,7 @@ public sealed partial class TouchControls : Control
         if (!Input.Held[i]) return;
         Input.Held[i] = false;
         float hold = (Time.GetTicksMsec() - _downAt[i]) / 1000f;
-        Input.Events.Add(new ButtonEvent((Btn)i, false, hold, Input.Swipe[i]));
+        Input.Events.Add(ButtonEvent.Up(i, hold, Input.Swipe[i]));
         Input.HoldTime[i] = 0;
         Input.Swipe[i] = false;
         QueueRedraw();
@@ -301,7 +301,7 @@ public sealed partial class TouchControls : Control
         // Shot power ring around Kick while it's held.
         if (!defend && Input.Held[2])
         {
-            float p = MathF.Min(1, Input.HoldTime[2] / ShotFull);
+            float p = (float)Math.Min(1, Input.HoldTime[2] / ShotFull);
             var c = BtnCentre(2);
             DrawArc(c, BtnRadius[2] + 5, 0, MathF.Tau, 48, new Color(1, 1, 1, 0.12f), 5, true);
             DrawArc(c, BtnRadius[2] + 5, -MathF.PI / 2, -MathF.PI / 2 + MathF.Tau * p, 48, Accent, 5, true);

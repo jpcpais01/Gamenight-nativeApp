@@ -1,6 +1,6 @@
 using System;
 using Godot;
-using GameNight.Bridge;
+using GameNight.Sim;
 
 namespace GameNight.Render;
 
@@ -21,7 +21,7 @@ public sealed class PlayersView
     readonly MultiMesh _mm;
     readonly MeshInstance3D _ball;
     readonly MeshInstance3D _ring;
-    readonly float[] _phase = new float[MatchFrame.MaxPlayers];
+    const int SkinSlots = 6;
 
     public PlayersView(Node3D root)
     {
@@ -31,7 +31,10 @@ public sealed class PlayersView
         mat.SetShaderParameter("trim", new[] { Hex(0x8f1f24), Hex(0x23345e), Hex(0x2a2a2a), Hex(0x163a36) });
         mat.SetShaderParameter("shorts", new[] { Hex(0xf3ede0), Hex(0x23345e), Hex(0x2a2a2a), Hex(0x163a36) });
         mat.SetShaderParameter("socks", new[] { Hex(0xc8393b), Hex(0xf1ebdc), Hex(0xe9c24a), Hex(0x2ba59a) });
-        mat.SetShaderParameter("skins", new[] { Hex(0xf0c29e), Hex(0xcc946b), Hex(0x8c5e40), Hex(0x573826) });
+        // Skin tones: the engine's own table (TeamData.SkinTones).
+        var skins = new Vector3[SkinSlots];
+        for (int i = 0; i < SkinSlots; i++) skins[i] = Hex(TeamData.SkinTones[Math.Min(i, TeamData.SkinTones.Length - 1)]);
+        mat.SetShaderParameter("skins", skins);
 
         _mm = new MultiMesh
         {
@@ -39,7 +42,7 @@ public sealed class PlayersView
             UseCustomData = true,
             Mesh = BuildBody(),
         };
-        _mm.InstanceCount = MatchFrame.MaxPlayers;
+        _mm.InstanceCount = MatchSnapshot.N;
         var mmi = new MultiMeshInstance3D
         {
             Multimesh = _mm,
@@ -64,25 +67,28 @@ public sealed class PlayersView
         return new Vector3(c.R, c.G, c.B);
     }
 
-    public void Update(MatchFrame a, MatchFrame b, float alpha, float dt)
+    public void Update(MatchSnapshot a, MatchSnapshot b, float alpha)
     {
-        int n = b.Count;
-        _mm.VisibleInstanceCount = n;
-        for (int i = 0; i < n; i++)
+        for (int i = 0; i < MatchSnapshot.N; i++)
         {
+            if (!b.Active[i])
+            {
+                // Not on the field (training drills): an empty transform hides it.
+                _mm.SetInstanceTransform(i, new Transform3D(new Basis().Scaled(Vector3.Zero), Vector3.Zero));
+                continue;
+            }
             float x = Mathf.Lerp(a.X[i], b.X[i], alpha);
             float y = Mathf.Lerp(a.Y[i], b.Y[i], alpha);
             float z = Mathf.Lerp(a.Z[i], b.Z[i], alpha);
             float face = Mathf.LerpAngle(a.Facing[i], b.Facing[i], alpha);
-            float speed = b.Speed[i];
-            // One stride cycle per ~2.2 m.
-            _phase[i] = (_phase[i] + speed / 2.2f * MathF.Tau * dt) % MathF.Tau;
-            float run = Math.Clamp(speed / 4f, 0, 1);
+            // The engine's run cycle: 2 pi per stride (it only ever grows; wrap it for the GPU).
+            float phase = Mathf.Lerp(a.StridePhase[i], b.StridePhase[i], alpha) % MathF.Tau;
+            float run = Math.Clamp(b.Speed[i] / 4f, 0, 1);
             float s = b.Height[i] / ModelHeight;
             var basis = new Basis(Vector3.Up, -face).Scaled(new Vector3(s, s, s));
             _mm.SetInstanceTransform(i, new Transform3D(basis, new Vector3(x, y, z)));
-            int kit = b.Team[i] + (b.Keeper[i] ? 2 : 0);
-            _mm.SetInstanceCustomData(i, new Color(_phase[i], run, kit, b.Skin[i] & 3));
+            int kit = b.Team[i] + (b.Role[i] == Role.GK ? 2 : 0);
+            _mm.SetInstanceCustomData(i, new Color(phase, run, kit, SkinIndex(b.Skin[i])));
         }
 
         _ball.Position = new Vector3(
@@ -91,9 +97,19 @@ public sealed class PlayersView
             Mathf.Lerp(a.BallZ, b.BallZ, alpha));
 
         int c = b.Controlled;
-        _ring.Visible = c >= 0 && b.Phase != MatchPhase.Goal;
+        _ring.Visible = c >= 0 && b.Phase != Phase.Goal;
         if (c >= 0)
             _ring.Position = new Vector3(Mathf.Lerp(a.X[c], b.X[c], alpha), 0.03f, Mathf.Lerp(a.Z[c], b.Z[c], alpha));
+    }
+
+    /// <summary>The snapshot's skin byte is an index, or (for now) the tone's low colour byte.</summary>
+    static int SkinIndex(byte skin)
+    {
+        if (skin < SkinSlots) return skin;
+        var tones = TeamData.SkinTones;
+        for (int i = 0; i < tones.Length && i < SkinSlots; i++)
+            if ((tones[i] & 0xff) == skin) return i;
+        return 0;
     }
 
     /// <summary>A low-poly footballer, 1.8 m tall, facing +X. Built once.</summary>

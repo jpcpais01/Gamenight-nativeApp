@@ -1,6 +1,6 @@
 using System;
 using Godot;
-using GameNight.Bridge;
+using GameNight.Sim;
 
 namespace GameNight.Render;
 
@@ -52,7 +52,7 @@ public sealed class MatchCamera
 
     static float Pitch => Mathf.DegToRad(PitchDeg);
 
-    public void Update(MatchFrame a, MatchFrame b, float alpha, float dt)
+    public void Update(MatchSnapshot a, MatchSnapshot b, float alpha, float dt)
     {
         if (dt <= 0) { Place(); return; }
         float bx = Mathf.Lerp(a.BallX, b.BallX, alpha);
@@ -69,8 +69,8 @@ public sealed class MatchCamera
         float halfZ = dist * tanV / MathF.Sin(Pitch + 0.15f);
 
         // Lead: where play is going, smoothed so it doesn't flick on every touch.
-        bool live = b.Phase == MatchPhase.Play;
-        int att = b.Attacking;
+        bool live = b.Phase == Phase.Play;
+        int att = b.PossTeam;
         float wantLX = live ? Math.Clamp(bvx * 0.4f, -9, 9) + (att >= 0 ? b.Dir[att] * 3.5f : 0) : 0;
         float wantLZ = live ? Math.Clamp(bvz * 0.25f, -4, 4) : 0;
         float kl = 1 - MathF.Exp(-dt * 1.8f);
@@ -111,7 +111,7 @@ public sealed class MatchCamera
         _aimZ = Math.Clamp(_aimZ, -HW + halfZ * 0.55f - 6, HW - halfZ * 0.45f + 4);
 
         // Critically damped follow, stiffer when the ball is travelling.
-        float w = b.Phase == MatchPhase.Goal ? 1.3f : 2.3f + MathF.Min(2.2f, ballSpeed * 0.1f);
+        float w = b.Phase == Phase.Goal ? 1.3f : 2.3f + MathF.Min(2.2f, ballSpeed * 0.1f);
         _vx += ((_aimX - _tx) * w * w - 2 * w * _vx) * dt;
         _vz += ((_aimZ - _tz) * w * w - 2 * w * _vz) * dt;
         _tx += _vx * dt;

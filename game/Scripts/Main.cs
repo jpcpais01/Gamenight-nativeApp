@@ -1,21 +1,21 @@
 using System;
 using Godot;
-using GameNight.Bridge;
 using GameNight.Render;
+using GameNight.Sim;
 using GameNight.UI;
 
 namespace GameNight;
 
 /// <summary>
-/// The match screen. The match runs at a fixed 120 steps a second; every rendered frame the
-/// view interpolates between the last two steps, so the picture is smooth at any refresh
-/// rate. The frame rate is never capped: it runs at whatever the display refreshes at.
+/// The match screen. The engine (GameNight.Sim, the PWA's match ported to C#) runs on its own
+/// thread at a fixed 120 steps a second; every rendered frame reads the last two steps and
+/// draws between them, so the picture is smooth at any refresh rate and a slow AI moment can
+/// never stall a frame. The frame rate is never capped: it runs at whatever the display does.
 /// </summary>
 public partial class Main : Node
 {
-    IMatchSource _match;
-    readonly MatchFrame _prev = new(), _cur = new();
-    double _acc;
+    MatchRunner _runner;
+    readonly MatchSnapshot _prev = new(), _cur = new();
 
     PixelView _view;
     MatchCamera _camera;
@@ -31,9 +31,8 @@ public partial class Main : Node
         Engine.MaxFps = 0;
         DisplayServer.ScreenSetKeepOn(true);
 
-        _match = new StubMatch(seed: 1);
-        _match.Write(_cur);
-        _prev.CopyFrom(_cur);
+        Kick.PrepareGroundPasses();
+        _runner = new MatchRunner(new Match(seed: DateTime.Now.Ticks % 2147483647));
 
         _view = new PixelView();
         AddChild(_view);
@@ -48,24 +47,26 @@ public partial class Main : Node
 
         foreach (var arg in OS.GetCmdlineUserArgs())
             if (arg.StartsWith("--screenshot=")) _shotPath = arg["--screenshot=".Length..];
+
+        _runner.Start();
     }
+
+    public override void _Notification(int what)
+    {
+        // Backgrounded or covered: stop the match clock; it resumes without a jump.
+        if (_runner == null) return;
+        if (what == NotificationApplicationPaused || what == NotificationApplicationFocusOut) _runner.Paused = true;
+        else if (what == NotificationApplicationResumed || what == NotificationApplicationFocusIn) _runner.Paused = false;
+    }
+
+    public override void _ExitTree() => _runner?.Stop();
 
     public override void _Process(double delta)
     {
         float dt = (float)delta;
         _controls.Tick(dt);
-
-        // Fixed steps (at most a quarter second's worth after a stall).
-        _acc = Math.Min(_acc + delta, 0.25);
-        double step = _match.Dt;
-        while (_acc >= step)
-        {
-            _prev.CopyFrom(_cur);
-            _match.Step(_controls.Input);
-            _match.Write(_cur);
-            _acc -= step;
-        }
-        float alpha = (float)(_acc / step);
+        _runner.Submit(_controls.Input);
+        _runner.Read(_prev, _cur, out float alpha);
 
         if (_view.Fit())
         {
@@ -73,14 +74,14 @@ public partial class Main : Node
             _camera.SetAspect(_view.Aspect);
         }
         _camera.Update(_prev, _cur, alpha, dt);
-        _players.Update(_prev, _cur, alpha, dt);
+        _players.Update(_prev, _cur, alpha);
         _view.Present(_camera.SubPixelX, _camera.SubPixelY);
 
-        _controls.SetMode(_match.HumanAttacking ? TouchControls.Mode.Attack : TouchControls.Mode.Defend);
+        _controls.SetMode(_cur.HumanAttacking ? TouchControls.Mode.Attack : TouchControls.Mode.Defend);
         _hud.Tick(_cur, delta);
 
         _time += delta;
-        if (_shotPath != null && _time > 4)
+        if (_shotPath != null && _time > 6)
         {
             GetViewport().GetTexture().GetImage().SavePng(_shotPath);
             GetTree().Quit();

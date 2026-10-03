@@ -14,8 +14,7 @@ on the phone (on Xiaomi/HyperOS, allow Chrome to install unknown apps the first 
 | Path | What it is |
 | --- | --- |
 | `game/` | The Godot project (`project.godot`, `GameNight.csproj`, `Main.tscn`). |
-| `game/Scripts/Main.cs` | The match screen: fixed 120 Hz steps, interpolated rendering, no frame cap. |
-| `game/Scripts/Bridge/` | The seam between game and match engine: `IMatchSource` (step, write a frame), `MatchFrame` (flat arrays the renderer reads), `InputState` (the PWA's controls). `StubMatch` is a stand-in until the real engine lands. |
+| `game/Scripts/Main.cs` | The match screen: the engine runs on its own thread at 120 Hz (`MatchRunner`); each frame reads the last two steps (`MatchSnapshot`) and draws between them. No frame cap. |
 | `game/Scripts/Render/` | `PixelView` (art-resolution viewport, integer upscale, sub-pixel scroll), `MatchCamera` (the PWA's broadcast camera), `PlayersView` (22 players in one instanced draw), `World` (pitch, goals, boards, stands). |
 | `game/Scripts/UI/` | `TouchControls` (joystick + Pass/Through/Kick/Sprint, as in the PWA) and `Hud` (score, clock, fps), drawn by the engine. |
 | `game/Shaders/` | Pitch, players, post pass (outline + grade + dither in one pass), nets, crowd, boards. |

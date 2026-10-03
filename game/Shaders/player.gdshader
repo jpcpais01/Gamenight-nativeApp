@@ -10,7 +10,7 @@ uniform vec3 shirt[4];
 uniform vec3 trim[4];
 uniform vec3 shorts[4];
 uniform vec3 socks[4];
-uniform vec3 skins[4];
+uniform vec3 skins[6];
 uniform vec3 boots = vec3(0.08, 0.08, 0.09);
 
 varying vec3 col;
