@@ -1,6 +1,7 @@
 using System;
 using Godot;
 using GameNight.Grounds;
+using GameNight.Audio;
 using GameNight.Menus;
 using GameNight.Render;
 using GameNight.Sim;
@@ -29,6 +30,8 @@ public partial class Main : Node
 
     PixelView _view;
     Ground _ground;
+    /// <summary>The match's sound and the terraces' director (the stadium can read Sound.Terraces).</summary>
+    public readonly MatchSound Sound = new();
     MatchCamera _camera;
     PlayersView _players;
     DeliveryView _delivery;
@@ -70,6 +73,7 @@ public partial class Main : Node
         {
             // Behind the home screen: the computer plays both sides, nothing to touch.
             _hud.Visible = _controls.Visible = _pause.Visible = false;
+            GameAudio.Instance?.SetAmbience(1);
             _hud.ProcessMode = _controls.ProcessMode = _pause.ProcessMode = ProcessModeEnum.Disabled;
         }
         if (Request?.Drill != null)
@@ -111,6 +115,7 @@ public partial class Main : Node
     {
         if (_runner != null) _runner.Paused = on;
         _hud.Paused = on;
+        if (GameAudio.Instance != null) GameAudio.Instance.Suspended = on;
         if (on) _controls.ReleaseAll();
         _controls.SetProcessInput(!on);
         _controls.Visible = !on;
@@ -121,6 +126,7 @@ public partial class Main : Node
         _camera.BaseDist = MatchCamera.Presets[Math.Clamp(MatchSettings.Camera, 0, 2)];
         _view.TargetHeight = MatchSettings.Pixels > 0 ? MatchSettings.Pixels : 270;
         _hud.ShowFps = MatchSettings.ShowFps;
+        if (GameAudio.Instance != null) GameAudio.Instance.Muted = !MatchSettings.Sound;
         // Fast graphics: the sun casts no shadows (the biggest cost on a weak GPU).
         foreach (var n in _view.WorldRoot.FindChildren("*", nameof(DirectionalLight3D), true, false))
             ((DirectionalLight3D)n).ShadowEnabled = !MatchSettings.Fast;
@@ -179,6 +185,7 @@ public partial class Main : Node
         _players.Update(_prev, _cur, alpha, _time, (float)_match.SwitchT);
         _delivery.Update(_cur);
         _ground.Update(_cur, _time, dt);
+        Sound.Frame(_match, _cur, Request?.Demo != true, Request?.Drill == null, Request?.Drill != null, _pause.IsOpen ? 0 : dt);
         _view.Present(_camera.SubPixelX, _camera.SubPixelY);
 
         bool attack = _cur.HumanAttacking;

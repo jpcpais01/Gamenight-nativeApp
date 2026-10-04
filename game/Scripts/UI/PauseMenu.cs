@@ -18,7 +18,7 @@ public sealed partial class PauseMenu : Control
     readonly Button _pause;
     readonly Control _menu;
     readonly VBoxContainer _card;
-    readonly Button _camera, _graphics, _pixels, _fps, _leave;
+    readonly Button _camera, _graphics, _pixels, _fps, _sound, _leave;
 
     public bool IsOpen => _menu.Visible;
 
@@ -79,7 +79,9 @@ public sealed partial class PauseMenu : Control
         card.AddChild(_pixels);
         _fps = Ghost("");
         _fps.Pressed += () => { MatchSettings.ShowFps = !MatchSettings.ShowFps; Changed(); };
-        card.AddChild(_fps);
+        _sound = Ghost("");
+        _sound.Pressed += () => { MatchSettings.Sound = !MatchSettings.Sound; Changed(); };
+        card.AddChild(Row(_fps, _sound));
         Labels();
     }
 
@@ -152,6 +154,7 @@ public sealed partial class PauseMenu : Control
         int scale = Math.Max(1, (int)MathF.Round(Render.PixelView.ScreenPixels().Y / (float)h));
         _pixels.Text = $"PIXELS: {h} · {scale}X";
         _fps.Text = "FPS COUNTER: " + (MatchSettings.ShowFps ? "ON" : "OFF");
+        _sound.Text = "SOUND: " + (MatchSettings.Sound ? "ON" : "OFF");
     }
 
     // ------------------------------------------------------------------ look

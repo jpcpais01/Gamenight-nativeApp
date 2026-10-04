@@ -14,6 +14,7 @@ public static class MatchSettings
     public static bool ShowFps;
     /// <summary>Fast graphics: no sun shadows.</summary>
     public static bool Fast;
+    public static bool Sound = true;
 
     public static void Load()
     {
@@ -23,6 +24,7 @@ public static class MatchSettings
         Pixels = (int)cfg.GetValue("match", "pixels", 0);
         ShowFps = (bool)cfg.GetValue("match", "fps", false);
         Fast = (bool)cfg.GetValue("match", "fast", false);
+        Sound = (bool)cfg.GetValue("match", "sound", true);
     }
 
     public static void Save()
@@ -32,6 +34,7 @@ public static class MatchSettings
         cfg.SetValue("match", "pixels", Pixels);
         cfg.SetValue("match", "fps", ShowFps);
         cfg.SetValue("match", "fast", Fast);
+        cfg.SetValue("match", "sound", Sound);
         cfg.Save(Path);
     }
 }
