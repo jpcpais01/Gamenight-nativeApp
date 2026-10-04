@@ -50,7 +50,7 @@ public sealed partial class HomeScreen : PxCanvas
         var club = new Rect2(10, 8, 58 + Mathf.Max(nameW, 100) + 10, 52);
         bool held = Held("club");
         var o = held ? new Vector2(2, 2) : Vector2.Zero;
-        Art.Crest(this, new Rect2(new Vector2(16, 12) + o, new Vector2(36, 42)), Club.S.Kit.Main, Club.S.Kit.Secondary, info.Short);
+        CrestArt.Draw(this, new Rect2(new Vector2(16, 10) + o, new Vector2(36, 46)), Club.S.Crest);
         Px.Text(this, Px.Small, new Vector2(60, 24) + o, "YOUR CLUB · EDIT", 8, Px.Cyan);
         Px.Text(this, Px.Big, new Vector2(60, 50) + o, info.Name, 30, Px.Ink, new Color(0, 0, 0, 0.5f), 3);
         Tap("club", club, () => _ui.Go(_ui.ClubStudio));
@@ -97,7 +97,7 @@ public sealed partial class HomeScreen : PxCanvas
         var opp = Club.OpponentInfo();
         float my = ty + 14;
         float colW = (inner.Size.X - 36 - 60) / 2;
-        Team(new Vector2(x, my), info, Club.TeamRating(), colW, Club.S.Kit.Main, Club.S.Kit.Secondary);
+        Team(new Vector2(x, my), info, Club.TeamRating(), colW, Club.S.Kit.Main, Club.S.Kit.Secondary, Club.S.Crest);
         var vs = new Rect2(x + colW + 8, my + 10, 44, 28);
         Px.Frame(this, vs, Px.Hex(0x2a0414), Px.Hex(0xffe066), new Color(0, 0, 0, 0.4f), 3, 4);
         Px.TextC(this, Px.Big, vs.GetCenter().X, vs.GetCenter().Y + 7, "VS", 22, Px.Hex(0xffe066));
@@ -112,9 +112,10 @@ public sealed partial class HomeScreen : PxCanvas
         Px.Text(this, Px.Big, new Vector2(x, inner.End.Y - 14), "Win +1,500 · Draw +800 · +150 per goal", 17, Px.Hex(0xffe6d2, 0.85f));
     }
 
-    void Team(Vector2 p, TeamInfo t, int ovr, float w, int main, int second)
+    void Team(Vector2 p, TeamInfo t, int ovr, float w, int main, int second, Crest crest = null)
     {
-        Art.Crest(this, new Rect2(p, new Vector2(38, 44)), main, second, t.Short);
+        if (crest != null) CrestArt.Draw(this, new Rect2(p - new Vector2(0, 3), new Vector2(38, 47)), crest);
+        else Art.Crest(this, new Rect2(p, new Vector2(38, 44)), main, second, t.Short);
         Px.Text(this, Px.Big, p + new Vector2(46, 22), Px.Fit(Px.Big, t.Name, 22, w - 50), 22, Px.Ink, new Color(0, 0, 0, 0.45f));
         Px.Text(this, Px.Small, p + new Vector2(46, 38), $"{ovr} OVR", 8, Px.Hex(0xffe0a8));
     }

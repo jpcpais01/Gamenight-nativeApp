@@ -177,7 +177,7 @@ public static class Art
     }
 
     /// <summary>Front view of shirt and shorts in a 100 x 130 box, with the kit's design.</summary>
-    public static void Jersey(CanvasItem ci, Rect2 r, ClubKit k)
+    public static void Jersey(CanvasItem ci, Rect2 r, ClubKit k, Crest crest = null)
     {
         var box = new Rect2(r.Position, new Vector2(r.Size.X, r.Size.Y * 100f / 130f));
         var M = Px.Hex(k.Main);
@@ -206,6 +206,85 @@ public static class Art
         }
         Poly(ci, box, S, 44, 8, 50, 16, 56, 8, 58, 9, 50, 20, 42, 9);
         Poly(ci, box, new Color(0, 0, 0, 0.18f), 30, 14, 36, 12, 36, 93, 30, 92);
+        // The crest over the heart.
+        if (crest != null) CrestArt.Draw(ci, R(55, 22, 10, 12.4f), crest);
+    }
+
+    // ---------------------------------------------------------------- manager
+
+    /// <summary>
+    /// The manager full length (the PWA's coachSVG): hair, face, coat with its trim, trousers and
+    /// shoes, in a 48 x 84 box. Taller and heavier managers fill more of it.
+    /// </summary>
+    public static void Coach(CanvasItem ci, Rect2 r, Coach c, int shirt)
+    {
+        var o = Outfit.For(c.Style, shirt);
+        float w = c.Build switch { 0 => 0.88f, 2 => 1.16f, _ => 1f };
+        float h = (float)(c.Height / 1.8);
+        float k = Mathf.Min(r.Size.X / 48f, r.Size.Y / 84f);
+        var origin = r.GetCenter() - new Vector2(24, 42) * k + new Vector2(4, 2) * k;
+        Vector2 At(float x, float y) => origin + new Vector2((20 + (x - 20) * w) * k, (80 + (y - 80) * h) * k);
+        void Box(float x, float y, float bw, float bh, int col) => Box2(x, y, bw, bh, Px.Hex(col));
+        void Box2(float x, float y, float bw, float bh, Color col)
+        {
+            var a = At(x, y);
+            var b = At(x + bw, y + bh);
+            ci.DrawRect(new Rect2(a, b - a), col);
+        }
+        var shadowC = origin + new Vector2(20, 79) * k;
+        ci.DrawColoredPolygon(Px.Ellipse(shadowC, 12 * w * k, 2 * k), new Color(0, 0, 0, 0.35f));
+        bool longCoat = c.Style == CoachStyle.Coat || c.Style == CoachStyle.Puffer;
+        float coatLen = longCoat ? 58 : 48;
+        Box(13, 46, 6, 30, o.Trousers);
+        Box(21, 46, 6, 30, o.Trousers);
+        if (o.Stripe != o.Trousers)
+        {
+            Box(13, 46, 1, 30, o.Stripe);
+            Box(26, 46, 1, 30, o.Stripe);
+        }
+        Box(12, 76, 7, 3, o.Shoes);
+        Box(21, 76, 7, 3, o.Shoes);
+        Box(12, 78, 7, 1, o.Sole);
+        Box(21, 78, 7, 1, o.Sole);
+        Box(6, 23, 4.5f, 23, o.Coat);
+        Box(29.5f, 23, 4.5f, 23, o.Coat);
+        Box(6, 44, 4.5f, 2, o.Cuff);
+        Box(29.5f, 44, 4.5f, 2, o.Cuff);
+        Box(6.5f, 46, 3.5f, 4, c.Skin);
+        Box(30, 46, 3.5f, 4, c.Skin);
+        Box(10, 22, 20, coatLen - 22, o.Coat);
+        if (o.Pattern == 8) Box(18, 23, 4, c.Style == CoachStyle.Coat ? 30 : 22, o.Trim);
+        else if (o.Pattern == 2) foreach (var y in new[] { 29, 35, 41, 47, 53 }) Box(10, y, 20, 1, o.Trim);
+        else
+        {
+            Box(10, 23, 1.5f, coatLen - 23, o.Trim);
+            Box(28.5f, 23, 1.5f, coatLen - 23, o.Trim);
+        }
+        Box(17, 18, 6, 5, c.Skin);
+        Box(14, 5, 12, 15, c.Skin);
+        Box(16.5f, 11, 2, 2, 0x1a1410);
+        Box(21.5f, 11, 2, 2, 0x1a1410);
+        Box2(18, 16, 4, 1, new Color(60 / 255f, 25 / 255f, 15 / 255f, 0.6f));
+        if (c.Hair < 0) return;
+        switch (c.HairStyle)
+        {
+            case 2:
+                Box(13, 3, 14, 6, c.Hair);
+                Box(12, 5, 2, 7, c.Hair);
+                Box(26, 5, 2, 7, c.Hair);
+                break;
+            case 3:
+                Box(17, 0, 6, 4, c.Hair);
+                Box(13, 4, 14, 4, c.Hair);
+                Box(13, 6, 2, 5, c.Hair);
+                Box(25, 6, 2, 5, c.Hair);
+                break;
+            default:
+                Box(13, 4, 14, 4, c.Hair);
+                Box(13, 6, 2, 4, c.Hair);
+                Box(25, 6, 2, 4, c.Hair);
+                break;
+        }
     }
 
     // ---------------------------------------------------------------- packs

@@ -207,7 +207,7 @@ public sealed partial class ResultModal : Modal
         var col = _result == 'W' ? Px.Gold : _result == 'D' ? Px.Ink : Px.Loss;
         Px.TextC(this, Px.Big, c, b.Position.Y + 84, label, 60, col, new Color(0, 0, 0, 0.5f), 4);
         float y = b.Position.Y + 110;
-        Art.Crest(this, new Rect2(c - 170, y, 54, 63), _home.Kit.Shirt, _home.Kit.Shirt2, _home.Short);
+        CrestArt.Draw(this, new Rect2(c - 170, y - 3, 54, 67), Ui.Club.S.Crest);
         Px.TextC(this, Px.Small, c - 143, y + 80, Px.Fit(Px.Small, _home.Name.ToUpperInvariant(), 8, 150), 8, Px.Ink);
         Art.Crest(this, new Rect2(c + 116, y, 54, 63), _away.Kit.Shirt, _away.Kit.Shirt2, _away.Short);
         Px.TextC(this, Px.Small, c + 143, y + 80, Px.Fit(Px.Small, _away.Name.ToUpperInvariant(), 8, 150), 8, Px.Ink);

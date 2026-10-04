@@ -41,10 +41,14 @@ public sealed class ClubSave
     public Record Record = new();
     public int PacksOpened;
     public ClubKit Kit = new();
+    public Crest Crest = new();
+    public Banner Banner = new();
+    /// <summary>You, the manager on the touchline.</summary>
+    public Coach Coach = new();
     /// <summary>The captain's card (unset, or not in the XI: the best-rated starter).</summary>
     public string Captain = "";
     /// <summary>The ground last played at: preselected next time.</summary>
-    public string Ground = "stadium";
+    public string Ground = "big";
     /// <summary>Unix ms when the free pack is next available.</summary>
     public long FreePackAt;
     /// <summary>Best streak per training drill.</summary>
@@ -120,6 +124,9 @@ public sealed class ClubState
     void Repair()
     {
         S.Kit ??= new ClubKit();
+        S.Crest ??= new Crest();
+        S.Banner ??= new Banner();
+        S.Coach ??= new Coach();
         S.Record ??= new Record();
         S.DrillBest ??= new();
         S.Lineup ??= new Lineup();
@@ -403,6 +410,36 @@ public sealed class ClubState
     {
         S.Kit = k;
         Save();
+    }
+
+    public void SetCrest(Crest c)
+    {
+        S.Crest = c;
+        Save();
+    }
+
+    public void SetBanner(Banner b)
+    {
+        S.Banner = b;
+        Save();
+    }
+
+    public void SetCoach(Coach c)
+    {
+        S.Coach = c;
+        Save();
+    }
+
+    /// <summary>Banner colours: painted in the chosen club colour, lettering in whatever reads on it.</summary>
+    public (string text, int bg, int fg) BannerColors()
+    {
+        var b = S.Banner;
+        var k = S.Kit;
+        int bg = b.Color == "main" ? k.Main : b.Color == "secondary" ? k.Secondary : 0x14123a;
+        int other = b.Color == "main" ? k.Secondary : b.Color == "secondary" ? k.Main : 0xffd447;
+        static double Lum(int c) => 0.299 * ((c >> 16) & 255) + 0.587 * ((c >> 8) & 255) + 0.114 * (c & 255);
+        int fg = Math.Abs(Lum(other) - Lum(bg)) > 70 ? other : Lum(bg) > 140 ? 0x14121c : 0xf3eee2;
+        return (b.Text, bg, fg);
     }
 
     public void SetGround(string g)

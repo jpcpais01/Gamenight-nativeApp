@@ -15,7 +15,7 @@ public sealed class MatchRequest
     public DrillKind? Drill;
     public int DrillBest;
     /// <summary>Where to play (see Grounds).</summary>
-    public string Ground = "stadium";
+    public string Ground = "big";
     /// <summary>The computer plays both sides behind the home screen: no controls, no HUD.</summary>
     public bool Demo;
     /// <summary>Called once when the match ends (full time) or is left.</summary>
@@ -42,6 +42,6 @@ public static class Grounds
 
     public static readonly System.Collections.Generic.List<Ground> All = new()
     {
-        new Ground { Id = "stadium", Name = "Evening ground", About = "Floodlights on, a full house" },
+        new Ground { Id = "big", Name = "The big stadium", About = "Floodlights on, a full house" },
     };
 }
