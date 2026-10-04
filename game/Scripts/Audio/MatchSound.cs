@@ -34,11 +34,13 @@ public sealed class MatchSound
             if (s.Whistle > 0) audio.Whistle(s.Whistle);
             if (s.Post > 0) audio.Post(s.Post);
             if (s.Net > 0) audio.Net(s.Net);
-            if (s.Goal >= 0) audio.Goal(drill ? 1.5f : (float)GoalSeq.Back);
-            if (s.Save > 0.5f) audio.CrowdGasp();
+            if (s.Goal >= 0) audio.Goal(drill ? 1.5f : (float)GoalSeq.Back, true, drill ? 0 : s.Goal);
             if (!drill && s.Foul == 1 && match.LastFoul?.Penalty == true) audio.CrowdGasp();
             bool pen = !drill && PenaltyNoise(s);
-            audio.SetExcitement(pen ? 1 : s.Excitement, pen ? 1 : GoalMouth(s));
+            // After their goal the home crowd is stunned: the bed sinks, then comes back.
+            float hush = 1 - 0.6f * Terraces.Hush;
+            audio.SetExcitement((pen ? 1 : s.Excitement) * hush, pen ? 1 : GoalMouth(s) * hush);
+            if (crowded) audio.SetTension(pen ? 1 : Terraces.Tension);
         }
         if (crowded) audio.Terraces(Terraces);
     }

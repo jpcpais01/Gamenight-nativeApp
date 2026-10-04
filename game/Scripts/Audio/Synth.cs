@@ -170,8 +170,9 @@ public sealed class Biquad
     }
 }
 
-/// <summary>Where a voice plays: a mono or stereo bus of the mix.</summary>
-public enum Bus : byte { Master, Crowd, Bed, End0, End1 }
+/// <summary>Where a voice plays: a mono or stereo bus of the mix. Bowl is the stands at large
+/// (stereo, placed by the voice's own pan) through the ground's reverb.</summary>
+public enum Bus : byte { Master, Crowd, Bed, End0, End1, Bowl }
 
 /// <summary>
 /// One sounding thing: a source (oscillator, noise, recording, or a custom generator), through
@@ -199,9 +200,20 @@ public sealed class Voice
     public bool Series;
     public float Pre = 1;
     public Param Gain, Gain2;
+    /// <summary>Left and right levels on a stereo bus (1, 1 is the centre).</summary>
+    public float PanL = 1, PanR = 1;
     public Bus Out;
     public double Start, Stop = double.MaxValue;
     public bool Done;
+
+    /// <summary>Place it from -1 (left) to 1 (right), equal power.</summary>
+    public Voice At(float pan)
+    {
+        float x = (Math.Clamp(pan, -1, 1) + 1) * MathF.PI / 4;
+        PanL = MathF.Cos(x) * 1.4142f;
+        PanR = MathF.Sin(x) * 1.4142f;
+        return this;
+    }
 }
 
 /// <summary>A decoded recording (stereo, at its own rate).</summary>
@@ -262,7 +274,9 @@ public sealed class Compressor
 
 /// <summary>
 /// The bowl's reverb: a long, dark Freeverb tail with a slap-back off the far stand (the PWA
-/// convolves a decaying noise impulse; this is its cheap twin).
+/// convolves a decaying noise impulse; this is its cheap twin). Each ground tunes it
+/// (<see cref="Configure"/>): a roof holds a longer, brighter tail; an open bowl with a track
+/// round the pitch throws back a later, clearer echo.
 /// </summary>
 public sealed class Reverb
 {
@@ -274,8 +288,8 @@ public sealed class Reverb
     readonly int[] _ci = new int[16], _ai = new int[8];
     readonly float[] _cs = new float[16];
     readonly float[] _slap;
-    int _si;
-    const float Feedback = 0.86f, Damp = 0.55f;
+    int _si, _slapLen;
+    float _feedback = 0.86f, _damp = 0.55f, _slapGain = 0.8f;
 
     public Reverb(float sr)
     {
@@ -285,7 +299,21 @@ public sealed class Reverb
             for (int i = 0; i < 8; i++) _cb[c * 8 + i] = new float[(int)((Combs[i] + c * Spread) * k)];
             for (int i = 0; i < 4; i++) _ab[c * 4 + i] = new float[(int)((Alls[i] + c * Spread) * k)];
         }
-        _slap = new float[(int)(0.2f * sr)];
+        _slap = new float[(int)(0.45f * sr)];
+        _slapLen = (int)(0.2f * sr);
+        _sr = sr;
+    }
+
+    readonly float _sr;
+
+    /// <summary>The tail's feedback (length) and damping (darkness), and the far stand's echo.</summary>
+    public void Configure(float feedback, float damp, float slapSeconds, float slapGain)
+    {
+        _feedback = Math.Clamp(feedback, 0.5f, 0.92f);
+        _damp = Math.Clamp(damp, 0.1f, 0.8f);
+        _slapLen = Math.Clamp((int)(slapSeconds * _sr), 1, _slap.Length);
+        _slapGain = slapGain;
+        if (_si >= _slapLen) _si = 0;
     }
 
     public void Run(float inL, float inR, out float l, out float r)
@@ -293,8 +321,8 @@ public sealed class Reverb
         float x = (inL + inR) * 0.015f;
         float slap = _slap[_si];
         _slap[_si] = x;
-        _si = (_si + 1) % _slap.Length;
-        x += slap * 0.8f;
+        if (++_si >= _slapLen) _si = 0;
+        x += slap * _slapGain;
         l = Chan(0, x);
         r = Chan(1, x);
     }
@@ -307,8 +335,8 @@ public sealed class Reverb
             int j = c * 8 + i;
             var b = _cb[j];
             float y = b[_ci[j]];
-            _cs[j] = y * (1 - Damp) + _cs[j] * Damp;
-            b[_ci[j]] = x + _cs[j] * Feedback;
+            _cs[j] = y * (1 - _damp) + _cs[j] * _damp;
+            b[_ci[j]] = x + _cs[j] * _feedback;
             if (++_ci[j] >= b.Length) _ci[j] = 0;
             o += y;
         }

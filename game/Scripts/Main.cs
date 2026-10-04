@@ -60,6 +60,7 @@ public partial class Main : Node
         AddChild(_view);
         World.Build(_view.WorldRoot);
         _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup).AddTo(_view.WorldRoot);
+        Acoustics();
         _players = new PlayersView(_view.WorldRoot);
         _officials = new Officials(_view.WorldRoot);
         _goals = new Goals(_view.WorldRoot);
@@ -238,6 +239,8 @@ public partial class Main : Node
         {
             GameAudio.Instance.Suspended = false;
             GameAudio.Instance.SetRain(false);
+            GameAudio.Instance.SetTension(0);
+            GameAudio.Instance.SetVenue(Venue.Default);
         }
     }
 
@@ -264,7 +267,11 @@ public partial class Main : Node
         old.Root.GetParent()?.RemoveChild(old.Root);
         old.Root.QueueFree();
         _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup).AddTo(_view.WorldRoot);
+        Acoustics();
     }
+
+    /// <summary>How the ground sounds: its crowd, its roof, how near the fans are.</summary>
+    void Acoustics() => GameAudio.Instance?.SetVenue(Venue.For(Request?.Ground ?? "big", Ground.Club?.S.Stadium?.Sets));
 
     /// <summary>The stadium builder: swing the camera round to look at a stand (yaw, 0 = from the near side).</summary>
     public void Focus(float yaw)
@@ -335,6 +342,7 @@ public partial class Main : Node
         Weather();
         _prof.Lap(Profiler.Sys.Stadium);
         Sound.Frame(_match, _cur, Request?.Demo != true, Request?.Drill == null, Request?.Drill != null, _pause.IsOpen ? 0 : dt);
+        GameAudio.Instance?.Place(_view.Camera.GlobalPosition.X, Sound.Terraces.Tension);
         _prof.Lap(Profiler.Sys.Sound);
         _view.Present(_camera.SubPixelX, _camera.SubPixelY);
 

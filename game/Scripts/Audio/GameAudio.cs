@@ -30,9 +30,9 @@ public sealed partial class GameAudio : Node
 
     Recording _bed, _roar;
     readonly List<(Param g, double next)> _drift = new();
-    Voice _rain;
+    Voice _rain, _tension;
     bool _raining;
-    float _excite = 0.2f, _mouth;
+    float _excite = 0.2f, _mouth, _tense = -1, _placeX = 1e9f, _lift;
     bool _muted, _suspended;
 
     public override void _EnterTree() => Instance = this;
@@ -53,6 +53,7 @@ public sealed partial class GameAudio : Node
         _bed = Load("res://Audio/crowd-bed.pcm");
         _roar = Load("res://Audio/crowd-goal.pcm");
         StartBed();
+        StartTension();
 
         _run = true;
         _thread = new Thread(Loop) { IsBackground = true, Name = "Audio", Priority = ThreadPriority.AboveNormal };
@@ -139,7 +140,47 @@ public sealed partial class GameAudio : Node
         }
     }
 
+    /// <summary>
+    /// The ground holding its breath: a band of crowd noise that climbs in pitch and swells as a
+    /// team closes on goal (the rising "ohhhh" before a shot), silent the rest of the time.
+    /// </summary>
+    void StartTension()
+    {
+        var f = new Biquad(FilterType.Bandpass, 520, 0.9f);
+        _tension = _mx.NoiseVoice(0, double.MaxValue, 0.9f, new Param(0), Bus.Bowl, f, new Biquad(FilterType.Bandpass, 1250, 1.6f));
+        _tension.W2 = 0.5f;
+        _tension.Pre = 2;
+    }
+
+    /// <summary>How close a goal is, 0..1 (the director's tension).</summary>
+    public void SetTension(float k)
+    {
+        if (MathF.Abs(k - _tense) < 0.02f) return;
+        _tense = k;
+        Do(() =>
+        {
+            double t = _mx.Now;
+            float u = Math.Clamp((k - 0.25f) / 0.75f, 0, 1);
+            _tension.Gain.Target(0.16f * u * u, t, u > 0 ? 0.35f : 0.8f);
+            _tension.F1.Freq.Target(480 + 520 * u, t, 0.5f);
+            _tension.F2.Freq.Target(1150 + 700 * u, t, 0.5f);
+        });
+    }
+
     // ------------------------------------------------------------------ settings
+
+    /// <summary>The ground the match is at: its crowd and how it sounds.</summary>
+    public void SetVenue(Venue v) => Do(() => _mx.SetVenue(v));
+
+    /// <summary>Where the camera is along the pitch (x, metres), and how big the moment is (0..1):
+    /// the ends' levels, sides and brightness follow.</summary>
+    public void Place(float x, float lift)
+    {
+        if (MathF.Abs(x - _placeX) < 0.75f && MathF.Abs(lift - _lift) < 0.05f) return;
+        _placeX = x;
+        _lift = lift;
+        Do(() => _mx.Place(x, lift));
+    }
 
     /// <summary>A ground with or without a crowd.</summary>
     public void SetCrowd(bool on) => Do(() => _mx.SetCrowd(on));
@@ -152,6 +193,7 @@ public sealed partial class GameAudio : Node
         Do(() =>
         {
             double t = _mx.Now;
+            _mx.Weather(on);
             if (on)
             {
                 _rain ??= _mx.NoiseVoice(t, double.MaxValue, 0.83f, new Param(0), Bus.Master,
@@ -180,6 +222,8 @@ public sealed partial class GameAudio : Node
             .Exp(0.42f, t + 1.4).Exp(0.12f, t + 2.6).Exp(0.25f, t + 3.1).Exp(0.0001f, t + 6.5);
         _mx.NoiseVoice(t, t + 6.6, 0.35f, g, Bus.Master,
             new Biquad(FilterType.Lowpass, 120 + 160 * near, 0.9f), new Biquad(FilterType.Peaking, 55, 1, 6));
+        // A big one right overhead: the crowd jumps, whistles, then cheers itself.
+        if (near > 0.55f) _chants.Thunderstruck(t + 0.25, near);
     });
 
     public bool Muted
@@ -312,15 +356,17 @@ public sealed partial class GameAudio : Node
     /// the top; to hold it longer, three looping copies (staggered, each a touch faster or
     /// slower, wandering in level like the bed) swell in under it, so no seam is heard.
     /// </summary>
-    public void Goal(float hold = 0, bool throughCrowd = true) => Do(() =>
+    public void Goal(float hold = 0, bool throughCrowd = true, int side = 0) => Do(() =>
     {
         double t = _mx.Now;
-        var bus = throughCrowd ? Bus.Crowd : Bus.Master;
+        // Theirs: only the away end goes up, small and far off across the ground.
+        var bus = !throughCrowd ? Bus.Master : side == 1 ? Bus.End1 : Bus.Crowd;
+        if (side == 1) hold = Math.Min(hold, 4);
         if (_roar != null)
         {
             const double skip = 0.1; // the recording opens with a beat of dead air
             double dur = _roar.Duration, take = dur - skip;
-            var g = new Param(1.1f);
+            var g = new Param(side == 1 ? 0.9f : 1.1f);
             var fe = new Param(1);
             _mx.Add(new Voice { Kind = Voice.Src.Sample, Rec = _roar, Pos = skip * _roar.Rate, Gain = fe, Gain2 = g, Out = bus, Start = t });
             if (hold <= take) return;

@@ -4,10 +4,11 @@ using System.Collections.Generic;
 namespace GameNight.Audio;
 
 /// <summary>
-/// The mix, as the PWA wires it: voices into the master, the crowd bus (bed, terraces, gasps,
-/// roars) and its two ends; the bed through its own limiter and level; the ends panned to
-/// their side of the ground through a dark lowpass and the bowl's reverb; the master through
-/// a gentle compressor. Rendered a block at a time on the audio thread.
+/// The mix: voices into the master, the crowd bus (bed, gasps, roars), the two ends and the
+/// bowl; the bed through its own limiter and level; each end through its own lowpass and placed
+/// by where the camera is (the end you're near is louder, brighter and off to that side; the
+/// far one dull and distant), the bowl's voices placed by their own pan, all into the ground's
+/// reverb; the master through a gentle compressor. Rendered a block at a time on the audio thread.
 /// </summary>
 public sealed class Mixer
 {
@@ -23,6 +24,7 @@ public sealed class Mixer
     readonly float[] _cL = new float[Block], _cR = new float[Block];
     readonly float[] _bL = new float[Block], _bR = new float[Block];
     readonly float[] _e0 = new float[Block], _e1 = new float[Block];
+    readonly float[] _wL = new float[Block], _wR = new float[Block];
 
     public readonly float[] Noise;
     readonly Random _rng = new();
@@ -39,9 +41,19 @@ public sealed class Mixer
 
     readonly Compressor _master, _limiter;
     readonly Biquad _toneL, _toneR;
+    readonly Biquad[] _tone = { new(FilterType.Lowpass, 3800), new(FilterType.Lowpass, 3800) };
     readonly Reverb _verb;
+    /// <summary>The away end is the smaller one.</summary>
     static readonly float[] EndGain = { 1, 0.62f };
     readonly float[] _panL = new float[2], _panR = new float[2];
+    // Each end's level, pan and brightness: now, and where they're heading.
+    readonly float[] _g = { 1, 0.62f }, _p = { -0.55f, 0.55f }, _cut = { 3800, 3800 };
+    readonly float[] _gT = { 1, 0.62f }, _pT = { -0.55f, 0.55f }, _cutT = { 3800, 3800 };
+
+    /// <summary>The ground's sound (set with <see cref="SetVenue"/>).</summary>
+    public Venue Venue { get; private set; } = Venue.Default;
+    float _dry = 0.55f, _wet = 0.55f, _scale = 1, _scaleT = 1, _muffle = 1;
+    bool _rain;
 
     public Mixer(float sr)
     {
@@ -49,16 +61,11 @@ public sealed class Mixer
         _dt = 1.0 / sr;
         _master = new Compressor(sr, -14, 30, 4, 0.003f, 0.25f);
         _limiter = new Compressor(sr, -8, 4, 20, 0.005f, 0.2f);
-        _toneL = new Biquad(FilterType.Lowpass, 3800);
-        _toneR = new Biquad(FilterType.Lowpass, 3800);
+        _toneL = new Biquad(FilterType.Lowpass, 4200);
+        _toneR = new Biquad(FilterType.Lowpass, 4200);
         _verb = new Reverb(sr);
-        float[] pan = { -0.55f, 0.55f };
-        for (int e = 0; e < 2; e++)
-        {
-            float x = (pan[e] + 1) / 2;
-            _panL[e] = MathF.Cos(x * MathF.PI / 2) * EndGain[e];
-            _panR[e] = MathF.Sin(x * MathF.PI / 2) * EndGain[e];
-        }
+        SetVenue(Venue.Default);
+        Place(0, 0);
 
         // Pink-ish noise, shared by everything.
         int len = (int)sr * 4;
@@ -77,6 +84,48 @@ public sealed class Mixer
     public float Rand() => (float)_rng.NextDouble();
 
     public void Add(Voice v) => _voices.Add(v);
+
+    /// <summary>The ground: how big the crowd is, the reverb's tail and the far stand's echo.</summary>
+    public void SetVenue(Venue v)
+    {
+        Venue = v;
+        _verb.Configure(0.78f + 0.1f * v.Roof, 0.62f - 0.22f * v.Roof, 0.1f + 0.22f * (1 - v.Near), 0.45f + 0.4f * (1 - v.Roof));
+        _dry = 0.4f + 0.3f * v.Near;
+        _wet = 0.35f + 0.45f * v.Roof + 0.1f * (1 - v.Near);
+        Weather(_rain);
+        if (v.Size <= 0) SetCrowd(false);
+        else if (!CrowdOn) SetCrowd(true);
+    }
+
+    /// <summary>Rain: a thinner crowd (some of it went home, the rest is huddled under the
+    /// roofs), muffled by the downpour.</summary>
+    public void Weather(bool rain)
+    {
+        _rain = rain;
+        _muffle = rain ? 0.72f : 1;
+        _scaleT = (0.55f + 0.45f * Venue.Size) * (rain ? 0.85f : 1);
+        _toneL.Freq.Set(4200 * _muffle, Now);
+        _toneR.Freq.Set(4200 * _muffle, Now);
+    }
+
+    /// <summary>
+    /// Where the listener is along the pitch (the camera, x in metres; the home end is behind
+    /// the left goal) and how far up the excitement is (a big moment brightens the whole
+    /// ground): each end's level, side and brightness follow.
+    /// </summary>
+    public void Place(float x, float lift)
+    {
+        float near0 = Venue.Near;
+        for (int e = 0; e < 2; e++)
+        {
+            float endX = e == 0 ? -62 : 62;
+            float d = MathF.Abs(endX - x);
+            float near = Math.Clamp(1 - (d - 12) / 95, 0, 1);
+            _gT[e] = EndGain[e] * (0.62f + 0.5f * near);
+            _pT[e] = Math.Clamp((endX - x) / 70, -0.85f, 0.85f);
+            _cutT[e] = (2100 + 2700 * near + 1200 * lift) * (0.85f + 0.3f * near0) * _muffle;
+        }
+    }
 
     public void SetCrowd(bool on)
     {
@@ -127,7 +176,21 @@ public sealed class Mixer
         Array.Clear(_cL); Array.Clear(_cR);
         Array.Clear(_bL); Array.Clear(_bR);
         Array.Clear(_e0); Array.Clear(_e1);
+        Array.Clear(_wL); Array.Clear(_wR);
         double t0 = Now;
+        // The ends drift to where the camera has them (about a quarter of a second behind).
+        const float ease = 0.035f;
+        for (int e = 0; e < 2; e++)
+        {
+            _g[e] += (_gT[e] - _g[e]) * ease;
+            _p[e] += (_pT[e] - _p[e]) * ease;
+            _cut[e] += (_cutT[e] - _cut[e]) * ease;
+            _tone[e].Freq.Set(_cut[e], t0);
+            float x = (_p[e] + 1) * MathF.PI / 4;
+            _panL[e] = MathF.Cos(x) * 1.4142f * _g[e];
+            _panR[e] = MathF.Sin(x) * 1.4142f * _g[e];
+        }
+        _scale += (_scaleT - _scale) * ease;
         bool crowd = CrowdOn || t0 < _crowdOffAt;
 
         for (int k = _voices.Count - 1; k >= 0; k--)
@@ -156,16 +219,15 @@ public sealed class Mixer
                 float bl = _bL[i] * bg, br = _bR[i] * bg;
                 float lim = _limiter.Gain(MathF.Max(MathF.Abs(bl), MathF.Abs(br)));
                 float cl = _cL[i] + bl * lim, cr = _cR[i] + br * lim;
-                // The two ends, panned, through the dark lowpass, dry and into the bowl.
+                // The two ends, each through its lowpass, placed; the bowl; dry and into the reverb.
                 float eg = EndsGain.At(t);
-                float el = (_e0[i] * _panL[0] + _e1[i] * _panL[1]) * eg;
-                float er = (_e0[i] * _panR[0] + _e1[i] * _panR[1]) * eg;
-                el = _toneL.Run(el, t, Sr);
-                er = _toneR.Run(er, t, Sr);
+                float a = _tone[0].Run(_e0[i], t, Sr), b = _tone[1].Run(_e1[i], t, Sr);
+                float el = (a * _panL[0] + b * _panL[1] + _toneL.Run(_wL[i], t, Sr)) * eg;
+                float er = (a * _panR[0] + b * _panR[1] + _toneR.Run(_wR[i], t, Sr)) * eg;
                 _verb.Run(el, er, out float wl, out float wr);
-                cl += 0.55f * (el + wl);
-                cr += 0.55f * (er + wr);
-                float cg = CrowdGain.At(t);
+                cl += _dry * el + _wet * wl;
+                cr += _dry * er + _wet * wr;
+                float cg = CrowdGain.At(t) * _scale;
                 l += cl * cg;
                 r += cr * cg;
             }
@@ -190,7 +252,8 @@ public sealed class Mixer
             case Bus.Crowd: L = _cL; R = _cR; break;
             case Bus.Bed: L = _bL; R = _bR; break;
             case Bus.End0: L = R = _e0; break;
-            default: L = R = _e1; break;
+            case Bus.End1: L = R = _e1; break;
+            default: L = _wL; R = _wR; break;
         }
         bool mono = L == R;
         int nNoise = Noise.Length;
@@ -278,14 +341,14 @@ public sealed class Mixer
             }
             else
             {
-                L[i] += s * g;
-                R[i] += (stereo ? sr : s) * g;
+                L[i] += s * g * v.PanL;
+                R[i] += (stereo ? sr : s) * g * v.PanR;
             }
         }
     }
 
     /// <summary>A sawtooth with its step smoothed (polyBLEP), so the high ones don't alias.</summary>
-    static float Saw(double p, float dp)
+    internal static float Saw(double p, float dp)
     {
         double q = p + 0.5;
         q -= Math.Floor(q);
