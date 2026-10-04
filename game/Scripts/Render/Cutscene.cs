@@ -39,6 +39,14 @@ public sealed class Cutscene
             // The Curva: two open tiers of ultras and their card display.
             W(5, (-28, 2.5f, 16), (-80, 14, 0), (-34, 3, -10), (-80, 15, 2), 44),
         },
+        "old" => new[]
+        {
+            W(3, (-70, 30, 52), (10, 4, -12), (-46, 27, 60), (18, 6, -18), 40),
+            // The old main stand and its gable.
+            W(3, (12, 3, 22), (0, 9, -60), (-8, 3, 18), (0, 10, -60), 40),
+            // The Shed, packed and bouncing.
+            W(5, (-30, 2.5f, 14), (-80, 9, 0), (-36, 3, -10), (-80, 10, 2), 40),
+        },
         "training" => new[]
         {
             W(3, (-72, 24, 54), (10, 3, -12), (-50, 20, 60), (18, 4, -18), 40),
