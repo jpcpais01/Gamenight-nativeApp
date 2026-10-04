@@ -21,6 +21,7 @@ public partial class Main : Node
     PixelView _view;
     MatchCamera _camera;
     PlayersView _players;
+    DeliveryView _delivery;
     TouchControls _controls;
     Hud _hud;
     PauseMenu _pause;
@@ -39,6 +40,7 @@ public partial class Main : Node
         AddChild(_view);
         World.Build(_view.WorldRoot);
         _players = new PlayersView(_view.WorldRoot);
+        _delivery = new DeliveryView(_view.WorldRoot);
         _camera = new MatchCamera(_view.Camera);
 
         _hud = new Hud { Name = "Hud", View = _view };
@@ -116,6 +118,7 @@ public partial class Main : Node
         if (_cur.Post > 0) _camera.Bump(0.6f);
         _camera.Update(_prev, _cur, alpha, _pause.IsOpen ? 0 : dt);
         _players.Update(_prev, _cur, alpha);
+        _delivery.Update(_cur);
         _view.Present(_camera.SubPixelX, _camera.SubPixelY);
 
         bool attack = _cur.HumanAttacking;
