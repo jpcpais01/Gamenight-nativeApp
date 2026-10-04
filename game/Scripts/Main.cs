@@ -39,10 +39,12 @@ public partial class Main : Node
     Hud _hud;
     PauseMenu _pause;
     readonly Replay _replay = new();
+    /// <summary>The walk-out before kick-off (the stadium reads Cutscene.Hang for the giant tifo).</summary>
+    public readonly Cutscene Cutscene = new();
     Letterbox _letterbox;
     /// <summary>Debug: `-- --screenshot=out.png` saves the screen after a few seconds and quits.</summary>
     string _shotPath;
-    double _time;
+    double _time, _shotAt = 6;
 
     public override void _Ready()
     {
@@ -65,7 +67,17 @@ public partial class Main : Node
         AddChild(_controls);
         _letterbox = new Letterbox();
         AddChild(_letterbox);
-        _letterbox.Skip += EndReplay;
+        _letterbox.Skip += () =>
+        {
+            if (Cutscene.Active)
+            {
+                Cutscene.Next();
+                if (!Cutscene.Active) EndDirected();
+            }
+            else EndDirected();
+        };
+        Cutscene.OnCaption = _letterbox.Caption;
+        Cutscene.OnJump = _players.Snap;
         _replay.OnRewind = _players.Snap;
         _replay.OnEvents = f =>
         {
@@ -99,7 +111,10 @@ public partial class Main : Node
         }
 
         foreach (var arg in OS.GetCmdlineUserArgs())
+        {
             if (arg.StartsWith("--screenshot=")) _shotPath = arg["--screenshot=".Length..];
+            if (arg.StartsWith("--shot-at=")) _shotAt = double.Parse(arg["--shot-at=".Length..], System.Globalization.CultureInfo.InvariantCulture);
+        }
 
         NewMatch();
     }
@@ -108,7 +123,7 @@ public partial class Main : Node
     void NewMatch()
     {
         _runner?.Stop();
-        if (_replay.Active) EndReplay();
+        if (Directed) EndDirected();
         _replay.Reset();
         _match = Request != null ? new Match(Request.Seed, Request.Setup) : new Match(seed: DateTime.Now.Ticks % 2147483647);
         if (Request?.Demo == true) _match.AutoPlay = true;
@@ -125,33 +140,43 @@ public partial class Main : Node
         _runner.Read(_prev, _cur, out _);
         _runner.Paused = _pause.IsOpen;
         _runner.Start();
+        // A real match opens with the walk-out.
+        if (Request?.Demo != true && Request?.Drill == null && (_shotPath == null || Array.IndexOf(OS.GetCmdlineUserArgs(), "--cutscene") >= 0))
+        {
+            Direct(false);
+            Cutscene.Start(_match, _cur, Request?.Ground ?? "big");
+        }
     }
 
     void SetPaused(bool on)
     {
-        if (_runner != null) _runner.Paused = on || _replay.Active;
+        if (_runner != null) _runner.Paused = on || Directed;
         _hud.Paused = on;
         if (GameAudio.Instance != null) GameAudio.Instance.Suspended = on;
         if (on) _controls.ReleaseAll();
         _controls.SetProcessInput(!on);
-        _controls.Visible = !on && !_replay.Active;
+        _controls.Visible = !on && !Directed;
     }
 
-    /// <summary>The cut after a goal: the match waits while the tape plays it back.</summary>
-    void StartReplay()
+    /// <summary>A replay or the walk-out on screen: the match waits.</summary>
+    bool Directed => _replay.Active || Cutscene.Active;
+
+    /// <summary>The cut after a goal (or the walk-out): the match waits while it plays.</summary>
+    void Direct(bool replay)
     {
         _runner.Paused = true;
         _players.Markers = false;
         _hud.Visible = false;
         _controls.ReleaseAll();
         _controls.Visible = false;
-        _letterbox.Open(true);
+        _letterbox.Open(replay);
     }
 
-    /// <summary>Skipped or done: back to the crowd and the walk home.</summary>
-    void EndReplay()
+    /// <summary>Skipped or done: back to the match.</summary>
+    void EndDirected()
     {
         _replay.Finish();
+        Cutscene.Cancel();
         _players.Snap();
         _players.Markers = true;
         _hud.Visible = Request?.Drill == null && Request?.Demo != true;
@@ -224,9 +249,16 @@ public partial class Main : Node
         if (_replay.Active)
         {
             _replay.Update(run, _camera);
-            if (!_replay.Active) EndReplay();
+            if (!_replay.Active) EndDirected();
         }
-        if (_replay.Active)
+        if (Cutscene.Active)
+        {
+            Cutscene.Update(run, _camera);
+            if (!Cutscene.Active) EndDirected();
+        }
+        if (Cutscene.Active)
+            _players.Update(Cutscene.Frame, Cutscene.Frame, 0, _time, 1);
+        else if (_replay.Active)
             _players.Update(_replay.A, _replay.B, _replay.Alpha, _time, 1);
         else
         {
@@ -235,7 +267,7 @@ public partial class Main : Node
             if (Request?.Demo != true && Request?.Drill == null)
             {
                 _replay.Record(_cur);
-                if (_replay.Start(_cur, GoalSeq.Cut)) StartReplay();
+                if (_replay.Start(_cur, GoalSeq.Cut)) Direct(true);
             }
         }
         _delivery.Update(_cur);
@@ -251,7 +283,7 @@ public partial class Main : Node
         if (Request != null && _cur.Phase == Phase.Fulltime && _cur.PhaseT > (Request.Demo ? 3 : 4.5)) Report(true);
 
         _time += delta;
-        if (_shotPath != null && _time > 6)
+        if (_shotPath != null && _time > _shotAt)
         {
             GetViewport().GetTexture().GetImage().SavePng(_shotPath);
             GetTree().Quit();
