@@ -15,6 +15,7 @@ public sealed class Arena : StandSet
     public override string Name => "Arena";
     public override string About => "Modern bowl: glass boxes, a sweeping roof, LED ribbons";
     public override uint Swatch => 0x9fc6e8;
+    public override uint[] Mains => new uint[] { RoofCol, Facade, Panels };
     public override float Natural(Kind k) => k == Kind.Side ? 40 : 34;
     public override Vector2 Range => new(24, 46);
     public override (uint col, Look look) Front(BuiltGround g) => (White, Look.Ribbon);
@@ -112,6 +113,7 @@ public sealed class Terrace : StandSet
     public override string Name => "Terrace";
     public override string About => "Old English: a packed standing terrace, pillars, brick";
     public override uint Swatch => 0xc0683f;
+    public override uint[] Mains => new uint[] { RoofCol, Brick };
     public override float Natural(Kind k) => k == Kind.Side ? 14 : k == Kind.End ? 13.5f : 12.5f;
     public override Vector2 Range => new(12, 17);
     public override (uint col, float par) Lower(BuiltGround g) => (Steps, 0);
@@ -207,6 +209,7 @@ public sealed class Curva : StandSet
     public override string Name => "Curva";
     public override string About => "Italian concrete: two open tiers, arches, spiral towers";
     public override uint Swatch => 0xe0a85e;
+    public override uint[] Mains => new uint[] { Ochre, Travertine };
     public override float Natural(Kind k) => k == Kind.Side ? 26 : k == Kind.End ? 28 : 27;
     public override Vector2 Range => new(20, 32);
     public override (uint col, Look look) Cap => (Ochre, Look.Plain);
@@ -322,6 +325,7 @@ public sealed class TheWall : StandSet
     public override string Name => "The Wall";
     public override string About => "One giant, steep standing tier under pylons and a box roof";
     public override uint Swatch => 0xffd447;
+    public override uint[] Mains => new uint[] { Clad, RoofCol, RoofTop, Panels };
     public override float Natural(Kind k) => k == Kind.End ? 42 : 36;
     public override Vector2 Range => new(26, 46);
     public override (uint col, float par) Lower(BuiltGround g) => (g.Seat, 1);
@@ -389,6 +393,7 @@ public sealed class Citadel : StandSet
     public override string Name => "Citadel";
     public override string About => "A fortress: stone walls, battlements, banners, round keeps";
     public override uint Swatch => 0x9a958a;
+    public override uint[] Mains => new uint[] { Stone, StoneTop, Base };
     public override float Natural(Kind k) => k == Kind.End ? 27 : k == Kind.Side ? 24 : 26;
     public override Vector2 Range => new(22, 34);
     public override (uint col, Look look) Front(BuiltGround g) => (Stone, Look.Brick);

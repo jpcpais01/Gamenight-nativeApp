@@ -24,6 +24,17 @@ public sealed class StadiumPlan
         if (Sets == null || Sets.Length < 8) Sets = (int[])new StadiumPlan().Sets.Clone();
         Sets[(int)s] = set;
     }
+
+    /// <summary>The main colour chosen per set (0 its own, <see cref="Kit.ClubPaint"/> the club's).</summary>
+    public uint[] Paint;
+
+    public uint PaintOf(int set) => Paint != null && set < Paint.Length ? Paint[set] : 0;
+
+    public void SetPaint(int set, uint col)
+    {
+        if (Paint == null || Paint.Length < Kit.Sets.Length) Array.Resize(ref Paint, Kit.Sets.Length);
+        Paint[set] = col;
+    }
 }
 
 /// <summary>One surface of a cross-section: from A to B (offset back from the stand's front
@@ -126,6 +137,39 @@ public static class Kit
 
     public static readonly string[] SlotNames = { "Main stand", "Home end", "Away end", "Near side", "Home corner, far", "Away corner, far", "Home corner, near", "Away corner, near" };
 
+    /// <summary>The colours a set's main colour can be changed to (0 keeps its own; ClubPaint is the club's).</summary>
+    public const uint ClubPaint = 1;
+    public static readonly uint[] Paints =
+    {
+        0, ClubPaint, 0xeceae4, 0x2a2c33, 0x8c8f95, 0xb8322a, 0x7a1f3a, 0xd8702a, 0xe0b030, 0xd8c49a,
+        0x2e7d4f, 0x2f9c9a, 0x6fb3e0, 0x2f5fb8, 0x1f2c5c, 0x6a3fa0,
+    };
+
+    /// <summary>How a set's colours change when its main colour is `want`: each of its main
+    /// colours keeps its lightness against the first (darker ones a shade of `want`, lighter
+    /// ones `want` washed toward white), everything else is untouched.</summary>
+    public static Func<uint, uint> Repaint(StandSet set, uint want)
+    {
+        if (want == 0 || set == null || set.Mains.Length == 0) return null;
+        var mains = set.Mains;
+        float refL = Mathf.Max(Lum(mains[0]), 0.02f);
+        var map = new Dictionary<uint, uint>();
+        foreach (var c in mains)
+        {
+            float k = Lum(c) / refL;
+            map[c] = k <= 1 ? Darken(want, k) : Mix(want, 0xffffff, 1 - 1 / k);
+        }
+        return c => map.TryGetValue(c, out var o) ? o : c;
+    }
+
+    static float Lum(uint c) => (0.3f * ((c >> 16) & 255) + 0.59f * ((c >> 8) & 255) + 0.11f * (c & 255)) / 255f;
+
+    static uint Mix(uint a, uint b, float t)
+    {
+        uint Ch(int sh) => (uint)Mathf.Round(Mathf.Lerp((a >> sh) & 255, (b >> sh) & 255, t)) << sh;
+        return Ch(16) | Ch(8) | Ch(0);
+    }
+
     public static uint Darken(uint hex, float k) =>
         ((uint)Mathf.Min(255, ((hex >> 16) & 255) * k) << 16) | ((uint)Mathf.Min(255, ((hex >> 8) & 255) * k) << 8) | (uint)Mathf.Min(255, (hex & 255) * k);
 
@@ -147,6 +191,8 @@ public abstract class StandSet
     public abstract float Natural(Kind k);
     /// <summary>How low and how high it can go (a corner meeting a neighbour).</summary>
     public abstract Vector2 Range { get; }
+    /// <summary>Its main colours, the first the one the builder shows: the club can change them.</summary>
+    public abstract uint[] Mains { get; }
 
     /// <summary>The pitch wall's colour and look.</summary>
     public virtual (uint col, Look look) Front(BuiltGround g) => (g.WallCol, Look.Wall);

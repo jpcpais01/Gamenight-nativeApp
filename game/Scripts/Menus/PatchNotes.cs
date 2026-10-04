@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.25", "Paint your stadium: in the builder each stand set has 16 colours (its own, your club's, and 14 more) for its main colour, saved with your plan. Drag the stadium to turn round it and tilt; two fingers slide across it and pinch to zoom."),
         ("0.24", "The crowd sounds real: the ends sing their songs in voice, the capo calls and the end answers, groans, applause for saves, whistles at time-wasting, the PA calls your scorer and the end roars his name back. Each ground sounds its own; the end nearest the camera is loudest."),
         ("0.23", "One PRESS / SPRINT button: in defence hold it to close the carrier down tight and poke the ball away. Without it your player shadows him goal-side and meets loose balls himself; pointing the stick away takes over. Through balls go where you aim, the hold sets how far ahead."),
         ("0.22", "Five more stadium sets in the builder: Harbour (containers and cranes), Pagoda (temple roofs and lanterns), Deco (1930s cream and gold with a clock tower), Crater (a volcano bowl with lava seams) and Orbital (the biggest, under a floating halo). Mix them with the first five."),

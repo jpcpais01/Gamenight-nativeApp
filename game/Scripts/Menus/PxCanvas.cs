@@ -91,6 +91,9 @@ public abstract partial class PxCanvas : Control
     /// <summary>Is this area being held down right now?</summary>
     protected bool Held(string key) => _down && !_dragging && _inside && _press == key;
 
+    /// <summary>Is there a tap area here?</summary>
+    protected bool OnTapArea(Vector2 p) => HitAt(p) != null;
+
     Hit? HitAt(Vector2 p)
     {
         for (int i = _hits.Count - 1; i >= 0; i--)

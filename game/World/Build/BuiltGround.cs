@@ -28,7 +28,11 @@ public sealed class BuiltGround : Ground
         _preview = preview;
         // Debug: `-- --plan=0,1,2,3,4,0,1,2` (a set per slot, in Slot order).
         foreach (var arg in OS.GetCmdlineUserArgs())
-            if (arg.StartsWith("--plan=")) _plan = new StadiumPlan { Sets = Array.ConvertAll(arg[7..].Split(','), int.Parse) };
+        {
+            if (arg.StartsWith("--plan=")) _plan = new StadiumPlan { Sets = Array.ConvertAll(arg[7..].Split(','), int.Parse), Paint = _plan.Paint };
+            // `--paint=0,b8322a,...` (a main colour per set, 0 its own, 1 the club's).
+            if (arg.StartsWith("--paint=")) _plan.Paint = Array.ConvertAll(arg[8..].Split(','), h => Convert.ToUInt32(h, 16));
+        }
     }
 
     public MeshData M => Static;
@@ -45,6 +49,13 @@ public sealed class BuiltGround : Ground
     protected override Vector3[] GlowSpots => _seen.ToArray();
 
     StandSet SetOf(Slot s) => Kit.Sets[_plan.Get(s)];
+
+    /// <summary>Builds in this set's colours as the club chose them (null: as they are).</summary>
+    void Painted(StandSet set)
+    {
+        uint want = set == null ? 0 : _plan.PaintOf(Array.IndexOf(Kit.Sets, set));
+        Static.Paint = ShadowOnly.Paint = Kit.Repaint(set, want == Kit.ClubPaint ? HomeColor : want);
+    }
 
     float TopOf(Slot s) => Clamp(SetOf(s), SetOf(s).Natural(Kit.KindOf(s)));
 
@@ -203,10 +214,13 @@ public sealed class BuiltGround : Ground
 
         foreach (var p in pieces)
         {
+            Painted(p.Set);
             Sweep(p.Mesh(this), p);
             p.Set.Dress(p, this);
         }
+        Painted(near.Set);
         if (!_preview) Paddock(near);
+        Painted(null);
 
         Pitchside.Tunnel(m, -Kit.BZ, Kit.DarkConcrete);
         Pitchside.AdBoards(m);
