@@ -43,5 +43,6 @@ public static class Grounds
     public static readonly System.Collections.Generic.List<Ground> All = new()
     {
         new Ground { Id = "big", Name = "The big stadium", About = "Floodlights on, a full house" },
+        new Ground { Id = "comunale", Name = "Stadio Comunale", About = "An Italian bowl: the open Curva, spiral towers, umbrella pines" },
     };
 }
