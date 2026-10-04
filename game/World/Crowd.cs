@@ -9,8 +9,9 @@ public sealed class TierFans
 {
     /// <summary>Seat width and row depth (along the slope), metres.</summary>
     public float SeatW = 0.62f, RowD = 0.8f;
-    /// <summary>Share of seats taken.</summary>
-    public float Fill = 0.92f;
+    /// <summary>Share of seats taken, on average: the empty ones come in random singles and in
+    /// patchy gaps, and the ends behind the goals are packed fuller.</summary>
+    public float Fill = 0.9f;
     /// <summary>Aisle steps every 15 m (matches the tier look).</summary>
     public bool Aisles = true;
     /// <summary>Vomitories every 30 m between these slope distances (none if y &lt;= x).</summary>
@@ -25,7 +26,7 @@ public sealed class TierFans
 }
 
 /// <summary>
-/// The crowd: every fan is an upright card on his step, all of them in one static mesh (one
+/// The crowd: every fan is an upright sprite (CrowdSprites) on his step, all of them in one static mesh (one
 /// draw). The vertex shader dresses and animates each from a hash of where he stands: sitting
 /// or standing, bouncing with the ultras, up out of their seats when it gets close, arms and
 /// scarves up, the scoring side going wild while the other sits in silence, cards held up
@@ -51,6 +52,7 @@ public sealed class Crowd
         // Running u along the front edge (the tier strip's uv) is the same at every offset
         // only approximately; aisles and tifo rects use the front edge's u, as the look does.
         var rng = new Random(path.Count * 7919 + (int)(a.X * 13 + a.Y * 31));
+        int seed = rng.Next(1000);
         for (int k = 0; k < rows; k++)
         {
             float sv = (k + 0.6f) * o.RowD;
@@ -62,13 +64,32 @@ public sealed class Crowd
                 // offset round the corners; close enough for aisles every 15 m.
                 if (o.Aisles && Mathf.Abs(Mathf.PosMod(u, 15f) - 7.5f) > 7.5f - 0.6f) return;
                 if (o.Vom.Y > o.Vom.X && sv > o.Vom.X - 0.4f && sv < o.Vom.Y + 0.2f && Mathf.Abs(Mathf.PosMod(u / 30f + 0.25f, 1f) - 0.5f) * 30f < 1.6f) return;
-                if (rng.NextDouble() > o.Fill) return;
                 int zone = o.Zone ?? ZoneAt(path, p);
+                float fill = o.Fill + (Patch(u / 7f, k / 2.5f, seed) - 0.5f) * 0.32f + (zone != 0 ? 0.06f : 0);
+                if (rng.NextDouble() > Mathf.Min(fill, 0.995f)) return;
                 var pos = new Vector3(p.X, sec.Y, p.Z);
                 var tifo = o.Tifo?.Invoke(pos, sv, zone) ?? new Vector2(-1, -1);
                 Add(pos, new Vector3(-nrm.X, 0, -nrm.Y), zone, shade, tifo, o.SeatW);
             });
         }
+    }
+
+    /// <summary>Smooth value noise in 0..1: where the gaps in a stand bunch up.</summary>
+    static float Patch(float x, float y, int seed)
+    {
+        static float H(int i, int j, int s)
+        {
+            uint n = (uint)(i * 374761393 + j * 668265263 + s * 2147483647);
+            n = (n ^ (n >> 13)) * 1274126177;
+            return ((n ^ (n >> 16)) & 0xffff) / 65535f;
+        }
+        int ix = Mathf.FloorToInt(x), iy = Mathf.FloorToInt(y);
+        float fx = x - ix, fy = y - iy;
+        fx = fx * fx * (3 - 2 * fx);
+        fy = fy * fy * (3 - 2 * fy);
+        float a = Mathf.Lerp(H(ix, iy, seed), H(ix + 1, iy, seed), fx);
+        float b = Mathf.Lerp(H(ix, iy + 1, seed), H(ix + 1, iy + 1, seed), fx);
+        return Mathf.Lerp(a, b, fy);
     }
 
     static int ZoneAt(List<PathPt> path, Vector3 p)
@@ -102,6 +123,13 @@ public sealed class Crowd
         _idx.Add(i0 + 1); _idx.Add(i0 + 2); _idx.Add(i0 + 3);
     }
 
+    static ShaderMaterial Material()
+    {
+        var mat = new ShaderMaterial { Shader = GD.Load<Shader>("res://World/Shaders/crowd.gdshader") };
+        mat.SetShaderParameter("sprites", CrowdSprites.Texture());
+        return mat;
+    }
+
     /// <summary>Bakes each fan's share of the sun (through the stands) and builds the draw.</summary>
     public MeshInstance3D Build(Node3D root, LightBake bake)
     {
@@ -128,7 +156,7 @@ public sealed class Crowd
         var mi = new MeshInstance3D
         {
             Mesh = mesh,
-            MaterialOverride = new ShaderMaterial { Shader = GD.Load<Shader>("res://World/Shaders/crowd.gdshader") },
+            MaterialOverride = Material(),
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             // Fans are moved up to ~2 m by the shader.
             ExtraCullMargin = 3,

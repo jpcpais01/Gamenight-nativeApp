@@ -239,10 +239,10 @@ public sealed class OldGround : Ground
         all.AddRange(away);
         RailBanners(m, all, 18.9f, 12.4f, 30, 2.8f);
 
-        Crowd.Tier(main, new(0.4f, 1.4f), new(15, Tier(15)), new TierFans { Fill = 0.72f, Shade = new(-2, 6) });
+        Crowd.Tier(main, new(0.4f, 1.4f), new(15, Tier(15)), new TierFans { Fill = 0.88f, Shade = new(-2, 6) });
         Crowd.Tier(shed, new(0.4f, 1.4f), new(18, Tier(18)), new TierFans { Aisles = false, Shade = new(-1, 9), Tifo = EndTifos(29, shedSlope) });
-        Crowd.Tier(away, new(0.4f, 1.4f), new(17, top), new TierFans { Aisles = false, Fill = 0.35f, Tifo = EndTifos(20, awaySlope * 0.55f + 1) });
-        Crowd.Tier(near, new(0.4f, 1.4f), new(8, Tier(8)), new TierFans { Fill = 0.6f });
+        Crowd.Tier(away, new(0.4f, 1.4f), new(17, top), new TierFans { Aisles = false, Fill = 0.72f, Tifo = EndTifos(20, awaySlope * 0.55f + 1) });
+        Crowd.Tier(near, new(0.4f, 1.4f), new(8, Tier(8)), new TierFans { Fill = 0.85f });
         WaveFlags(main, new(0.4f, 1.4f), new(15, Tier(15)));
         WaveFlags(shed, new(0.4f, 1.4f), new(18, Tier(18)));
         HoldBanner(shed[shed.Count / 2], 6.5f, new(0.4f, 1.4f), new(18, Tier(18)), 10);

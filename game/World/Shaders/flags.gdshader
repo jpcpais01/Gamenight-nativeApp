@@ -64,7 +64,10 @@ void fragment() {
 		b = step(r, 0.3) * (1.0 - step(0.2, r) * step(r, 0.24));
 	}
 	else if (pat < 5.5) b = mod(floor(u.x * 4.0) + floor(u.y * 3.0), 2.0);     // chequers
-	else b = step(0.5, fract(u.y * 2.5));                                      // hoops
+	else if (pat < 6.5) b = step(0.5, fract(u.y * 2.5));                       // hoops
+	else if (pat < 7.5) b = step(0.5, fract(u.x * 3.5));                       // stripes
+	else if (pat < 8.5) b = step(u.x * 0.62 + 0.19, u.y);                      // diagonal halves
+	else b = max(step(abs(u.y - 0.5), 0.1), step(abs(u.x - 0.36), 0.065));     // cross
 	vec3 c = pat > 9.5 ? vec3(0.04) : mix(col, col2, b);
 	if (has_crest > 0.5 && pat > 3.5 && pat < 4.5) {
 		// The club crest in the middle of the cloth.

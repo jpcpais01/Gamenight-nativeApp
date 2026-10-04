@@ -23,7 +23,10 @@ public sealed class Flags
             (Pos, Yaw, Size, C, C2, Pat) = (pos, yaw, size, c, c2, pat);
     }
 
-    const uint W = 0xf3eee2, N = 0x14123a;
+    const uint W = 0xf3eee2, N = 0x14123a, G = 0xffd447, K = 0x16161a;
+    /// <summary>The designs without the crest: band, halves, sash, tricolour, chequers, hoops,
+    /// stripes, diagonal halves, cross (flags.gdshader).</summary>
+    static readonly int[] Plain = { 0, 1, 2, 3, 5, 6, 7, 8, 9 };
     readonly List<Spot> _spots = new();
     long _seed = 11;
 
@@ -32,7 +35,7 @@ public sealed class Flags
     public int Count => _spots.Count;
 
     /// <summary>Flags over a tier from a to b (offset, height) along `path`, by zone: the home
-    /// end (1) waves 34, the away end (2) 12, the sides (0) 18.</summary>
+    /// end (1) waves 56, the away end (2) 20, the sides (0) 36.</summary>
     public void Add(List<PathPt> path, Vector2 a, Vector2 b, uint home, uint away, float crestShare)
     {
         void Zone(int zone, int n, uint[][] cols, float big, float crest)
@@ -48,12 +51,12 @@ public sealed class Flags
                 float o = o0 + Rnd() * (o1 - o0);
                 float h = a.Y + (o - a.X) / (b.X - a.X) * (b.Y - a.Y);
                 _spots.Add(new Spot(p.At(o, h + 1.1f), Mathf.Atan2(-p.NX, -p.NZ), 0.8f + Rnd() * big,
-                    withCrest ? home : c[0], withCrest ? W : c[1], withCrest ? 4 : (int)(Rnd() * 7)));
+                    withCrest ? home : c[0], withCrest ? W : c[1], withCrest ? 4 : Plain[(int)(Rnd() * Plain.Length)]));
             }
         }
-        Zone(1, 34, new[] { new[] { home, W }, new[] { home, N }, new[] { W, home }, new[] { 0xffd447u, home } }, 0.7f, crestShare);
-        Zone(2, 12, new[] { new[] { away, W }, new[] { W, away }, new[] { away, N } }, 0.4f, 0);
-        Zone(0, 18, new[] { new[] { home, W }, new[] { W, home }, new[] { away, W } }, 0.35f, crestShare * 0.6f);
+        Zone(1, 56, new[] { new[] { home, W }, new[] { home, N }, new[] { W, home }, new[] { G, home }, new[] { home, K }, new[] { K, home }, new[] { home, G } }, 0.75f, crestShare);
+        Zone(2, 20, new[] { new[] { away, W }, new[] { W, away }, new[] { away, N }, new[] { away, K }, new[] { G, away } }, 0.45f, 0);
+        Zone(0, 36, new[] { new[] { home, W }, new[] { W, home }, new[] { home, K }, new[] { away, W } }, 0.4f, crestShare * 0.6f);
     }
 
     public void Build(Node3D root, LightBake bake, Texture2D crest)

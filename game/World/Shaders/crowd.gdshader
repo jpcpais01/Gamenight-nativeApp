@@ -1,4 +1,5 @@
-// The crowd: one upright card per fan, all in one static mesh. VERTEX is the fan's spot on
+// The crowd: one upright sprite per fan (CrowdSprites: 16 people x 12 poses, each texel a
+// region to colour), all in one static mesh. VERTEX is the fan's spot on
 // his step, NORMAL the way he faces (the pitch), UV the card corner, UV2 his card in the
 // tifo (atlas uv, or -1), COLOR = (seat width, zone/2, roof shade, sun visibility). Zones:
 // 0 side stands (seated, mixed), 1 home end (the ultras: standing, bouncing), 2 away end.
@@ -13,17 +14,22 @@ render_mode unshaded, cull_disabled, shadows_disabled;
 uniform vec4 flares[8];
 uniform int flare_n = 0;
 
+uniform sampler2D sprites : filter_nearest;
+
 varying vec2 q;
+varying flat float pose;
+varying flat float vrow;
+varying flat float pat;
 varying flat vec3 shirt;
+varying flat vec3 shirt2;
+varying flat vec3 jacket;
+varying flat vec3 hat;
 varying flat vec3 skin;
 varying flat vec3 hair;
 varying flat vec3 legs;
 varying flat vec3 club;
 varying flat vec3 light;
 varying flat vec3 card;
-varying flat float arms;
-varying flat float scarf;
-varying flat float hairOn;
 varying flat float torch;
 varying flat float cardOn;
 varying float dist;
@@ -65,9 +71,8 @@ void vertex() {
 	stand = max(stand, ours) * (1.0 - theirs * step(0.3, h(s, 8.1)) * (1.0 - ultra));
 	float tall = 0.92 + 0.14 * h(s, 2.9);
 	float wide = 0.85 + 0.3 * h(s, 1.7);
-	scarf = step(h(s, 5.5), max(max(max(ultra, awayEnd) * 0.7, ex2 * 0.75), sing * 0.95)) * (1.0 - ours) * (1.0 - viking);
-	arms = max(max(scarf, ultra * step(0.6, beat) * step(0.5, h(s, 7.7))), ours * step(0.15, h(s, 9.9)));
-	arms = max(arms, viking * step(h(s, 2.2) * 0.25, gn_chant.z + 0.3));
+	float scarf = step(h(s, 5.5), max(max(max(ultra, awayEnd) * 0.7, ex2 * 0.75), sing * 0.95)) * (1.0 - ours) * (1.0 - viking);
+	float arms = max(ultra * step(0.6, beat) * step(0.5, h(s, 7.7)), viking * step(h(s, 2.2) * 0.25, gn_chant.z + 0.3));
 
 	// Card display for the kick-off: held up overhead, edge to edge, they make the picture.
 	cardOn = 0.0;
@@ -77,12 +82,35 @@ void vertex() {
 		card = textureLod(gn_atlas, UV2, 0.0).rgb * (0.86 + 0.14 * h(s, 4.4));
 	}
 
-	float w = COLOR.r * 0.98;
+	// His pose (CrowdSprites.Pose): standing about, arms up or the V on the beat, the scarf held
+	// up, clapping when it gets going, a fist pump or clapping for a goal, hands on the head
+	// when they concede, now and then pointing; the card for the tifo.
+	float clapK = step(0.0, sin(t * 13.0 + ph));
+	pose = step(0.55, sin(t * 0.7 + ph));
+	if (scarf > 0.5) {
+		pose = 6.0 + step(0.0, sin(t * 2.6 + ph));
+	} else if (ours > 0.5) {
+		float k = h(s, 9.9);
+		pose = k < 0.3 ? 10.0 : k < 0.7 ? 2.0 + step(0.0, sin(t * 6.0 + ph)) : 4.0 + clapK;
+	} else if (arms > 0.5) {
+		pose = 2.0 + step(0.5, h(s, 7.3));
+	} else if (theirs > 0.5 && h(s, 8.3) < 0.45 && gn_goal.y < 7.0) {
+		pose = 8.0;
+	} else if (h(s, 6.1) < 0.4 * smoothstep(0.45, 0.8, ex)) {
+		pose = 4.0 + clapK;
+	} else if (step(0.994, h(s + floor(t * 0.4 + h(s, 0.9) * 10.0), 7.0)) > 0.5) {
+		pose = 11.0;
+	}
+	if (cardOn > 0.5) pose = 9.0;
+	// Who he is: one of the 16 people (the kids are rare).
+	vrow = h(s, 2.4) < 0.06 ? 14.0 + step(0.5, h(s, 2.5)) : floor(h(s, 1.9) * 13.99);
+
+	float w = 0.8 * wide;
 	vec3 face = normalize(NORMAL);
 	vec3 right = normalize(vec3(-face.z, 0.0, face.x));
 	float cx = UV.x * w;
 	float cy = UV.y * 2.25 * tall;
-	q = vec2(cx / wide, cy / tall);
+	q = vec2(UV.x + 0.5, UV.y);
 	VERTEX = root + right * (cx + sin(t * 1.3 + ph) * 0.02) + vec3(0.0, cy - (1.0 - stand) * 0.44 + jump, 0.0) + face * 0.05;
 	dist = length((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
 
@@ -93,11 +121,19 @@ void vertex() {
 		: hs < share + 0.12 ? vec3(0.7, 0.67, 0.6)
 		: hs < share + 0.22 ? vec3(0.025, 0.028, 0.035)
 		: vec3(0.09, 0.11, 0.17);
+	// Replica shirts: some striped or hooped in the second colour.
+	pat = hs < share ? floor(h(s, 3.1) * 5.0) - 2.0 : 0.0;
+	shirt2 = h(s, 3.2) < 0.5 ? vec3(0.85, 0.82, 0.74) : club * 0.35;
+	float hj = h(s, 6.4);
+	jacket = hj < 0.3 ? vec3(0.018, 0.02, 0.025) : hj < 0.5 ? vec3(0.03, 0.04, 0.09) : hj < 0.65 ? vec3(0.18, 0.18, 0.19)
+		: hj < 0.75 ? vec3(0.07, 0.08, 0.04) : club * 0.5;
+	float hk = h(s, 6.7);
+	hat = hk < 0.5 ? club : hk < 0.7 ? vec3(0.02) : hk < 0.85 ? vec3(0.75, 0.73, 0.68) : vec3(0.04, 0.05, 0.12);
 	skin = mix(vec3(0.84, 0.53, 0.32), vec3(0.15, 0.065, 0.028), h(s, 9.2));
 	float hh = h(s, 3.9);
-	hair = mix(vec3(0.007, 0.005, 0.004), vec3(0.17, 0.09, 0.03), hh * hh);
-	hairOn = step(0.3, h(s, 0.7));
-	legs = mix(vec3(0.012, 0.016, 0.03), vec3(0.07, 0.07, 0.08), h(s, 4.7));
+	hair = hh < 0.86 ? mix(vec3(0.007, 0.005, 0.004), vec3(0.17, 0.09, 0.03), hh * hh) : hh < 0.94 ? vec3(0.55, 0.4, 0.17) : vec3(0.45, 0.44, 0.42);
+	float hl = h(s, 4.7);
+	legs = hl < 0.45 ? mix(vec3(0.03, 0.05, 0.11), vec3(0.07, 0.1, 0.2), h(s, 4.8)) : hl < 0.85 ? vec3(0.015, 0.017, 0.022) : vec3(0.2, 0.18, 0.14);
 
 	// Light: sky and floodlights, and the sun where the stands don't shade him.
 	float shade = COLOR.b;
@@ -115,32 +151,29 @@ void vertex() {
 }
 
 void fragment() {
-	float x = q.x;
-	float y = q.y;
-	float ax = abs(x);
+	int px = int(floor(q.x * 16.0));
+	int py = int(floor((1.0 - q.y) * 45.0));
+	if (px < 0 || px > 15 || py < 0 || py > 44) discard;
+	vec2 rg = texelFetch(sprites, ivec2(int(pose) * 16 + px, int(vrow) * 45 + py), 0).rg;
+	int reg = int(rg.r * 255.0 + 0.5);
+	if (reg == 0) discard;
 	vec3 c;
 	float glow = 0.0;
-	if (cardOn > 0.5 && ax < 0.29 && y > 1.2 && y < 1.95) {
-		c = card;
-	} else {
-		vec2 hq = vec2(x, (y - 1.6) * 0.92);
-		bool up = arms > 0.5;
-		if (scarf > 0.5 && ax < 0.27 && y > 1.86 && y < 1.97) {
-			c = mix(club, vec3(0.88, 0.85, 0.77), step(0.5, fract(x * 6.0 + 0.25)));
-		} else if (length(hq) < 0.105) {
-			c = mix(skin, hair, step(0.04, hq.y) * hairOn) * (1.0 - 0.25 * smoothstep(0.05, 0.105, ax));
-			glow = torch;
-		} else if (up ? (abs(ax - 0.21) < 0.045 && y > 1.32 && y < 1.92) : (abs(ax - 0.225) < 0.04 && y > 1.0 && y < 1.42)) {
-			float hand = up ? step(1.84, y) : step(y, 1.07);
-			c = mix(shirt * 0.85, skin, hand);
-		} else if (y > 0.86 && y < 1.46 && ax < 0.2 - max(0.0, y - 1.38) * 1.3) {
-			c = shirt * (1.0 - 0.28 * smoothstep(0.09, 0.2, ax));
-		} else if (y > 0.0 && y < 0.88 && abs(ax - 0.075) < 0.068) {
-			c = legs;
-		} else {
-			discard;
-		}
-		c *= 0.62 + 0.38 * smoothstep(0.0, 1.7, y);
+	if (reg == 1) { c = skin; glow = torch * step(float(py), 16.0); }
+	else if (reg == 2) { c = hair; glow = torch; }
+	else if (reg == 3) {
+		c = shirt;
+		if (pat > 0.5 && pat < 1.5) c = mix(c, shirt2, float((px / 2) % 2));
+		else if (pat > 1.5) c = mix(c, shirt2, float((py / 3) % 2));
 	}
+	else if (reg == 4) c = jacket;
+	else if (reg == 5) c = legs;
+	else if (reg == 6) c = vec3(0.03, 0.03, 0.035);
+	else if (reg == 7) { c = hat; glow = torch; }
+	else if (reg == 8) c = mix(club, vec3(0.88, 0.85, 0.77), float(((px + py) / 2) % 2));
+	else if (reg == 9) c = cardOn > 0.5 ? card : shirt;
+	else c = vec3(0.03, 0.025, 0.02);
+	c *= rg.g * 2.0;
+	c *= 0.68 + 0.32 * smoothstep(0.0, 0.75, q.y);
 	ALBEDO = world_fog(c * light + vec3(1.0, 0.97, 0.9) * glow * 1.6, dist, 0.04);
 }
