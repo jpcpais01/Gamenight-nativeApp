@@ -10,7 +10,7 @@ namespace GameNight.Grounds;
 /// heads) in 12 poses (standing about, arms up, the V, clapping, a scarf held up, hands on
 /// the head, a card held up for the tifo, a fist pump, pointing). Each texel is a region, not a
 /// colour (R: skin, hair, shirt, jacket, legs, shoes, hat, scarf, card, eyes) plus a shade (G),
-/// so crowd.gdshader dresses every fan in his own colours from one 192 x 720 texture.
+/// so crowd.gdshader dresses every fan in his own colours from one 192 x 720 texture (RGBA8: the plainest format every GPU samples).
 /// </summary>
 public static class CrowdSprites
 {
@@ -31,7 +31,7 @@ public static class CrowdSprites
     public static ImageTexture Texture()
     {
         if (_tex != null) return _tex;
-        var img = Image.CreateEmpty(W * Poses, H * Rows, false, Image.Format.Rg8);
+        var img = Image.CreateEmpty(W * Poses, H * Rows, false, Image.Format.Rgba8);
         for (int row = 0; row < Rows; row++)
             for (int pose = 0; pose < Poses; pose++)
                 new Sheet(img, pose * W, row * H).Person(People[row], (Pose)pose);

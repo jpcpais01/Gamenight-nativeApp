@@ -16,27 +16,21 @@ uniform int flare_n = 0;
 
 uniform sampler2D sprites : filter_nearest;
 
+// Few varyings (mobile GPUs have as few as 16 slots, and a shader over the limit doesn't
+// draw at all): the fan's colours go packed four to a uvec4, 8 bits a channel.
 varying vec2 q;
-varying flat float pose;
-varying flat float vrow;
-varying flat float pat;
-varying flat vec3 shirt;
-varying flat vec3 shirt2;
-varying flat vec3 jacket;
-varying flat vec3 hat;
-varying flat vec3 skin;
-varying flat vec3 hair;
-varying flat vec3 legs;
-varying flat vec3 club;
-varying flat vec3 light;
-varying flat vec3 card;
-varying flat float torch;
-varying flat float cardOn;
 varying float dist;
+varying flat vec4 misc;   // pose, person row, shirt pattern, torch glow
+varying flat vec3 light;
+varying flat uvec4 colA;  // shirt, second shirt colour, jacket, hat
+varying flat uvec4 colB;  // skin, hair, legs, club
+varying flat uvec2 colC;  // card, whether he holds it up
 
 float h(float s, float k) { return fract(sin(s * 12.9898 + k * 78.233) * 43758.5453); }
 
 void vertex() {
+	float pose, vrow, pat, torch, cardOn;
+	vec3 shirt, shirt2, jacket, hat, skin, hair, legs, club, card;
 	vec3 root = VERTEX;
 	float s = fract(sin(dot(root.xz, vec2(12.9898, 78.233)) + root.y * 3.7) * 43758.5453) * 100.0;
 	float zone = COLOR.g * 2.0;
@@ -148,9 +142,18 @@ void vertex() {
 	// Camera flashes popping round the ground on the big moments: a chance, a goal.
 	float moment = max(fresh, smoothstep(0.75, 1.0, gn_excite));
 	torch = max(torch, step(1.0 - 0.004 * moment, h(s + floor(t * 9.0 + h(s, 0.6) * 10.0), 6.0)) * 1.4);
+	misc = vec4(pose, vrow, pat, torch);
+	colA = uvec4(packUnorm4x8(vec4(shirt, 0.0)), packUnorm4x8(vec4(shirt2, 0.0)), packUnorm4x8(vec4(jacket, 0.0)), packUnorm4x8(vec4(hat, 0.0)));
+	colB = uvec4(packUnorm4x8(vec4(skin, 0.0)), packUnorm4x8(vec4(hair, 0.0)), packUnorm4x8(vec4(legs, 0.0)), packUnorm4x8(vec4(club, 0.0)));
+	colC = uvec2(packUnorm4x8(vec4(card, 0.0)), uint(cardOn > 0.5));
 }
 
 void fragment() {
+	float pose = misc.x, vrow = misc.y, pat = misc.z, torch = misc.w;
+	vec3 shirt = unpackUnorm4x8(colA.x).rgb, shirt2 = unpackUnorm4x8(colA.y).rgb, jacket = unpackUnorm4x8(colA.z).rgb, hat = unpackUnorm4x8(colA.w).rgb;
+	vec3 skin = unpackUnorm4x8(colB.x).rgb, hair = unpackUnorm4x8(colB.y).rgb, legs = unpackUnorm4x8(colB.z).rgb, club = unpackUnorm4x8(colB.w).rgb;
+	vec3 card = unpackUnorm4x8(colC.x).rgb;
+	float cardOn = float(colC.y);
 	int px = int(floor(q.x * 16.0));
 	int py = int(floor((1.0 - q.y) * 45.0));
 	if (px < 0 || px > 15 || py < 0 || py > 44) discard;
