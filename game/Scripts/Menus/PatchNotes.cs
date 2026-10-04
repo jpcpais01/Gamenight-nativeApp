@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.14", "FPS DETAIL now catches spikes: a live frame-time graph, and for each hitch what caused it (a garbage collection, a shader compiling, the GPU, a part of the game, or Android itself), how many ms it cost and what was happening in the match."),
         ("0.13", "Pick the weather in the pause menu (MATCH: EVENING, SUNNY DAY or RAINY NIGHT); it switches at once and is remembered. In the rain the pitch soaks dark with standing water that catches the floodlights, the rain hisses, and thunder rolls after each flash."),
         ("0.12", "See where the phone's power goes: tap FPS COUNTER in the pause menu twice for DETAIL. It shows the frame time, GPU against CPU, the engine's step, draw calls, and a ranked bar for each part of the game."),
         ("0.11", "Sound no longer stays off after you leave a match from the pause menu. The goal nets have smaller holes, in a softer grey, and still show from the match camera."),

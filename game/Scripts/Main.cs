@@ -77,6 +77,14 @@ public partial class Main : Node
         _prof.Watch(_view.Viewport, GetViewport());
         _prof.SimStepMs = () => _runner?.StepMs ?? 0;
         _prof.AudioBlockMs = () => GameAudio.Instance?.BlockMs ?? 0;
+        _prof.SimStepPeak = () =>
+        {
+            if (_runner == null) return 0;
+            double peak = _runner.StepPeak;
+            _runner.StepPeak = 0;
+            return peak;
+        };
+        _prof.Context = SpikeContext;
         _letterbox.Skip += () =>
         {
             if (Cutscene.Active)
@@ -343,6 +351,25 @@ public partial class Main : Node
             _thunderFor = atm.FlashAt;
             audio.Thunder(0.4f + (float)Random.Shared.NextDouble() * 3f);
         }
+    }
+
+    /// <summary>What's happening, in a few words, for the frame-time breakdown's spike list.</summary>
+    string SpikeContext()
+    {
+        if (_pause.IsOpen) return "paused";
+        if (Cutscene.Active) return "walk-out";
+        if (_replay.Active) return "goal replay";
+        if (_time < 3) return "first seconds";
+        return _cur.Phase switch
+        {
+            Phase.Goal => "goal",
+            Phase.Kickoff => "kick-off",
+            Phase.SetPiece => _cur.SetPiece?.ToString().ToLowerInvariant() ?? "set piece",
+            Phase.Out => "ball out",
+            Phase.Halftime => "half time",
+            Phase.Fulltime => "full time",
+            _ => "open play",
+        };
     }
 
     /// <summary>What the buttons say (the PWA's main loop): after your goal they pick the

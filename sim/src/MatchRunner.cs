@@ -152,6 +152,8 @@ public sealed class MatchRunner : IDisposable
 
     /// <summary>What a step costs on the engine thread (ms, smoothed): for the frame-time breakdown.</summary>
     public double StepMs;
+    /// <summary>The slowest step since the frame-time breakdown last took it (ms).</summary>
+    public double StepPeak;
 
     void StepOnce()
     {
@@ -195,7 +197,9 @@ public sealed class MatchRunner : IDisposable
             (last, work) = (work, last);
             steps++;
             stepAt = Stopwatch.GetTimestamp();
-            StepMs += ((stepAt - start) * 1000.0 / Stopwatch.Frequency - StepMs) * 0.05;
+            double ms = (stepAt - start) * 1000.0 / Stopwatch.Frequency;
+            StepMs += (ms - StepMs) * 0.05;
+            if (ms > StepPeak) StepPeak = ms;
         }
     }
 
