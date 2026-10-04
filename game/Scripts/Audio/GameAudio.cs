@@ -169,6 +169,19 @@ public sealed partial class GameAudio : Node
         });
     }
 
+    /// <summary>Thunder after a lightning flash, `delay` seconds later (how far off the strike
+    /// was): a crack when it's close, then a long low roll that swells twice and dies away.</summary>
+    public void Thunder(float delay) => Do(() =>
+    {
+        double t = _mx.Now + delay;
+        float near = Math.Clamp(1 - delay / 4, 0, 1);
+        if (near > 0.3f) _mx.Burst(t, 0.35, FilterType.Bandpass, 900, 0.7f, 0.22f * near, 0.8f);
+        var g = new Param(0.0001f).Set(0.0001f, t).Exp(0.5f, t + 0.12).Exp(0.22f, t + 0.9)
+            .Exp(0.42f, t + 1.4).Exp(0.12f, t + 2.6).Exp(0.25f, t + 3.1).Exp(0.0001f, t + 6.5);
+        _mx.NoiseVoice(t, t + 6.6, 0.35f, g, Bus.Master,
+            new Biquad(FilterType.Lowpass, 120 + 160 * near, 0.9f), new Biquad(FilterType.Peaking, 55, 1, 6));
+    });
+
     public bool Muted
     {
         get => _muted;

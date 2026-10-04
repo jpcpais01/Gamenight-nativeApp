@@ -105,6 +105,8 @@ public partial class Main : Node
         _pause.Restart += NewMatch;
         _pause.SettingsChanged += ApplySettings;
         if (Request != null && !Request.Demo) _pause.Leave = () => Report(false);
+        _pause.WeatherName = () => Atmosphere.Names[(int)_ground.Atmosphere.Weather];
+        _pause.CycleWeather = () => Atmosphere.Names[(int)_ground.Atmosphere.Cycle()];
         ApplySettings();
         if (Request?.Demo == true)
         {
@@ -220,7 +222,11 @@ public partial class Main : Node
     {
         _runner?.Stop();
         // Left from the pause menu: the sound it stopped comes back for the menus.
-        if (Request?.Demo != true && GameAudio.Instance != null) GameAudio.Instance.Suspended = false;
+        if (Request?.Demo != true && GameAudio.Instance != null)
+        {
+            GameAudio.Instance.Suspended = false;
+            GameAudio.Instance.SetRain(false);
+        }
     }
 
     /// <summary>Tells the menus the match is over (full time, or left from the pause menu).</summary>
@@ -299,6 +305,7 @@ public partial class Main : Node
         _goals.Update(_time);
         _prof.Lap(Profiler.Sys.Players);
         _ground.Update(_cur, _time, dt);
+        Weather();
         _prof.Lap(Profiler.Sys.Stadium);
         Sound.Frame(_match, _cur, Request?.Demo != true, Request?.Drill == null, Request?.Drill != null, _pause.IsOpen ? 0 : dt);
         _prof.Lap(Profiler.Sys.Sound);
@@ -319,6 +326,22 @@ public partial class Main : Node
             GetViewport().GetTexture().GetImage().SavePng(_shotPath);
             GetTree().Quit();
             _shotPath = null;
+        }
+    }
+
+    double _thunderFor = -10;
+
+    /// <summary>The rain's hiss, and thunder after each flash (later the farther off it struck).</summary>
+    void Weather()
+    {
+        var atm = _ground.Atmosphere;
+        var audio = GameAudio.Instance;
+        if (atm == null || audio == null || Request?.Demo == true) return;
+        audio.SetRain(atm.Weather == Grounds.Weather.Rain);
+        if (atm.FlashAt > _thunderFor && atm.FlashAt <= _time)
+        {
+            _thunderFor = atm.FlashAt;
+            audio.Thunder(0.4f + (float)Random.Shared.NextDouble() * 3f);
         }
     }
 

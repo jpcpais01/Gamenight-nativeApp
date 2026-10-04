@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.13", "Pick the weather in the pause menu (MATCH: EVENING, SUNNY DAY or RAINY NIGHT); it switches at once and is remembered. In the rain the pitch soaks dark with standing water that catches the floodlights, the rain hisses, and thunder rolls after each flash."),
         ("0.12", "See where the phone's power goes: tap FPS COUNTER in the pause menu twice for DETAIL. It shows the frame time, GPU against CPU, the engine's step, draw calls, and a ranked bar for each part of the game."),
         ("0.11", "Sound no longer stays off after you leave a match from the pause menu. The goal nets have smaller holes, in a softer grey, and still show from the match camera."),
         ("0.10", "The goal nets now look like real nets in a match: a diamond mesh of cord you can see from the normal camera, not a faint haze, still bulging and rippling when the ball hits them."),

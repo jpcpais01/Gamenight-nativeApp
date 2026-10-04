@@ -12,13 +12,15 @@ public sealed partial class PauseMenu : Control
     public event Action Opened, Resumed, Restart, SettingsChanged;
     /// <summary>Leave the match for the menus (set by Main when the menus started it).</summary>
     public Action Leave;
+    /// <summary>The weather: its name, and the next one (set by Main; switches live).</summary>
+    public Func<string> WeatherName, CycleWeather;
 
     static readonly string[] CameraNames = { "Close", "Normal", "Far" };
 
     readonly Button _pause;
     readonly Control _menu;
     readonly VBoxContainer _card;
-    readonly Button _camera, _graphics, _pixels, _fps, _sound, _leave;
+    readonly Button _camera, _graphics, _pixels, _weather, _fps, _sound, _leave;
 
     public bool IsOpen => _menu.Visible;
 
@@ -76,7 +78,9 @@ public sealed partial class PauseMenu : Control
 
         _pixels = Ghost("");
         _pixels.Pressed += NextPixels;
-        card.AddChild(_pixels);
+        _weather = Ghost("");
+        _weather.Pressed += () => { CycleWeather?.Invoke(); Labels(); };
+        card.AddChild(Row(_pixels, _weather));
         _fps = Ghost("");
         // Off, on, then on with the breakdown of where the time goes.
         _fps.Pressed += () =>
@@ -166,6 +170,8 @@ public sealed partial class PauseMenu : Control
         _pixels.Text = $"PIXELS: {h} · {scale}X";
         _fps.Text = "FPS COUNTER: " + (!MatchSettings.ShowFps ? "OFF" : MatchSettings.Profile ? "DETAIL" : "ON");
         _sound.Text = "SOUND: " + (MatchSettings.Sound ? "ON" : "OFF");
+        _weather.Visible = WeatherName != null;
+        if (WeatherName != null) _weather.Text = "MATCH: " + WeatherName().ToUpperInvariant();
     }
 
     // ------------------------------------------------------------------ look

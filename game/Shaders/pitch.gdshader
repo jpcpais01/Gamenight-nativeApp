@@ -85,6 +85,15 @@ void fragment() {
 	float trackMask = step(9.0, outside);
 	g = mix(g, gn_land * (0.9 + 0.1 * vnoise(p * 1.7)), trackMask);
 
+	// Rain: the grass soaks darker and deeper green, water stands in the low spots, and the
+	// floodlights glance off it all at a low angle (a sheen toward the lights, added below).
+	float puddle = 0.0;
+	if (gn_rain > 0.0) {
+		g = pow(g, vec3(1.12)) * vec3(0.8, 0.86, 0.8);
+		puddle = smoothstep(0.75, 0.79, vnoise(p * 0.21 + 3.1) * 0.7 + vnoise(p * 0.83) * 0.3) * (1.0 - trackMask);
+		g = mix(g, vec3(0.13, 0.17, 0.2), puddle * 0.7);
+	}
+
 	// Chalk, filtered by how much of the pixel it covers (as the PWA does): a hard edge made
 	// lines a pixel thick here and two there, and they shimmered as the camera moved. A far
 	// line thinner than a pixel fades to a steady, paler line instead of breaking up.
@@ -95,7 +104,15 @@ void fragment() {
 	ALBEDO = pow(mix(g, chalk, line), vec3(2.2));
 	ROUGHNESS = 1.0;
 	// The ground's floodlight pools.
-	EMISSION = ALBEDO * light_map_flood(vec3(p.x, 0.0, p.y));
+	vec3 flood = light_map_flood(vec3(p.x, 0.0, p.y));
+	EMISSION = ALBEDO * flood;
+	if (gn_rain > 0.0) {
+		// The wet sheen: brightest at a grazing view, strongest on the puddles, lit by the
+		// floodlight pools (and the lightning).
+		float graze = pow(1.0 - clamp(dot(NORMAL, VIEW), 0.0, 1.0), 3.0);
+		float wet = (0.2 + 0.8 * puddle) * (0.25 + 0.75 * graze);
+		EMISSION += (flood * 0.2 + weather_flash() * 0.6) * wet;
+	}
 }
 
 // The sun, kept off where the stands shade the grass (the ground's baked light map).

@@ -90,6 +90,8 @@ public sealed class Atmosphere
     Vector2 _cloudOfs;
     float _cloudShade;
     double _nextFlash = 12, _flashAt = -10;
+    /// <summary>When the last lightning struck (match time), for the thunder.</summary>
+    public double FlashAt => _flashAt;
     readonly Random _rng = new();
 
     public Atmosphere(Node3D root)
