@@ -65,11 +65,13 @@ void vertex() {
 	float viking = gn_chant.w * singing;
 	float idle = sin(t * 7.5 - root.y * 0.5 + h(s, 4.0) * 0.6);
 	float onBeat = sin((gn_chant.z - root.y * 0.025 - h(s, 0.3) * 0.06) * 6.2832);
-	float beat = mix(idle * ultra, onBeat, singing);
-	float jump = max(ultra, singing) * max(0.0, beat) * (0.08 + 0.1 * max(ex, sing)) * (1.0 - viking)
+	// Calm by default: they bounce only while their end sings (or the place is at boiling point).
+	float boil = smoothstep(0.8, 1.0, ex) * ultra;
+	float beat = mix(idle * boil, onBeat, singing);
+	float jump = max(boil, singing) * max(0.0, beat) * (0.08 + 0.1 * max(ex, sing)) * (1.0 - viking) * step(h(s, 2.8), 0.85)
 		+ (1.0 - ultra) * max(0.0, sin(t * (7.0 + h(s, 1.1) * 3.0) + ph)) * ex2 * 0.16
 		+ ours * max(0.0, sin(t * (8.5 + h(s, 2.1) * 4.0) + ph)) * 0.4;
-	float stand = max(max(ultra, awayEnd * max(0.7, singing)), clamp(ex * 2.4 - 1.25 - h(s, 6.6) * 0.5, 0.0, 1.0));
+	float stand = max(max(ultra * step(h(s, 6.2), 0.85), awayEnd * max(step(h(s, 6.2), 0.55), singing)), clamp(ex * 2.4 - 1.25 - h(s, 6.6) * 0.5, 0.0, 1.0));
 	// His team closing on goal: up out of the seat, the end they attack first, then the rest.
 	float rise = team < 0.5 ? gn_mood.x : gn_mood.y;
 	float dirT = team < 0.5 ? gn_mood.z : -gn_mood.z;
@@ -85,8 +87,9 @@ void vertex() {
 	stand = max(stand, ours) * (1.0 - theirs * step(0.3, h(s, 8.1)) * (1.0 - ultra));
 	float tall = 0.92 + 0.14 * h(s, 2.9);
 	float wide = 0.85 + 0.3 * h(s, 1.7);
-	float scarf = step(h(s, 5.5), max(max(max(ultra, awayEnd) * 0.7, ex2 * 0.75), sing * 0.95)) * (1.0 - ours) * (1.0 - viking);
-	float arms = max(ultra * step(0.6, beat) * step(0.5, h(s, 7.7)), viking * step(h(s, 2.2) * 0.25, gn_chant.z + 0.3));
+	// Scarves come up for the songs (most of a singing end), hardly ever otherwise.
+	float scarf = step(h(s, 5.5), max(sing * 0.8, ex2 * ex2 * 0.2)) * (1.0 - ours) * (1.0 - viking);
+	float arms = max(singing * ultra * step(0.6, beat) * step(0.5, h(s, 7.7)), viking * step(h(s, 2.2) * 0.25, gn_chant.z + 0.3));
 
 	// Card display for the kick-off: held up overhead, edge to edge, they make the picture.
 	cardOn = 0.0;
