@@ -40,6 +40,7 @@ public sealed class MatchSnapshot
     public readonly byte[] Team = new byte[N], Index = new byte[N], Number = new byte[N];
     public readonly Role[] Role = new Role[N];
     public readonly sbyte[] Foot = new sbyte[N];
+    /// <summary>Look.Height and Look.Build: body scale factors (about 0.95-1.1), not metres.</summary>
     public readonly float[] Height = new float[N], Build = new float[N];
     /// <summary>Skin and hair: indices into TeamData.SkinTones / HairColors (0 if a line-up brings its own colour).</summary>
     public readonly byte[] Skin = new byte[N], Hair = new byte[N], HairStyle = new byte[N];
@@ -67,6 +68,19 @@ public sealed class MatchSnapshot
     public SetPieceKind? SetPiece;
     public int SetPieceTeam, SetPieceTaker = -1;
     public float SetPieceX, SetPieceZ;
+    public bool SetPieceDirect;
+    /// <summary>The delivery ring of an aimed corner or goal kick (SetPiece.Target).</summary>
+    public bool HasSetPieceTarget;
+    public float SetPieceTargetX, SetPieceTargetZ;
+    /// <summary>The dead-ball camera (Match.DeadBallView): taker id (-1 when none), the point it frames, the kind.</summary>
+    public int DeadBallTaker = -1;
+    public float DeadBallX, DeadBallZ;
+    public SetPieceKind DeadBallKind;
+    /// <summary>The human is aiming a corner / goal kick / dead-ball shot (Match.AimingCorner, ...).</summary>
+    public bool AimingCorner, AimingGoalKick, AimingShot;
+    /// <summary>The dead-ball shot's aim point on the goal mouth (Match.AimPoint()).</summary>
+    public bool HasAimPoint;
+    public float AimX, AimY, AimZ;
     public CelebrationKind? Celebration;
     public float CelebrationAt;
     public float Excitement;
@@ -108,6 +122,10 @@ public sealed class MatchSnapshot
         Controlled = o.Controlled; Owner = o.Owner; HeldBy = o.HeldBy; PassTarget = o.PassTarget; Scorer = o.Scorer;
         PossTeam = o.PossTeam; HumanAttacking = o.HumanAttacking;
         SetPiece = o.SetPiece; SetPieceTeam = o.SetPieceTeam; SetPieceTaker = o.SetPieceTaker; SetPieceX = o.SetPieceX; SetPieceZ = o.SetPieceZ;
+        SetPieceDirect = o.SetPieceDirect; HasSetPieceTarget = o.HasSetPieceTarget; SetPieceTargetX = o.SetPieceTargetX; SetPieceTargetZ = o.SetPieceTargetZ;
+        DeadBallTaker = o.DeadBallTaker; DeadBallX = o.DeadBallX; DeadBallZ = o.DeadBallZ; DeadBallKind = o.DeadBallKind;
+        AimingCorner = o.AimingCorner; AimingGoalKick = o.AimingGoalKick; AimingShot = o.AimingShot;
+        HasAimPoint = o.HasAimPoint; AimX = o.AimX; AimY = o.AimY; AimZ = o.AimZ;
         Celebration = o.Celebration; CelebrationAt = o.CelebrationAt; Excitement = o.Excitement;
         KickCount = o.KickCount; KickMax = o.KickMax;
         Whistle = o.Whistle; Goal = o.Goal; Foul = o.Foul; Card = o.Card; Offside = o.Offside;
@@ -232,6 +250,24 @@ public sealed partial class Match
         s.SetPieceTaker = SetPiece?.Taker.Id ?? -1;
         s.SetPieceX = (float)(SetPiece?.X ?? 0);
         s.SetPieceZ = (float)(SetPiece?.Z ?? 0);
+        s.SetPieceDirect = SetPiece?.Direct ?? false;
+        var target = SetPiece?.Target;
+        s.HasSetPieceTarget = target != null;
+        s.SetPieceTargetX = (float)(target?.X ?? 0);
+        s.SetPieceTargetZ = (float)(target?.Z ?? 0);
+        var view = DeadBallView;
+        s.DeadBallTaker = view?.taker.Id ?? -1;
+        s.DeadBallX = (float)(view?.x ?? 0);
+        s.DeadBallZ = (float)(view?.z ?? 0);
+        s.DeadBallKind = view?.kind ?? SetPieceKind.Kickoff;
+        s.AimingCorner = AimingCorner;
+        s.AimingGoalKick = AimingGoalKick;
+        s.AimingShot = AimingShot;
+        var aim = AimPoint();
+        s.HasAimPoint = aim != null;
+        s.AimX = (float)(aim?.x ?? 0);
+        s.AimY = (float)(aim?.y ?? 0);
+        s.AimZ = (float)(aim?.z ?? 0);
         s.Celebration = Celebration?.Kind;
         s.CelebrationAt = (float)(Celebration?.At ?? 0);
         s.Excitement = (float)Excitement;
