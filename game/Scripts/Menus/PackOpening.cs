@@ -379,12 +379,12 @@ public sealed partial class PackOpening : PxCanvas
     Rect2 PackRect()
     {
         float h = Mathf.Round(Size.Y * 0.56f), w = Mathf.Round(h / 1.4f);
-        float bob = _phase == Phase.Tease ? Mathf.Round(Mathf.Sin((float)T * 2.2f) * 4) : 0;
+        float bob = _phase == Phase.Tease ? Mathf.Sin((float)T * 2.2f) * 4 : 0;
         float y = PedestalTop().Y - h - 26 + bob;
         if (_phase == Phase.Intro)
         {
             float k = Mathf.Min(1, (float)_t / 0.55f);
-            k = Mathf.Floor(k * k * 8) / 8;
+            k *= k;
             y = Mathf.Lerp(-h - 20, y, k);
         }
         return new Rect2(Size.X / 2 - w / 2, y, w, h);
@@ -514,7 +514,7 @@ public sealed partial class PackOpening : PxCanvas
                 var r = CardRect();
                 float rot = Mathf.Sin((float)T * 1.3f) * 0.022f;
                 float s = 1 + (float)_punch * 0.12f;
-                Transform(ci, r.Translated(new Vector2(0, Mathf.Round(Mathf.Sin((float)T * 2) * 3))), rot, new Vector2(s, s));
+                Transform(ci, r.Translated(new Vector2(0, Mathf.Sin((float)T * 2) * 3)), rot, new Vector2(s, s));
                 Foil(ci, r, Tier, (float)T);
                 ci.DrawSetTransformMatrix(_base);
                 if (Tier >= 2) Orbit(ci, r, Tier >= 4 ? Hue : Col(Tier), 4 + Tier * 2);
@@ -611,7 +611,7 @@ public sealed partial class PackOpening : PxCanvas
         float a = Mathf.Clamp(1 - (t - 0.2f) / 0.5f, 0, 1);
         if (a > 0)
         {
-            var body = r.Translated(new Vector2(0, Mathf.Round(t * t * 160)));
+            var body = r.Translated(new Vector2(0, t * t * 160));
             Art.Pack(this, body, _pack, 1);
             DrawRect(new Rect2(body.Position, new Vector2(body.Size.X, body.Size.Y * 0.18f)), _tint.Lerp(Colors.White, 0.6f));
             if (a < 1) DrawRect(body.Grow(4), new Color(0.02f, 0.015f, 0.06f, 1 - a));
@@ -635,7 +635,7 @@ public sealed partial class PackOpening : PxCanvas
             Fx.Spot(this, new Vector2(xs[i], y0), new Vector2(Size.X / 2 + (xs[i] - Size.X / 2) * 0.25f, pool), 30, 180, i == 2 ? c : Colors.White, i == 2 ? 0.2f : 0.1f);
         if (_summaryBeat == 0) return;
         float k = Mathf.Min(1, ((float)_t - 0.95f) / 0.12f);
-        float s = 1.6f - 0.6f * Mathf.Floor(k * 4) / 4;
+        float s = 1.6f - 0.6f * (1 - (1 - k) * (1 - k));
         var m = Stage();
         Fx.Beams(this, m, c, 16, Size.Length(), 0.06f, (float)T * 0.6f, 0.12f);
         string name = Cards.Label(Cur.Rarity).ToUpperInvariant();
@@ -649,7 +649,7 @@ public sealed partial class PackOpening : PxCanvas
         var c = Cur;
         var col = Tier >= 4 ? Hue : Col(Tier);
         float k = Mathf.Min(1, (float)_t / 0.14f);
-        float s = 1.5f - 0.5f * Mathf.Floor(k * 4) / 4;
+        float s = 1.5f - 0.5f * (1 - (1 - k) * (1 - k));
         var m = Stage();
         Fx.Spot(this, new Vector2(m.X, -10), PedestalTop(), 50, 220, col, 0.18f);
         Fx.Beams(this, m, col, 12, Size.Length(), 0.05f, (float)T * 0.4f, 0.1f);
@@ -681,8 +681,7 @@ public sealed partial class PackOpening : PxCanvas
             // Flies in from below, slowing as it arrives.
             float dur = Tier >= 2 ? 0.5f : 0.36f;
             float k = Mathf.Min(1, t / dur);
-            k = 1 - (1 - k) * (1 - k);
-            k = Mathf.Floor(k * 8) / 8;
+            k = 1 - (1 - k) * (1 - k) * (1 - k);
             var er = r.Translated(new Vector2(0, (1 - k) * (Size.Y - r.Position.Y + 30)));
             Transform(this, er, (1 - k) * 0.4f, Vector2.One);
             Art.CardBack(this, er, c.Rarity);
@@ -715,7 +714,7 @@ public sealed partial class PackOpening : PxCanvas
             return;
         }
         // Face up: floating, swaying a touch, the glow breathing.
-        float bob = Mathf.Round(Mathf.Sin((float)T * 2) * 3);
+        float bob = Mathf.Sin((float)T * 2) * 3;
         float rot = Mathf.Sin((float)T * 1.3f) * 0.022f;
         float s = 1 + (float)_punch * 0.12f;
         DrawColoredPolygon(Px.Ellipse(PedestalTop(), r.Size.X * 0.42f - bob, 8, 20), new Color(0, 0, 0, 0.4f));
@@ -728,7 +727,7 @@ public sealed partial class PackOpening : PxCanvas
     void Caption(Card c, Rect2 r)
     {
         float k = Mathf.Min(1, (float)_t / 0.25f);
-        float off = Mathf.Round((1 - Mathf.Floor(k * 5) / 5) * 80);
+        float off = (1 - k) * (1 - k) * 80;
         float x = r.End.X + 44 + off, y = r.Position.Y + 20;
         var col = Tier >= 4 ? Hue : Col(Tier);
         string label = Cards.Label(c.Rarity).ToUpperInvariant() + (c.Position == Pos.GK ? " · GOALKEEPER" : "");
@@ -770,7 +769,7 @@ public sealed partial class PackOpening : PxCanvas
             // Dealt out from below, then flipped in turn.
             float dk = Mathf.Clamp(((float)_t - i * 0.06f) / 0.3f, 0, 1);
             if (dk <= 0) continue;
-            dk = Mathf.Floor((1 - (1 - dk) * (1 - dk)) * 8) / 8;
+            dk = 1 - (1 - dk) * (1 - dk) * (1 - dk);
             var at = deck.Lerp(r.GetCenter(), dk) - r.Size / 2;
             var dr = new Rect2(at, r.Size);
             bool best = i == n - 1;

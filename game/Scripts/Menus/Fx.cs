@@ -167,7 +167,7 @@ public static partial class Fx
                     case Kind.Mote:
                         // Fade in and out.
                         float a = Mathf.Min(1, Mathf.Min(k * 3, (1 - k) * 4)) * 0.55f;
-                        ci.DrawRect(new Rect2(b.P.Round(), new Vector2(b.Size, b.Size)), new Color(b.C, a));
+                        ci.DrawRect(new Rect2(b.P, new Vector2(b.Size, b.Size)), new Color(b.C, a));
                         break;
                     case Kind.Streak:
                         var tail = b.P - b.V.Normalized() * Mathf.Min(26, b.V.Length() * 0.05f);
@@ -178,14 +178,14 @@ public static partial class Fx
                         // A spinning strip of foil: its width flickers as it turns.
                         float w = b.Size * Mathf.Abs(Mathf.Cos(b.Rot)) + 1, h = b.Size * 0.55f;
                         var c = new Color(b.C.Lightened(Mathf.Abs(Mathf.Sin(b.Rot)) * 0.4f), Mathf.Min(1, k * 2));
-                        ci.DrawRect(new Rect2((b.P - new Vector2(w, h) / 2).Round(), new Vector2(w, h).Round()), c);
+                        ci.DrawRect(new Rect2(b.P - new Vector2(w, h) / 2, new Vector2(w, h)), c);
                         break;
                     }
                     case Kind.Star:
                         Twinkle(ci, b.P, b.Size * (0.6f + 0.4f * Mathf.Abs(Mathf.Sin(b.Rot))), new Color(b.C, Mathf.Min(1, k * 2)));
                         break;
                     default:
-                        ci.DrawRect(new Rect2(b.P.Round(), new Vector2(b.Size, b.Size).Round()), new Color(b.C, Mathf.Clamp(k * 1.6f, 0, 1)));
+                        ci.DrawRect(new Rect2(b.P, new Vector2(b.Size, b.Size)), new Color(b.C, Mathf.Clamp(k * 1.6f, 0, 1)));
                         break;
                 }
             }
@@ -315,7 +315,7 @@ public static partial class Fx
         {
             float k = (i + scroll) / 9f;
             float y = horizon + (H - horizon) * k * k;
-            ci.DrawRect(new Rect2(0, Mathf.Round(y), W, 1), new Color(tint, lineA * k * 1.2f));
+            ci.DrawRect(new Rect2(0, y, W, 1), new Color(tint, lineA * k * 1.2f));
         }
         // Vignette.
         for (int i = 0; i < 4; i++)

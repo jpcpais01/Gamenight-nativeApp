@@ -80,8 +80,8 @@ public sealed partial class HomeScreen : PxCanvas
         var inner = r.Grow(-3);
         Px.Bands(this, inner, new[] { Px.Hex(0xef4b4e), Px.Hex(0xd23345), Px.Hex(0xa81f3c), Px.Hex(0x6e1234), Px.Hex(0x3e0a28) }, new[] { 0, 0.22f, 0.46f, 0.7f, 0.88f });
         for (float ly = inner.Position.Y + 6; ly < inner.End.Y; ly += 9) DrawRect(new Rect2(inner.Position.X, ly, inner.Size.X, 3), new Color(0, 0, 0, 0.07f));
-        // The sun: stepped rings, drifting in steps.
-        float step = Mathf.Floor((float)(T % 12) / 2) / 6;
+        // The sun: stepped rings, drifting slowly back and forth.
+        float step = 0.5f - 0.5f * Mathf.Cos((float)T * Mathf.Tau / 24);
         float sr = inner.Size.Y * 0.3f;
         var sun = new Vector2(inner.End.X - sr - 6 - inner.Size.X * 0.05f * step, inner.Position.Y + sr + 6 + inner.Size.Y * 0.05f * step);
         foreach (var (k, a) in new[] { (1f, 0.14f), (0.7f, 0.3f), (0.4f, 0.55f) })
@@ -196,7 +196,7 @@ public sealed partial class HomeScreen : PxCanvas
         TileFrame("store", r, "STORE", () => _ui.Go(_ui.Store));
         var o = Held("store") ? new Vector2(3, 3) : Vector2.Zero;
         // Two packs floating in steps.
-        float bob = Mathf.Floor((float)(T * 2 % 4)) switch { 1 => -3, 2 => -6, 3 => -3, _ => 0 };
+        float bob = -3 - Mathf.Sin((float)T * 2.4f) * 3;
         float ph = Mathf.Clamp(r.Size.Y - 58, 44, 110);
         float pw = ph / 1.4f;
         Art.Pack(this, new Rect2(r.End.X - pw * 1.6f - 30 + o.X, r.End.Y - ph - 20 + bob * 0.6f + o.Y, pw, ph), Packs.All[4]);

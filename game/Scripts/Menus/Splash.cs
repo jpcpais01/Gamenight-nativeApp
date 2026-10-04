@@ -58,7 +58,12 @@ public sealed partial class Splash : Control
         QueueRedraw();
     }
 
-    static float Step(double t, double start, double dur, int steps) => Mathf.Floor(Mathf.Clamp((float)((t - start) / dur), 0, 1) * steps) / steps;
+    /// <summary>0..1 over [start, start + dur], easing out (smooth at any frame rate).</summary>
+    static float Step(double t, double start, double dur, int steps)
+    {
+        float k = Mathf.Clamp((float)((t - start) / dur), 0, 1);
+        return 1 - (1 - k) * (1 - k);
+    }
 
     public override void _Draw()
     {

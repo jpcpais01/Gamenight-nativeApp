@@ -81,7 +81,7 @@ public sealed partial class StoreScreen : PxCanvas
             // The pack, gently bobbing out of step with its neighbours.
             float ah = Mathf.Min(th * 0.5f, (tw - 30) * 1.4f);
             float aw = ah / 1.4f;
-            float bob = ((int)(T * 2 + i) % 4) switch { 1 => -2, 2 => -4, 3 => -2, _ => 0 };
+            float bob = -2 - Mathf.Sin((float)T * 2.4f + i * 1.3f) * 2;
             var art = new Rect2(r.GetCenter().X - aw / 2, r.Position.Y + 14 + bob, aw, ah);
             if (i >= 3) Fx.Beams(this, art.GetCenter(), pc, 10, aw * 0.85f, 0.08f, (float)T * (0.2f + (i - 3) * 0.25f), 0.1f + (i - 3) * 0.05f);
             Fx.Glow(this, art.GetCenter(), aw * 0.9f, pc, 0.1f + i * 0.03f);

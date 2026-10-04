@@ -155,9 +155,9 @@ public sealed partial class ToastLayer : Control
     public override void _Draw()
     {
         if (_msg == null || _t > 2.8) return;
-        // Stepped in, held, stepped out.
+        // Slides in, holds, slides out.
         float k = (float)Math.Min(1, Math.Min(_t / 0.2, (2.8 - _t) / 0.3));
-        k = Mathf.Floor(k * 4) / 4;
+        k = 1 - (1 - k) * (1 - k);
         if (k <= 0) return;
         float w = Px.Width(Px.Big, _msg, 20) + 36;
         var r = new Rect2(Size.X / 2 - w / 2, Size.Y - 64 + (1 - k) * 20, w, 38);

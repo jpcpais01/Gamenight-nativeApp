@@ -49,7 +49,7 @@ public sealed partial class DrillHud : Control
         if (_verdict != null && _verdictT < 1.6)
         {
             var col = _verdict.Good == true ? Px.Win : _verdict.Good == false ? Px.Loss : Px.Ink;
-            float k = Mathf.Min(1, Mathf.Floor((float)_verdictT / 0.05f + 1) / 3);
+            float k = Mathf.Min(1, (float)_verdictT / 0.15f);
             int size = (int)(56 * (0.8f + 0.2f * k));
             Px.TextC(this, Px.Big, Size.X / 2, Size.Y * 0.32f, _verdict.Title.ToUpperInvariant(), size, col, new Color(0, 0, 0, 0.6f), 4);
             if (_verdict.Sub.Length > 0) Px.TextC(this, Px.Small, Size.X / 2, Size.Y * 0.32f + 26, _verdict.Sub.ToUpperInvariant(), 10, Px.Ink, new Color(0, 0, 0, 0.6f), 1);

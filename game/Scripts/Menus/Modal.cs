@@ -36,10 +36,11 @@ public abstract partial class Modal : PxCanvas
         DrawRect(new Rect2(Vector2.Zero, Size), new Color(0.03f, 0.02f, 0.1f, 0.72f));
         var s = BoxSize;
         s = new Vector2(Mathf.Min(s.X, Size.X - 24), Mathf.Min(s.Y, Size.Y - 20));
-        // Pops in over a few stepped frames.
-        float k = Mathf.Min(1, Mathf.Floor((float)T / 0.06f + 1) / 4);
+        // Pops in, easing out.
+        float k = Mathf.Min(1, (float)T / 0.18f);
+        k = 1 - (1 - k) * (1 - k) * (1 - k);
         var size = s * (0.9f + 0.1f * k);
-        Box = new Rect2(((Size - size) / 2).Round(), size.Round());
+        Box = new Rect2((Size - size) / 2, size);
         Px.Frame(this, Box, Colors.Transparent, new Color(190 / 255f, 200 / 255f, 1f, 0.4f), new Color(0, 0, 0, 0.6f));
         Px.Bands(this, Box.Grow(-3), new[] { Px.Night2, Px.Hex(0x171442), Px.Hex(0x12103a) }, new[] { 0, 0.4f, 0.75f });
         Tap("box", Box, null);
