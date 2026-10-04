@@ -117,6 +117,7 @@ public partial class Main : Node
         _pause.WeatherName = () => Atmosphere.Names[(int)_ground.Atmosphere.Weather];
         _pause.CycleWeather = () => Atmosphere.Names[(int)_ground.Atmosphere.Cycle()];
         _pause.SaveReport = SaveReport;
+        if (Request?.Demo != true && Request?.Drill == null) _pause.Foul = () => _runner?.Invoke(m => m.DebugFoul());
         ApplySettings();
         if (Request?.Demo == true)
         {
@@ -342,6 +343,7 @@ public partial class Main : Node
         _hud.Tick(_prev, _cur, alpha, _controls.Input, attack, delta);
         _drillHud?.Tick();
         if (_prewarm > 0) Prewarm(--_prewarm == 0);
+        _pause.FoulShown = !Directed;
         _prof.Lap(Profiler.Sys.Hud);
         _prof.End(delta);
         // Full time: a few seconds of the scene, then back to the menus.

@@ -16,12 +16,17 @@ public sealed partial class PauseMenu : Control
     public Func<string> WeatherName, CycleWeather;
     /// <summary>Saves the frame-time report (FPS DETAIL on); returns where it went, for the button.</summary>
     public Func<string> SaveReport;
+    /// <summary>The PWA's FOUL button beside pause: a free kick for us where the ball is (set by
+    /// Main for real matches), shown while FoulShown (not during the walk-out or a replay).</summary>
+    public Action Foul;
+    public bool FoulShown;
 
     static readonly string[] CameraNames = { "Close", "Normal", "Far" };
 
     readonly Button _pause;
     readonly Control _menu;
     readonly VBoxContainer _card;
+    readonly Button _foul;
     readonly Button _camera, _graphics, _pixels, _weather, _fps, _sound, _leave, _report;
 
     public bool IsOpen => _menu.Visible;
@@ -43,6 +48,15 @@ public sealed partial class PauseMenu : Control
             _pause.DrawRect(new Rect2(c.X + 2.5f, c.Y - 7, 4, 14), Style.Ink);
         };
         _pause.Pressed += Open;
+        _foul = new Button { Text = "FOUL", CustomMinimumSize = new Vector2(0, 34), FocusMode = FocusModeEnum.None, Visible = false };
+        _foul.AddThemeFontOverride("font", Style.Font(true, 12 * 0.12f));
+        _foul.AddThemeFontSizeOverride("font_size", 12);
+        var red = new Color(200 / 255f, 57 / 255f, 59 / 255f, 0.55f);
+        foreach (var st in new[] { "normal", "hover", "focus" }) _foul.AddThemeStyleboxOverride(st, Flat(red, 4, null, 0, 10));
+        _foul.AddThemeStyleboxOverride("pressed", Flat(new Color(red, 0.85f), 4, null, 0, 10));
+        foreach (var st in new[] { "font_color", "font_hover_color", "font_pressed_color", "font_focus_color" }) _foul.AddThemeColorOverride(st, Style.Ink);
+        _foul.Pressed += () => Foul?.Invoke();
+        AddChild(_foul);
         AddChild(_pause);
 
         // The dimmed match behind the card; taps on it do nothing.
@@ -107,6 +121,8 @@ public sealed partial class PauseMenu : Control
         var hud = GetParent()?.GetNodeOrNull<Hud>("Hud");
         float r = hud?.SafeRight ?? 0, t = hud?.SafeTop ?? 0;
         _pause.Position = new Vector2(Size.X - 14 - r - _pause.Size.X, 10 + t);
+        _foul.Visible = Foul != null && FoulShown && !_menu.Visible;
+        if (_foul.Visible) _foul.Position = new Vector2(Size.X - 60 - r - _foul.Size.X, 10 + t);
         _card.CustomMinimumSize = new Vector2(Math.Min(340, Size.X - 32), 0);
     }
 
