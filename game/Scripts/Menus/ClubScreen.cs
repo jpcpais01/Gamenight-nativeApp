@@ -25,10 +25,18 @@ public sealed partial class ClubScreen : PxCanvas
 
     readonly Menus _ui;
     readonly LineEdit _name, _code, _letters, _year, _banner, _coach;
-    int _tab, _slot, _part, _cslot; // tab; kit colour slot; crest part; crest colour slot
+    int _tab, _slot, _part, _cslot, _page; // tab; kit colour slot; crest part; crest colour slot
     bool _resetArmed;
     /// <summary>The open tab: 0 kit, 1 crest, 2 fans, 3 manager.</summary>
     public int Tab { get => _tab; set => _tab = value; }
+
+    /// <summary>Debug: open the crest maker at a part and page.</summary>
+    public void CrestPage(int part, int page)
+    {
+        _tab = 1;
+        _part = part;
+        _page = page;
+    }
     ClubState Club => _ui.Club;
 
     public ClubScreen(Menus ui)
@@ -157,8 +165,8 @@ public sealed partial class ClubScreen : PxCanvas
 
         Place(_name, _tab == 0);
         Place(_code, _tab == 0);
-        Place(_letters, _tab == 1 && _part == 3);
-        Place(_year, _tab == 1 && _part == 3);
+        Place(_letters, _tab == 1 && _part == 4);
+        Place(_year, _tab == 1 && _part == 4);
         Place(_banner, _tab == 2);
         Place(_coach, _tab == 3);
         switch (_tab)
@@ -295,7 +303,7 @@ public sealed partial class ClubScreen : PxCanvas
             Refill();
         });
 
-        string[] parts = { "SHAPE", "FIELD", "EMBLEM", "LETTERING" };
+        string[] parts = { "SHAPE", "FIELD", "PATTERN", "EMBLEM", "LETTERS", "TRIM" };
         float x = px;
         for (int i = 0; i < parts.Length; i++)
         {
@@ -304,66 +312,71 @@ public sealed partial class ClubScreen : PxCanvas
             {
                 Commit();
                 _part = idx;
-            }) + 8;
+                _page = 0;
+            }, 17) + 6;
         }
 
         float y = 100;
-        if (_part < 3)
+        float pagerX = px + pw;
+        if (_part < 4)
         {
-            string[] names = _part == 0 ? Crest.Shapes : _part == 1 ? Crest.Divisions : Crest.Emblems;
-            int cur = _part == 0 ? c.Shape : _part == 1 ? c.Division : c.Emblem;
-            int per = Mathf.Max(1, (int)((pw + 6) / 52));
+            // A page of thumbnails: three rows at a time.
+            string[] names = _part switch { 0 => Crest.Shapes, 1 => Crest.Divisions, 2 => Crest.Patterns, _ => Crest.Emblems };
+            int cur = CrestPart(c, _part);
+            int per = Mathf.Max(1, (int)((pw + 6) / 46));
+            int pageSize = per * 3;
+            int pages = (names.Length + pageSize - 1) / pageSize;
+            _page = Math.Clamp(_page, 0, pages - 1);
             float tw = (pw - (per - 1) * 6) / per;
-            float th = tw * 1.24f * 0.82f + 14;
-            for (int i = 0; i < names.Length; i++)
+            float th = tw * 1.24f * 0.78f + 13;
+            for (int j = 0; j < pageSize; j++)
             {
-                int v = i;
-                var r = new Rect2(px + i % per * (tw + 6), y + i / per * (th + 6), tw, th);
+                int v = _page * pageSize + j;
+                if (v >= names.Length) break;
+                var r = new Rect2(px + j % per * (tw + 6), y + j / per * (th + 6), tw, th);
                 bool on = v == cur;
                 Px.Frame(this, r, on ? new Color(Px.Gold, 0.18f) : new Color(8 / 255f, 6 / 255f, 26 / 255f, 0.6f), on ? Px.Gold : Px.Line, null, 2, 0);
                 var look = c.Clone();
-                if (_part == 0) look.Shape = v;
-                else if (_part == 1) look.Division = v;
-                else look.Emblem = v;
+                SetCrestPart(look, _part, v);
                 CrestArt.Draw(this, new Rect2(r.Position.X + 4, r.Position.Y + 3, tw - 8, th - 17), look);
-                Px.TextC(this, Px.Small, r.GetCenter().X, r.End.Y - 4, Px.Fit(Px.Small, names[i].ToUpperInvariant(), 7, tw - 4), 7, on ? Px.Gold : Px.InkDim);
-                Tap("opt" + i, r, () => EditCrest(z =>
-                {
-                    if (_part == 0) z.Shape = v;
-                    else if (_part == 1) z.Division = v;
-                    else z.Emblem = v;
-                }));
+                Px.TextC(this, Px.Small, r.GetCenter().X, r.End.Y - 4, Px.Fit(Px.Small, names[v].ToUpperInvariant(), 7, tw - 4), 7, on ? Px.Gold : Px.InkDim);
+                int part = _part;
+                Tap("opt" + j, r, () => EditCrest(z => SetCrestPart(z, part, v)));
             }
-            y += (names.Length + per - 1) / per * (th + 6) + 8;
+            y += 3 * (th + 6) + 6;
+            if (pages > 1)
+            {
+                // Pager, right of the colour slots.
+                float nx = Chip("pg+", new Vector2(px + pw - 34, y), ">", false, () => _page = (_page + 1) % pages, 18, 26);
+                Px.TextC(this, Px.Big, px + pw - 34 - 30, y + 20, $"{_page + 1}/{pages}", 18, Px.InkDim);
+                Chip("pg-", new Vector2(px + pw - 34 - 30 - 46, y), "<", false, () => _page = (_page + pages - 1) % pages, 18, 26);
+                pagerX = px + pw - 34 - 30 - 52;
+            }
         }
-        else
+        else if (_part == 4)
         {
             Head(px, y + 6, "LETTERS");
             Head(px + 120, y + 6, "FOUNDED");
-            Head(px + 230, y + 6, "STARS");
             Place(_letters, true, new Rect2(px, y + 12, 108, 40));
             Place(_year, true, new Rect2(px + 120, y + 12, 98, 40));
-            Chip("star-", new Vector2(px + 230, y + 16), "-", false, () => EditCrest(z => z.Stars = Math.Max(0, z.Stars - 1)), 22, 32);
-            Px.TextC(this, Px.Big, px + 282, y + 42, c.Stars.ToString(), 28, Px.Ink);
-            Chip("star+", new Vector2(px + 300, y + 16), "+", false, () => EditCrest(z => z.Stars = Math.Min(5, z.Stars + 1)), 22, 32);
-            y += 70;
-            Head(px, y, "LETTERING");
-            float lx = px;
-            for (int i = 0; i < Crest.TextStyles.Length; i++)
-            {
-                int v = i;
-                lx += Chip("ts" + i, new Vector2(lx, y + 6), Crest.TextStyles[i], c.TextStyle == i, () => EditCrest(z => z.TextStyle = v)) + 8;
-            }
-            y += 46;
-            Head(px, y, "BORDER");
-            lx = px;
-            for (int i = 0; i < Crest.Borders.Length; i++)
-            {
-                int v = i;
-                lx += Chip("bd" + i, new Vector2(lx, y + 6), Crest.Borders[i], c.Border == i, () => EditCrest(z => z.Border = v)) + 8;
-            }
-            y += 50;
+            Head(px + 232, y + 6, "FACE");
+            ChipRow("font", Crest.Fonts, c.Font, v => EditCrest(z => z.Font = v), px + 232, y + 18, pw - 232);
+            y += 64;
+            Head(px, y, "STYLE");
+            y = ChipRow("ts", Crest.TextStyles, c.TextStyle, v => EditCrest(z => z.TextStyle = v), px, y + 6, pw) + 10;
         }
+        else
+        {
+            Head(px, y + 6, "BORDER");
+            y = ChipRow("bd", Crest.Borders, c.Border, v => EditCrest(z => z.Border = v), px, y + 12, pw) + 6;
+            Head(px, y + 6, "CHAMPION STARS");
+            Chip("star-", new Vector2(px + 130, y - 6), "-", false, () => EditCrest(z => z.Stars = Math.Max(0, z.Stars - 1)), 22, 30);
+            Px.TextC(this, Px.Big, px + 184, y + 18, c.Stars.ToString(), 26, Px.Ink);
+            Chip("star+", new Vector2(px + 204, y - 6), "+", false, () => EditCrest(z => z.Stars = Math.Min(5, z.Stars + 1)), 22, 30);
+            y += 40;
+        }
+        y = Mathf.Max(y, 244);
+        y = Mathf.Min(y, Size.Y - 120);
 
         // Colours: field, second, detail.
         string[] slots = { "Field", "Second", "Detail" };
@@ -381,6 +394,37 @@ public sealed partial class ClubScreen : PxCanvas
             else if (_cslot == 1) z.Secondary = col;
             else z.Accent = col;
         }), 12, Mathf.Min(30, (Size.Y - 14 - y) / 2 - 6));
+    }
+
+    static int CrestPart(Crest c, int part) => part switch { 0 => c.Shape, 1 => c.Division, 2 => c.Pattern, _ => c.Emblem };
+
+    static void SetCrestPart(Crest c, int part, int v)
+    {
+        switch (part)
+        {
+            case 0: c.Shape = v; break;
+            case 1: c.Division = v; break;
+            case 2: c.Pattern = v; break;
+            default: c.Emblem = v; break;
+        }
+    }
+
+    /// <summary>Option chips that wrap onto new lines; returns the y under the last line.</summary>
+    float ChipRow(string key, string[] names, int cur, Action<int> pick, float x0, float y, float w)
+    {
+        float x = x0;
+        for (int i = 0; i < names.Length; i++)
+        {
+            int v = i;
+            float cw = Px.Width(Px.Big, names[i], 18) + 18;
+            if (x + cw > x0 + w && x > x0)
+            {
+                x = x0;
+                y += 32;
+            }
+            x += Chip(key + i, new Vector2(x, y), names[i], cur == i, () => pick(v)) + 6;
+        }
+        return y + 32;
     }
 
     // ---------------------------------------------------------------- fans

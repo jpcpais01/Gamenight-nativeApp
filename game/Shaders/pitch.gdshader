@@ -85,10 +85,12 @@ void fragment() {
 	float trackMask = step(9.0, outside);
 	g = mix(g, gn_land * (0.9 + 0.1 * vnoise(p * 1.7)), trackMask);
 
-	// Chalk: hard-edged, never thinner than about one art pixel (so far lines don't break up).
+	// Chalk, filtered by how much of the pixel it covers (as the PWA does): a hard edge made
+	// lines a pixel thick here and two there, and they shimmered as the camera moved. A far
+	// line thinner than a pixel fades to a steady, paler line instead of breaking up.
 	float d = lines_dist(p);
-	float px = fwidth(d);
-	float line = step(d, max(line_half_width, px * 0.55)) * (1.0 - trackMask);
+	float aa = fwidth(d) * 0.8 + 0.01;
+	float line = (1.0 - smoothstep(line_half_width - aa, line_half_width + aa, d)) * (1.0 - trackMask);
 	// Colours above are written in sRGB; the renderer lights in linear.
 	ALBEDO = pow(mix(g, chalk, line), vec3(2.2));
 	ROUGHNESS = 1.0;
