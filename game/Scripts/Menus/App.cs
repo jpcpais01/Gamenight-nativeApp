@@ -106,7 +106,11 @@ public sealed partial class App : Node
             req.Showcase = true;
         }
         Swap(new Main { Request = req });
-        if (_showcase) StadiumFocus(_menus.Stadium.Selected);
+        if (_showcase)
+        {
+            StadiumFocus(_menus.Stadium.Selected);
+            StadiumBare(_menus.Stadium.Bare);
+        }
         BackdropChanged();
     }
 
@@ -187,6 +191,12 @@ public sealed partial class App : Node
     public void StadiumOrbit(float yaw, float tilt, float zoom, Vector2 slide)
     {
         if (_showcase && !_playing) _match?.Orbit(yaw, tilt, zoom, slide);
+    }
+
+    /// <summary>The stadium builder's menus hidden or back.</summary>
+    public void StadiumBare(bool bare)
+    {
+        if (_showcase && !_playing) _match?.Centre(bare);
     }
 
     /// <summary>Straight into a match at this ground.</summary>

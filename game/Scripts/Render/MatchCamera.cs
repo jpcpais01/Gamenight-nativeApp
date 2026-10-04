@@ -51,7 +51,9 @@ public sealed class MatchCamera
     public Vector2? Follow;
     float _orbit = float.NaN, _dt;
     // The builder's camera as dragged: height (an angle), distance, and a shift over the ground.
-    float _elev = El0, _dist = 1, _sway = 1, _swayGoal = 1;
+    float _elev = El0, _dist = 1, _sway = 1, _swayGoal = 1, _side = 1;
+    /// <summary>The builder's menus are hidden: frame the stadium in the middle of the screen.</summary>
+    public bool Centred;
     Vector3 _pan, _panGoal;
     const float El0 = 0.6f;
 
@@ -374,12 +376,13 @@ public sealed class MatchCamera
             _orbit += Mathf.Wrap(want - _orbit, -Mathf.Pi, Mathf.Pi) * ease;
             _pan = _pan.Lerp(_panGoal, ease);
             _sway += (_swayGoal - _sway) * ease;
+            _side += ((Centred ? 0 : 1) - _side) * ease;
             float a = _orbit + MathF.Sin((float)_time * 0.13f) * 0.22f * _sway;
             float fh = MathF.Cos(_elev) / MathF.Cos(El0) * _dist, fv = MathF.Sin(_elev) / MathF.Sin(El0) * _dist;
             pos = new Vector3(MathF.Sin(a) * 158 * fh, Math.Max(4, 104 * fv), MathF.Cos(a) * 142 * fh) + _pan;
             // Aimed a little to the left of the stand, so it sits to the right of the builder's panel.
             var right = new Vector3(MathF.Cos(a), 0, -MathF.Sin(a));
-            look = new Vector3(-MathF.Sin(_orbit) * 40, 8, -MathF.Cos(_orbit) * 30) - right * 26 * _dist + _pan;
+            look = new Vector3(-MathF.Sin(_orbit) * 40, 8, -MathF.Cos(_orbit) * 30) - right * 26 * _dist * _side + _pan;
             fov = 40;
             subX = subY = 0;
         }

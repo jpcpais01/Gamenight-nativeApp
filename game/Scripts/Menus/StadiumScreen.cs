@@ -27,7 +27,22 @@ public sealed partial class StadiumScreen : PxCanvas
 
     // Fingers on the stadium: one drag turns round it, two slide across it and pinch to zoom.
     readonly Dictionary<int, Vector2> _touch = new();
-    bool _orbiting, _two;
+    bool _orbiting, _two, _gesture;
+    // A plain tap on the stadium hides the menus (the stadium alone, centred); another brings them back.
+    bool _bare;
+    double _bareAt;
+    public bool Bare => _bare;
+
+    public override void _Notification(int what)
+    {
+        base._Notification(what);
+        // Always open with the menus showing.
+        if (what == NotificationVisibilityChanged && IsVisibleInTree() && _bare)
+        {
+            _bare = false;
+            _ui.App.StadiumBare(false);
+        }
+    }
 
     public override void _GuiInput(InputEvent e)
     {
@@ -37,8 +52,13 @@ public sealed partial class StadiumScreen : PxCanvas
                 if (t.Pressed)
                 {
                     _touch[t.Index] = t.Position;
-                    if (_touch.Count == 1) _orbiting = !OnTapArea(t.Position);
-                    if (_touch.Count >= 2) _two = true;
+                    if (_touch.Count == 1)
+                    {
+                        _orbiting = !OnTapArea(t.Position);
+                        _gesture = false;
+                        _pressAt = t.Position;
+                    }
+                    if (_touch.Count >= 2) _two = _gesture = true;
                 }
                 else _touch.Remove(t.Index);
                 if (_touch.Count == 0) _orbiting = _two = false;
@@ -55,6 +75,7 @@ public sealed partial class StadiumScreen : PxCanvas
                 else
                 {
                     _touch[d.Index] = d.Position;
+                    if ((d.Position - _pressAt).Length() > 10) _gesture = true;
                     if (_orbiting && !_two) _ui.App.StadiumOrbit(-d.Relative.X / Size.X * 4, d.Relative.Y / Size.Y * 1.6f, 1, Vector2.Zero);
                 }
                 break;
@@ -67,6 +88,16 @@ public sealed partial class StadiumScreen : PxCanvas
                 break;
         }
         base._GuiInput(e);
+    }
+
+    Vector2 _pressAt;
+
+    protected override void Background()
+    {
+        if (_gesture) return;
+        _bare = !_bare;
+        _bareAt = T;
+        _ui.App.StadiumBare(_bare);
     }
 
     (Vector2 centre, float spread) Fingers()
@@ -141,6 +172,13 @@ public sealed partial class StadiumScreen : PxCanvas
     protected override void Paint()
     {
         float W = Size.X, H = Size.Y;
+        if (_bare)
+        {
+            // Just the stadium: a hint for a moment, then nothing.
+            float a = Mathf.Clamp(2.5f - (float)(T - _bareAt), 0, 1);
+            if (a > 0) Px.TextC(this, Px.Small, W / 2, H - 20, "TAP TO BRING BACK THE MENU", 8, new Color(1, 1, 1, a), new Color(0, 0, 0, 0.6f * a), 1);
+            return;
+        }
         // The stadium shows through; shade the panels' side so they read.
         DrawRect(new Rect2(0, 0, 340, H), new Color(14 / 255f, 10 / 255f, 40 / 255f, 0.45f));
         DrawRect(new Rect2(0, H - 110, W, 110), new Color(14 / 255f, 10 / 255f, 40 / 255f, 0.35f));
