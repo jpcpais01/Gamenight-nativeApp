@@ -3,6 +3,8 @@
 shader_type spatial;
 render_mode specular_disabled, diffuse_lambert;
 
+#include "res://World/Shaders/light_map.gdshaderinc"
+
 const float HL = 52.5;
 const float HW = 34.0;
 const float BOX_D = 16.5;
@@ -89,4 +91,11 @@ void fragment() {
 	// Colours above are written in sRGB; the renderer lights in linear.
 	ALBEDO = pow(mix(g, chalk, line), vec3(2.2));
 	ROUGHNESS = 1.0;
+	// The ground's floodlight pools.
+	EMISSION = ALBEDO * light_map_flood(vec3(p.x, 0.0, p.y));
+}
+
+// The sun, kept off where the stands shade the grass (the ground's baked light map).
+void light() {
+	DIFFUSE_LIGHT += light_map_sun(LIGHT, NORMAL, LIGHT_COLOR, ATTENUATION, vec3(wp.x, 0.0, wp.y));
 }

@@ -11,6 +11,8 @@ uniform int part = 0;
 uniform vec4 ka[22];
 uniform vec4 kb[22];
 
+#include "res://World/Shaders/light_map.gdshaderinc"
+
 varying vec3 base;
 varying vec3 wpos;
 varying flat int pid;
@@ -146,7 +148,15 @@ void fragment() {
 	ALBEDO = c * mix(0.85, 1.0, ao);
 	AO = ao;
 	AO_LIGHT_AFFECT = 0.0;
-	RIM = 0.3;
-	RIM_TINT = 0.55;
 	ROUGHNESS = 0.75;
+	// The ground's floodlights.
+	EMISSION = ALBEDO * light_map_flood(wpos);
+}
+
+// The sun, kept off in the stands' shadow (the ground's baked light map), with Godot's own
+// rim term (rim 0.3, tint 0.55 at this roughness) in the sunlight.
+void light() {
+	DIFFUSE_LIGHT += light_map_sun(LIGHT, NORMAL, LIGHT_COLOR, ATTENUATION, wpos);
+	float rim = pow(max(1e-4, 1.0 - max(dot(NORMAL, VIEW), 0.0)), 4.0);
+	DIFFUSE_LIGHT += rim * 0.3 * mix(vec3(1.0), ALBEDO, 0.55) * LIGHT_COLOR / PI * ATTENUATION * light_map_at(wpos).r;
 }

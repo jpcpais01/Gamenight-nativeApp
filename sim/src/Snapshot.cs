@@ -96,6 +96,9 @@ public sealed class MatchSnapshot
     public CelebrationKind? Celebration;
     public float CelebrationAt, CelebrationTurn;
     public float Excitement;
+    /// <summary>For the crowd and sound: who shot (-1 = no shot on), who attacks, who touched last, a penalty given or being taken.</summary>
+    public int ShotTeam = -1, AttackingTeam = -1, LastTouchTeam = -1;
+    public bool PenaltyPending;
 
     // ---- this step's events (sound, camera, HUD)
     public int KickCount;
@@ -144,6 +147,7 @@ public sealed class MatchSnapshot
         HasArc = o.HasArc; ArcCount = o.ArcCount; ArcRingX = o.ArcRingX; ArcRingZ = o.ArcRingZ;
         Array.Copy(o.ArcX, ArcX, ArcX.Length); Array.Copy(o.ArcY, ArcY, ArcY.Length); Array.Copy(o.ArcZ, ArcZ, ArcZ.Length);
         Celebration = o.Celebration; CelebrationAt = o.CelebrationAt; CelebrationTurn = o.CelebrationTurn; Excitement = o.Excitement;
+        ShotTeam = o.ShotTeam; AttackingTeam = o.AttackingTeam; LastTouchTeam = o.LastTouchTeam; PenaltyPending = o.PenaltyPending;
         KickCount = o.KickCount; KickMax = o.KickMax;
         Whistle = o.Whistle; Goal = o.Goal; Foul = o.Foul; Card = o.Card; Offside = o.Offside;
         Post = o.Post; Net = o.Net; Bounce = o.Bounce; Save = o.Save; Tackle = o.Tackle;
@@ -299,5 +303,9 @@ public sealed partial class Match
         s.CelebrationAt = (float)(Celebration?.At ?? 0);
         s.CelebrationTurn = (float)(Celebration?.Turn ?? 0);
         s.Excitement = (float)Excitement;
+        s.ShotTeam = ShotTeam();
+        s.AttackingTeam = AttackingTeam();
+        s.LastTouchTeam = LastTouch?.Team ?? -1;
+        s.PenaltyPending = PenaltyPending;
     }
 }
