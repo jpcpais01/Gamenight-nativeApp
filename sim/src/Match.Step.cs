@@ -482,7 +482,8 @@ public sealed partial class Match
                 tz = (Ball.Pos.Z - c.Pos.Z) / Math.Max(0.01, d);
                 v = 0;
             }
-            speed = Math.Min(v, press || onBall ? c.TopSpeed : PlayerK.JogSpeed + 2.2);
+            // Flat out to close the gap; once tight, as quick as he needs to stay with him.
+            speed = Math.Min(v, press || onBall || d > 3 ? c.TopSpeed : PlayerK.JogSpeed + 2.2);
             face = true;
             burst = onBall;
             // Square-on while he can keep up that way; a carrier running at him faster than he
@@ -521,21 +522,27 @@ public sealed partial class Match
             // on it rather than past it (running on with it when it's rolling his way).
             var ip = AI.Intercept[c.Id];
             double bs = JsMath.Hypot(Ball.Vel.X, Ball.Vel.Z);
-            speed = press ? c.TopSpeed : Math.Max(AI.MeetPace(c), d > 1.5 ? PlayerK.JogSpeed : bs + 1);
+            // A race for it (one of them gets there within 0.8 s of him) is run flat out too.
+            double theirs = 99;
+            foreach (var q in Teams[1 - c.Team].Players)
+                if (AI.Intercept[q.Id].T >= 0) theirs = Math.Min(theirs, AI.Intercept[q.Id].T);
+            bool race = ip.T < 0 || theirs < ip.T + 0.8;
+            speed = press || race ? c.TopSpeed : Math.Max(AI.MeetPace(c), d > 1.5 ? PlayerK.JogSpeed : bs + 1);
             double along = Math.Max(0, d < 3 ? Ball.Vel.X * tx + Ball.Vel.Z * tz : ip.VX * tx + ip.VZ * tz);
-            speed = Math.Min(speed, Math.Sqrt(along * along + 2 * PlayerK.Brake * 0.7 * dd) + 0.6);
+            speed = Math.Min(speed, Math.Sqrt(along * along + 2 * PlayerK.Brake * dd) + 0.6);
             burst = d < 2.5;
         }
 
-        // The stick: roughly along the run, it bends it; turned away, it's in charge.
+        // The stick: anywhere in front of his run it only bends it (about 10° at most); pointed
+        // back against it (past ~120°), it's in charge.
         double want = 1;
         if (m > 0.12)
         {
             double sx = input.MoveX / m;
             double sz = -input.MoveY / m;
-            want = M.Smoothstep(-0.2, 0.4, sx * tx + sz * tz);
-            double nx = tx * want + sx * (1 - 0.65 * want);
-            double nz = tz * want + sz * (1 - 0.65 * want);
+            want = M.Smoothstep(-0.75, -0.35, sx * tx + sz * tz);
+            double nx = tx * want + sx * (1 - 0.82 * want);
+            double nz = tz * want + sz * (1 - 0.82 * want);
             double n = JsMath.Hypot(nx, nz);
             if (n > 0.05)
             {
@@ -548,6 +555,8 @@ public sealed partial class Match
         c.MoveZ = tz;
         c.WantSpeed = Math.Min(c.TopSpeed, speed);
         if (want < 0.5) return;
+        // Running hard costs legs, button or not (as it does the computer's players).
+        if (c.WantSpeed > PlayerK.JogSpeed + 0.5) c.Sprinting = true;
         c.Burst = burst;
         if (face && d < 6)
         {
