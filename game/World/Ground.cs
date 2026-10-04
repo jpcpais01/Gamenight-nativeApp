@@ -22,7 +22,7 @@ public sealed class ClubArt
 /// crowd), the sky and the time of day. A subclass describes its geometry in <see cref="Build"/>;
 /// this base bakes the light, commits it all as a few draws and drives the mood per frame:
 ///   1 draw  every static surface (stadium.gdshader, vertex colours + baked sun)
-///   1 draw  the crowd (crowd.gdshader)
+///  12 draws the crowd in wedges (crowd.gdshader), most culled
 ///   1 draw  the floodlight glows
 /// The pitch, goals and players are drawn by the match view; they read this ground's light
 /// map (stand shadows, floodlight pools) through the gn_light_map global.

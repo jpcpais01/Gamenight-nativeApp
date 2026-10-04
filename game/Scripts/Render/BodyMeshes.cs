@@ -101,8 +101,14 @@ public static class BodyMeshes
 
     /// <summary>three's LatheGeometry: the profile (radius, height) swept round the y axis; u round, v along the profile.
     /// Faces always point outward, whichever way the profile is listed.</summary>
+    /// <summary>Round-the-body resolution while building (1 = the PWA's): the profiles, and so the
+    /// uv layout, stay the same, only the facets around each part get fewer.</summary>
+    static float _detail = 1;
+    static int D(int n, int min) => Math.Max(min, (int)MathF.Round(n * _detail));
+
     static Geo Lathe((float r, float y)[] pts, int segments)
     {
+        segments = D(segments, 5);
         var g = new Geo();
         int n = pts.Length;
         // Profile normals (as three computes them), turned outward.
@@ -140,6 +146,8 @@ public static class BodyMeshes
     /// <summary>three's SphereGeometry (uv.y = 1 at the top).</summary>
     static Geo Sphere(float r, int ws, int hs, float thetaLen = MathF.PI)
     {
+        ws = D(ws, 6);
+        hs = D(hs, 4);
         var g = new Geo();
         var grid = new int[hs + 1, ws + 1];
         for (int iy = 0; iy <= hs; iy++)
@@ -191,6 +199,7 @@ public static class BodyMeshes
     /// <summary>three's IcosahedronGeometry(radius, detail): flat-shaded, each face its own vertices.</summary>
     static Geo Icosahedron(float radius, int detail, Func<Vector3, Vector3> shape)
     {
+        if (_detail < 0.75f) detail = Math.Max(0, detail - 1);
         float t = (1 + MathF.Sqrt(5)) / 2;
         float[] v = { -1, t, 0, 1, t, 0, -1, -t, 0, 1, -t, 0, 0, -1, t, 0, 1, t, 0, -1, -t, 0, 1, -t, t, 0, -1, t, 0, 1, -t, 0, -1, -t, 0, 1 };
         int[] f = { 0, 11, 5, 0, 5, 1, 0, 1, 7, 0, 7, 10, 0, 10, 11, 1, 5, 9, 5, 11, 4, 11, 10, 2, 10, 7, 6, 7, 1, 8, 3, 9, 4, 3, 4, 2, 3, 2, 6, 3, 6, 8, 3, 8, 9, 4, 9, 5, 2, 4, 11, 6, 2, 10, 8, 6, 7, 9, 8, 1 };
@@ -239,7 +248,16 @@ public static class BodyMeshes
 
     static Geo Cap(float r, float theta, float tilt) => Sphere(r, 18, 9, theta).RotateX(-tilt);
 
-    public static ArrayMesh[] Build()
+    /// <summary>The parts. `detail` below 1 for figures that are only ever a few pixels tall
+    /// (the bench): about half the triangles at 0.5, the same shapes.</summary>
+    public static ArrayMesh[] Build(float detail = 1)
+    {
+        _detail = detail;
+        try { return BuildParts(); }
+        finally { _detail = 1; }
+    }
+
+    static ArrayMesh[] BuildParts()
     {
         var m = new ArrayMesh[PartCount];
 
