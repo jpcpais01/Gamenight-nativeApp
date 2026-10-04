@@ -80,10 +80,21 @@ public sealed class PlayersView
     readonly List<MultiMeshInstance3D> _instances = new();
     readonly Vector4[][] _ka = new Vector4[BodyMeshes.PartCount][], _kb = new Vector4[BodyMeshes.PartCount][];
 
+    /// <summary>Only the first this many bodies are drawn (the officials need three of the 22).</summary>
+    public int Bodies
+    {
+        set
+        {
+            for (int k = 0; k < BodyMeshes.PartCount; k++) _mm[k].VisibleInstanceCount = Math.Min(N, value) * PerPlayer[k];
+        }
+    }
+
     /// <summary>The bodies only (no ball, no markers): for the officials, or anyone else drawn as a player.</summary>
     public PlayersView(Node3D root, bool matchProps = true)
     {
-        var meshes = BodyMeshes.Build();
+        // A figure is a few dozen art pixels tall: 60% of the facets reads the same and saves
+        // about 40% of the triangles (players were most of the frame's, shadows included).
+        var meshes = BodyMeshes.Build(0.6f);
         var shader = GD.Load<Shader>("res://Shaders/body.gdshader");
         var shaderDouble = GD.Load<Shader>("res://Shaders/body_double.gdshader");
         for (int k = 0; k < BodyMeshes.PartCount; k++)

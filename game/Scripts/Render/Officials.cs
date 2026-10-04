@@ -47,7 +47,7 @@ public sealed class Officials
         };
         _all = new[] { _ref, _lines[0], _lines[1] };
 
-        _view = new PlayersView(root, false) { RefSlot = 0, LineSlots = new[] { 1, 2 } };
+        _view = new PlayersView(root, false) { RefSlot = 0, LineSlots = new[] { 1, 2 }, Bodies = 3 };
         _view.AddFlags(root);
         foreach (var o in _all) _view.SetBody(o.Id, o, RefKit, -1, false);
         _view.Flush();

@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.19", "Lighter players: each figure uses fewer facets (the same look at pixel size), and the referee's team no longer draws 19 invisible bodies, cutting most of the triangles the players and their shadows cost."),
         ("0.18", "The FOUL button is back beside pause, like the browser game: tap it for a free kick to you where the ball is."),
         ("0.17", "Smoother 120 fps: frame pacing now always holds the full refresh rate with one more frame queued, so a small hiccup no longer drops a whole frame. The HUD and controls compile during the walk-out, not at kick-off. Truer performance reports."),
         ("0.16", "Build your own stadium: tap STADIUM on the home screen and pick a stand for each side, end and corner from five sets (Arena, Terrace, Curva, The Wall, Citadel). Any mix joins up, the stadium builds behind you as you pick, and Your stadium is a ground to play at."),
