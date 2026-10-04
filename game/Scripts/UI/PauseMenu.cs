@@ -10,13 +10,15 @@ namespace GameNight.UI;
 public sealed partial class PauseMenu : Control
 {
     public event Action Opened, Resumed, Restart, SettingsChanged;
+    /// <summary>Leave the match for the menus (set by Main when the menus started it).</summary>
+    public Action Leave;
 
     static readonly string[] CameraNames = { "Close", "Normal", "Far" };
 
     readonly Button _pause;
     readonly Control _menu;
     readonly VBoxContainer _card;
-    readonly Button _camera, _graphics, _pixels, _fps;
+    readonly Button _camera, _graphics, _pixels, _fps, _leave;
 
     public bool IsOpen => _menu.Visible;
 
@@ -62,6 +64,9 @@ public sealed partial class PauseMenu : Control
         var restart = Ghost("RESTART MATCH");
         restart.Pressed += () => { Close(); Restart?.Invoke(); };
         card.AddChild(restart);
+        _leave = Ghost("LEAVE MATCH");
+        _leave.Pressed += () => { _menu.Visible = false; Leave?.Invoke(); };
+        card.AddChild(_leave);
 
         _camera = Ghost("");
         _camera.Pressed += () => { MatchSettings.Camera = (MatchSettings.Camera + 1) % 3; Changed(); };
@@ -92,6 +97,7 @@ public sealed partial class PauseMenu : Control
         if (_menu.Visible) return;
         _menu.Visible = true;
         _pause.Visible = false;
+        _leave.Visible = Leave != null;
         Labels();
         Opened?.Invoke();
     }

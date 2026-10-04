@@ -1,5 +1,6 @@
 using System;
 using Godot;
+using GameNight.Menus;
 using GameNight.Render;
 using GameNight.Sim;
 using GameNight.UI;
@@ -14,8 +15,15 @@ namespace GameNight;
 /// </summary>
 public partial class Main : Node
 {
+    /// <summary>Set by the menus before the node enters the tree: what to play and how to report
+    /// back. Without one this is a stand-alone match, as on the first builds.</summary>
+    public MatchRequest Request;
+
     Match _match;
     MatchRunner _runner;
+    Drill _drill;
+    DrillHud _drillHud;
+    bool _reported;
     readonly MatchSnapshot _prev = new(), _cur = new();
 
     PixelView _view;
@@ -53,7 +61,21 @@ public partial class Main : Node
         _pause.Resumed += () => SetPaused(false);
         _pause.Restart += NewMatch;
         _pause.SettingsChanged += ApplySettings;
+        if (Request != null && !Request.Demo) _pause.Leave = () => Report(false);
         ApplySettings();
+        if (Request?.Demo == true)
+        {
+            // Behind the home screen: the computer plays both sides, nothing to touch.
+            _hud.Visible = _controls.Visible = _pause.Visible = false;
+            _hud.ProcessMode = _controls.ProcessMode = _pause.ProcessMode = ProcessModeEnum.Disabled;
+        }
+        if (Request?.Drill != null)
+        {
+            _hud.Visible = false;
+            _drillHud = new DrillHud();
+            AddChild(_drillHud);
+            MoveChild(_drillHud, _hud.GetIndex());
+        }
 
         foreach (var arg in OS.GetCmdlineUserArgs())
             if (arg.StartsWith("--screenshot=")) _shotPath = arg["--screenshot=".Length..];
@@ -65,10 +87,18 @@ public partial class Main : Node
     void NewMatch()
     {
         _runner?.Stop();
-        _match = new Match(seed: DateTime.Now.Ticks % 2147483647);
+        _match = Request != null ? new Match(Request.Seed, Request.Setup) : new Match(seed: DateTime.Now.Ticks % 2147483647);
+        if (Request?.Demo == true) _match.AutoPlay = true;
+        if (Request?.Setup != null) _players.SetKits(_match.Teams[0].Info.Kit, _match.Teams[1].Info.Kit);
         // Names and kits are read before the match's own thread starts.
         _hud.SetMatch(_match);
         _runner = new MatchRunner(_match);
+        if (Request?.Drill is DrillKind kind)
+        {
+            _drill = new Drill(_match, kind, Math.Max(Request.DrillBest, _drill?.Best ?? 0));
+            _runner.AfterStep = _drill.Step;
+            _drillHud.Drill = _drill;
+        }
         _runner.Read(_prev, _cur, out _);
         _runner.Paused = _pause.IsOpen;
         _runner.Start();
@@ -96,11 +126,37 @@ public partial class Main : Node
     public override void _Notification(int what)
     {
         // Backgrounded or covered: the pause menu comes up and the match clock stops.
-        if (_runner == null || _shotPath != null) return;
+        if (_runner == null || _shotPath != null || Request?.Demo == true) return;
         if (what == NotificationApplicationPaused || what == NotificationApplicationFocusOut) _pause.Open();
     }
 
     public override void _ExitTree() => _runner?.Stop();
+
+    /// <summary>Tells the menus the match is over (full time, or left from the pause menu).</summary>
+    void Report(bool finished)
+    {
+        if (_reported || Request?.Done == null) return;
+        _reported = true;
+        _runner.Paused = true;
+        Request.Done(new MatchOutcome { Finished = finished, Home = _cur.Score[0], Away = _cur.Score[1], DrillBest = _drill?.Best ?? 0 });
+    }
+
+    /// <summary>Android back during a match: the pause menu, open or closed.</summary>
+    public void Back()
+    {
+        if (_pause.IsOpen) _pause.Close();
+        else _pause.Open();
+    }
+
+    /// <summary>The demo match behind the menus: hidden (and not drawn or stepped) under a full screen.</summary>
+    public void Backdrop(bool shown)
+    {
+        if (_view == null) return;
+        ProcessMode = shown ? ProcessModeEnum.Inherit : ProcessModeEnum.Disabled;
+        _view.Visible = shown;
+        _view.Viewport.RenderTargetUpdateMode = shown ? SubViewport.UpdateMode.Always : SubViewport.UpdateMode.Disabled;
+        if (_runner != null) _runner.Paused = !shown;
+    }
 
     public override void _Process(double delta)
     {
@@ -124,6 +180,9 @@ public partial class Main : Node
         bool attack = _cur.HumanAttacking;
         _controls.SetMode(attack ? TouchControls.Mode.Attack : TouchControls.Mode.Defend);
         _hud.Tick(_prev, _cur, alpha, _controls.Input, attack, delta);
+        _drillHud?.Tick();
+        // Full time: a few seconds of the scene, then back to the menus.
+        if (Request != null && _cur.Phase == Phase.Fulltime && _cur.PhaseT > (Request.Demo ? 3 : 4.5)) Report(true);
 
         _time += delta;
         if (_shotPath != null && _time > 6)
