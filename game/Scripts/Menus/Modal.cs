@@ -185,6 +185,7 @@ public sealed partial class ResultModal : Modal
 {
     readonly int _gf, _ga, _coins;
     readonly char _result;
+    bool _rang;
     readonly TeamInfo _home, _away;
 
     public ResultModal(Menus ui, int gf, int ga, TeamInfo home, TeamInfo away, int coins, char result) : base(ui)
@@ -214,6 +215,11 @@ public sealed partial class ResultModal : Modal
         Px.TextC(this, Px.Big, c, y + 52, $"{_gf} - {_ga}", 56, Px.Ink, new Color(0, 0, 0, 0.5f), 3);
         // Coins count up after half a second, easing out.
         float k = Mathf.Clamp(((float)T - 0.5f) / 1.2f, 0, 1);
+        if (k >= 1 && !_rang)
+        {
+            _rang = true;
+            Audio.GameAudio.Instance?.Coins();
+        }
         int shown = (int)Mathf.Round(_coins * (1 - Mathf.Pow(1 - k, 3)));
         string s = "+" + Px.Thousands(shown);
         float w = Px.Width(Px.Big, s, 30) + 30;

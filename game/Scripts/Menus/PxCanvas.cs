@@ -121,7 +121,11 @@ public abstract partial class PxCanvas : Control
                 if (!_dragging)
                 {
                     var h = HitAt(mb.Position);
-                    if (h is Hit hit && hit.Key == _press) hit.Tap?.Invoke();
+                    if (h is Hit hit && hit.Key == _press)
+                    {
+                        Audio.GameAudio.Instance?.UiTap();
+                        hit.Tap?.Invoke();
+                    }
                     else if (_press == null) Background();
                 }
                 _press = null;

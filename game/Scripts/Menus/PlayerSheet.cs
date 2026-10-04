@@ -98,6 +98,7 @@ public sealed partial class PlayerSheet : Modal
                     return;
                 }
                 int v = club.Sell(c.Id);
+                Audio.GameAudio.Instance?.Coins();
                 Ui.Close(this);
                 Ui.Toast($"Sold {c.Name} for {Px.Thousands(v)} coins");
             }, _armed ? Px.Loss : null);

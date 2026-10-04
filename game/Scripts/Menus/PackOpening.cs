@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
+using GameNight.Audio;
 using GameNight.Club;
 using Pos = GameNight.Club.Position;
 
@@ -42,6 +43,7 @@ public sealed partial class PackOpening : PxCanvas
         _cards = cards;
         _kit = ui.Club.Info().Kit;
         _bestTier = (int)cards[^1].Rarity;
+        GameAudio.Instance?.SetAmbience(0);
     }
 
     Card Cur => _cards[Math.Min(_i, _cards.Count - 1)];
@@ -89,6 +91,7 @@ public sealed partial class PackOpening : PxCanvas
     {
         _phase = p;
         _t = 0;
+        if (p == Phase.Enter) GameAudio.Instance?.Whoosh();
     }
 
     void Flash(double strength)
@@ -103,6 +106,7 @@ public sealed partial class PackOpening : PxCanvas
         _tint = _taps >= 2 && _bestTier >= 2 ? Art.RarityColor((Rarity)_bestTier) : _bestTier >= 1 && _taps >= 2 ? Px.Hex(0xe6f1ff) : Colors.White;
         Embers(Mid, _tint, 6 + _taps * 5, 220);
         Input.VibrateHandheld(20 + _taps * 20);
+        GameAudio.Instance?.PackShake(_taps);
         if (_taps >= 3) Burst();
     }
 
@@ -113,6 +117,7 @@ public sealed partial class PackOpening : PxCanvas
         Flash(1);
         Spray(Mid, new[] { c, Colors.White }, 90 + _bestTier * 30, 520 + _bestTier * 60);
         Input.VibrateHandheld(120);
+        GameAudio.Instance?.PackBurst(_bestTier);
         To(Phase.Burst);
     }
 
@@ -125,6 +130,7 @@ public sealed partial class PackOpening : PxCanvas
         {
             To(Phase.Walkout);
             Flash(0.35);
+            GameAudio.Instance?.Stinger(0);
         }
         else To(Phase.Enter);
     }
@@ -139,12 +145,14 @@ public sealed partial class PackOpening : PxCanvas
             _t = 0;
             Flash(0.35);
             Embers(Mid, _tint, 10, 160);
+            GameAudio.Instance?.Stinger(_walkStep);
         }
     }
 
     void Flip()
     {
         To(Phase.Flip);
+        GameAudio.Instance?.Reveal(Tier);
         var c = Art.RarityColor(Cur.Rarity);
         var cols = Tier >= 4 ? new[] { Px.Hex(0x7ff6ff), Px.Hex(0xff7ae6), Px.Hex(0xfff27a), Colors.White } : new[] { c, Colors.White };
         Spray(CardRect().GetCenter(), cols, 40 + Tier * 30, 300 + Tier * 80);
@@ -177,6 +185,7 @@ public sealed partial class PackOpening : PxCanvas
     void Close()
     {
         _ui.Close(this);
+        GameAudio.Instance?.SetAmbience(0.4f);
     }
 
     protected override void Background() => OnTap();
@@ -263,7 +272,11 @@ public sealed partial class PackOpening : PxCanvas
         if (_phase != Phase.Summary)
         {
             Px.TextR(this, Px.Small, W - 110, 28, _phase == Phase.Tease ? "" : $"{_i + 1} / {_cards.Count}", 9, Px.InkDim);
-            GhostButton("skip", new Rect2(W - 96, 10, 82, 32), "SKIP >", 20, Summary);
+            GhostButton("skip", new Rect2(W - 96, 10, 82, 32), "SKIP >", 20, () =>
+            {
+                GameAudio.Instance?.Reveal(_bestTier);
+                Summary();
+            });
         }
         DrawSetTransform(Vector2.Zero);
         if (_flash > 0) DrawRect(new Rect2(Vector2.Zero, Size), new Color(1, 1, 1, (float)(_flash / _flashMax) * 0.85f));

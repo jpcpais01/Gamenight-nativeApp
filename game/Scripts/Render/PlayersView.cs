@@ -118,13 +118,22 @@ public sealed class PlayersView
     static Color Lin(int rgb) => new Color(((rgb >> 16) & 255) / 255f, ((rgb >> 8) & 255) / 255f, (rgb & 255) / 255f).SrgbToLinear();
     static Vector4 Lin4(int rgb, float w) { var c = Lin(rgb); return new Vector4(c.R, c.G, c.B, w); }
 
-    /// <summary>A new match: each player's body, kit, skin, hair and boots.</summary>
-    public void SetMatch(Match m)
+    /// <summary>The controlled player's ring and marker (off during replays and cutscenes).</summary>
+    public bool Markers = true;
+
+    /// <summary>Every body jumped (a replay rewound or ended): settle feet and secondary motion afresh.</summary>
+    public void Snap()
     {
         Array.Clear(_secReady);
         Array.Clear(_footW);
         Array.Clear(_inStance);
         Array.Clear(_ikOn);
+    }
+
+    /// <summary>A new match: each player's body, kit, skin, hair and boots.</summary>
+    public void SetMatch(Match m)
+    {
+        Snap();
         _lastTime = -1;
         var ka = new Vector4[BodyMeshes.PartCount][];
         var kb = new Vector4[BodyMeshes.PartCount][];
@@ -358,6 +367,7 @@ public sealed class PlayersView
         // Your player: the ring (it pulses on a switch) and the arrow over his head.
         int c = b.Controlled;
         bool show = c >= 0 && b.Phase != Phase.Fulltime && b.DeadBallTaker < 0 && b.Phase != Phase.Goal;
+        show &= Markers;
         _ring.Visible = _marker.Visible = show;
         if (show)
         {

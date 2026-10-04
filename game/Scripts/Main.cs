@@ -1,6 +1,7 @@
 using System;
 using Godot;
 using GameNight.Grounds;
+using GameNight.Audio;
 using GameNight.Menus;
 using GameNight.Render;
 using GameNight.Sim;
@@ -29,12 +30,16 @@ public partial class Main : Node
 
     PixelView _view;
     Ground _ground;
+    /// <summary>The match's sound and the terraces' director (the stadium can read Sound.Terraces).</summary>
+    public readonly MatchSound Sound = new();
     MatchCamera _camera;
     PlayersView _players;
     DeliveryView _delivery;
     TouchControls _controls;
     Hud _hud;
     PauseMenu _pause;
+    readonly Replay _replay = new();
+    Letterbox _letterbox;
     /// <summary>Debug: `-- --screenshot=out.png` saves the screen after a few seconds and quits.</summary>
     string _shotPath;
     double _time;
@@ -58,6 +63,18 @@ public partial class Main : Node
         AddChild(_hud);
         _controls = new TouchControls();
         AddChild(_controls);
+        _letterbox = new Letterbox();
+        AddChild(_letterbox);
+        _letterbox.Skip += EndReplay;
+        _replay.OnRewind = _players.Snap;
+        _replay.OnEvents = f =>
+        {
+            var audio = GameAudio.Instance;
+            if (audio == null) return;
+            if (f.KickMax > 0) audio.Kick(f.KickMax);
+            if (f.Post > 0) audio.Post(f.Post);
+            if (f.Net > 0) audio.Net(f.Net);
+        };
         _pause = new PauseMenu { CurrentHeight = () => _view.ArtHeight };
         AddChild(_pause);
         _pause.Opened += () => SetPaused(true);
@@ -70,6 +87,7 @@ public partial class Main : Node
         {
             // Behind the home screen: the computer plays both sides, nothing to touch.
             _hud.Visible = _controls.Visible = _pause.Visible = false;
+            GameAudio.Instance?.SetAmbience(1);
             _hud.ProcessMode = _controls.ProcessMode = _pause.ProcessMode = ProcessModeEnum.Disabled;
         }
         if (Request?.Drill != null)
@@ -90,6 +108,8 @@ public partial class Main : Node
     void NewMatch()
     {
         _runner?.Stop();
+        if (_replay.Active) EndReplay();
+        _replay.Reset();
         _match = Request != null ? new Match(Request.Seed, Request.Setup) : new Match(seed: DateTime.Now.Ticks % 2147483647);
         if (Request?.Demo == true) _match.AutoPlay = true;
         // Names and kits are read before the match's own thread starts.
@@ -109,11 +129,35 @@ public partial class Main : Node
 
     void SetPaused(bool on)
     {
-        if (_runner != null) _runner.Paused = on;
+        if (_runner != null) _runner.Paused = on || _replay.Active;
         _hud.Paused = on;
+        if (GameAudio.Instance != null) GameAudio.Instance.Suspended = on;
         if (on) _controls.ReleaseAll();
         _controls.SetProcessInput(!on);
-        _controls.Visible = !on;
+        _controls.Visible = !on && !_replay.Active;
+    }
+
+    /// <summary>The cut after a goal: the match waits while the tape plays it back.</summary>
+    void StartReplay()
+    {
+        _runner.Paused = true;
+        _players.Markers = false;
+        _hud.Visible = false;
+        _controls.ReleaseAll();
+        _controls.Visible = false;
+        _letterbox.Open(true);
+    }
+
+    /// <summary>Skipped or done: back to the crowd and the walk home.</summary>
+    void EndReplay()
+    {
+        _replay.Finish();
+        _players.Snap();
+        _players.Markers = true;
+        _hud.Visible = Request?.Drill == null && Request?.Demo != true;
+        _controls.Visible = !_pause.IsOpen;
+        _letterbox.Close();
+        if (_runner != null) _runner.Paused = _pause.IsOpen;
     }
 
     void ApplySettings()
@@ -121,6 +165,7 @@ public partial class Main : Node
         _camera.BaseDist = MatchCamera.Presets[Math.Clamp(MatchSettings.Camera, 0, 2)];
         _view.TargetHeight = MatchSettings.Pixels > 0 ? MatchSettings.Pixels : 270;
         _hud.ShowFps = MatchSettings.ShowFps;
+        if (GameAudio.Instance != null) GameAudio.Instance.Muted = !MatchSettings.Sound;
         // Fast graphics: the sun casts no shadows (the biggest cost on a weak GPU).
         foreach (var n in _view.WorldRoot.FindChildren("*", nameof(DirectionalLight3D), true, false))
             ((DirectionalLight3D)n).ShadowEnabled = !MatchSettings.Fast;
@@ -175,10 +220,27 @@ public partial class Main : Node
         }
         if (_cur.Goal >= 0) _camera.Bump(0.4f);
         if (_cur.Post > 0) _camera.Bump(0.6f);
-        _camera.Update(_prev, _cur, alpha, _pause.IsOpen ? 0 : dt);
-        _players.Update(_prev, _cur, alpha, _time, (float)_match.SwitchT);
+        float run = _pause.IsOpen ? 0 : dt;
+        if (_replay.Active)
+        {
+            _replay.Update(run, _camera);
+            if (!_replay.Active) EndReplay();
+        }
+        if (_replay.Active)
+            _players.Update(_replay.A, _replay.B, _replay.Alpha, _time, 1);
+        else
+        {
+            _camera.Update(_prev, _cur, alpha, run);
+            _players.Update(_prev, _cur, alpha, _time, (float)_match.SwitchT);
+            if (Request?.Demo != true && Request?.Drill == null)
+            {
+                _replay.Record(_cur);
+                if (_replay.Start(_cur, GoalSeq.Cut)) StartReplay();
+            }
+        }
         _delivery.Update(_cur);
         _ground.Update(_cur, _time, dt);
+        Sound.Frame(_match, _cur, Request?.Demo != true, Request?.Drill == null, Request?.Drill != null, _pause.IsOpen ? 0 : dt);
         _view.Present(_camera.SubPixelX, _camera.SubPixelY);
 
         bool attack = _cur.HumanAttacking;

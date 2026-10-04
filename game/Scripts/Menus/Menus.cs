@@ -59,6 +59,7 @@ public sealed partial class Menus : Control
         screen.Visible = true;
         if (screen is PxCanvas c) c.ResetScroll();
         if (screen is SquadScreen s) s.Opened();
+        Audio.GameAudio.Instance?.SetAmbience(screen == Home ? 1 : 0.4f);
         App?.BackdropChanged();
     }
 
