@@ -104,6 +104,10 @@ gn_night={
 "type": "float",
 "value": 0.0
 }
+gn_chant={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
 gn_excite={
 "type": "float",
 "value": 0.2

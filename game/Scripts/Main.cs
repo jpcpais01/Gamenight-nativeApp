@@ -271,7 +271,6 @@ public partial class Main : Node
             }
         }
         _delivery.Update(_cur);
-        _ground.ShowGiantTifo(Cutscene.Active && Cutscene.Hang > 0.5f);
         _ground.Update(_cur, _time, dt);
         Sound.Frame(_match, _cur, Request?.Demo != true, Request?.Drill == null, Request?.Drill != null, _pause.IsOpen ? 0 : dt);
         _view.Present(_camera.SubPixelX, _camera.SubPixelY);

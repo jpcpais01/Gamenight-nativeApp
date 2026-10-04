@@ -62,6 +62,11 @@ public abstract class Ground
     protected GiantTifo Giant;
     bool _showGiant, _debugHang;
     float _drop;
+    StandFx _fx;
+    ShaderMaterial _crowdMat;
+    Main _main;
+    bool _pyroDone;
+    const float HLx = 52.5f;
 
     /// <summary>The player's club (set once by the app): its crest, motto and tifos dress the
     /// ground whenever it's the home side.</summary>
@@ -189,7 +194,12 @@ public abstract class Ground
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
         };
         Root.AddChild(mi);
-        Crowd.Build(Root, bake);
+        var crowd = Crowd.Build(Root, bake);
+        if (Crowd.Fans > 0)
+        {
+            _crowdMat = (ShaderMaterial)crowd.MaterialOverride;
+            _fx = new StandFx(Root, HomeColor, AwayColor);
+        }
         Flags.Build(Root, bake, Art.Crest);
         if (GlowSpots.Length > 0) _glows = new GlowView(Root, GlowSpots);
         Root.AddChild(new Signage(ClubName, HomeColor, AwayColor, Banners, BoardArt, Paint, Art));
@@ -209,6 +219,18 @@ public abstract class Ground
     public virtual void Update(MatchSnapshot s, double time, float dt)
     {
         if (_debugCam != null) PlaceDebugCamera();
+        // The match screen this ground belongs to: its terraces director and walk-out.
+        if (_main == null)
+            for (Node n = Root.GetParent(); n != null && _main == null; n = n.GetParent()) _main = n as Main;
+        var terraces = _main?.Sound.Terraces;
+        // Debug: `-- --pyro` lights the home end at once.
+        if (terraces != null && !_pyroDone && Array.IndexOf(OS.GetCmdlineUserArgs(), "--pyro") >= 0)
+        {
+            _pyroDone = true;
+            for (int i = 0; i < 7; i++)
+                terraces.Pyro.Add(new GameNight.Audio.Pyro { X = -(HLx + 8.5f + 3 + i * 1.7f), Y = 1.4f + (3 + i * 1.7f) / 19.6f * 10.1f + 1.7f, Z = -18 + i * 6, Born = terraces.T, Life = 60, Seed = i * 0.13f, Smoke = i == 3 });
+            terraces.Confetti.Add((0, 300));
+        }
         float progress = s.Phase == Phase.Fulltime ? 1f : Mathf.Clamp(s.Minute / 90f, 0, 1);
         if (_debugCam != null && _debugCam.Length > 6) progress = _debugCam[6];
         Atmosphere.Set(progress);
@@ -216,14 +238,21 @@ public abstract class Ground
         // A goal: whoever's score went up. The scoring side's fans go wild for a while.
         if (s.Score[0] != _lastScore0 || s.Score[1] != _lastScore1)
         {
-            if (s.Score[0] > _lastScore0) { _goalTeam = 0; _goalAt = time; }
-            else if (s.Score[1] > _lastScore1) { _goalTeam = 1; _goalAt = time; }
+            if (s.Score[0] > _lastScore0) { _goalTeam = 0; _goalAt = time; _fx?.Goal(0, -20); }
+            else if (s.Score[1] > _lastScore1) { _goalTeam = 1; _goalAt = time; _fx?.Goal(1, 20); }
             _lastScore0 = s.Score[0];
             _lastScore1 = s.Score[1];
         }
         double since = time - _goalAt;
         RenderingServer.GlobalShaderParameterSet("gn_goal", since < 20 ? new Vector2(_goalTeam, (float)since) : new Vector2(-1, 100));
         RenderingServer.GlobalShaderParameterSet("gn_excite", s.Excitement);
+        RenderingServer.GlobalShaderParameterSet("gn_chant", terraces == null ? Vector4.Zero : new Vector4(terraces.Home, terraces.Away, terraces.Beat, terraces.Arms));
+        if (_fx != null)
+        {
+            var (flares, count) = _fx.Update(dt, time, terraces);
+            _crowdMat.SetShaderParameter("flares", flares);
+            _crowdMat.SetShaderParameter("flare_n", count);
+        }
 
         // The kick-off card displays, at the start of each half.
         bool kickoff = (s.Phase == Phase.Kickoff || s.SetPiece == SetPieceKind.Kickoff && s.Phase == Phase.SetPiece)
@@ -235,7 +264,8 @@ public abstract class Ground
         if (Giant != null)
         {
             float step = Mathf.Min(dt, 0.1f);
-            _drop = _showGiant || _debugHang || _tifo > 0.5f ? Mathf.Min(1, _drop + step / 3) : Mathf.Max(0, _drop - step / 4);
+            bool walkOut = _main != null && _main.Cutscene.Active && _main.Cutscene.Hang > 0.5f;
+            _drop = _showGiant || walkOut || _debugHang || _tifo > 0.5f ? Mathf.Min(1, _drop + step / 3) : Mathf.Max(0, _drop - step / 4);
             Giant.Set(_drop * _drop * (3 - 2 * _drop));
         }
         _lastPhase = s.Phase;

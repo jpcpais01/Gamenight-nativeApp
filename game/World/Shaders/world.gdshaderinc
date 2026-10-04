@@ -11,6 +11,8 @@ global uniform vec2 gn_fog_range;
 global uniform float gn_haze;
 global uniform float gn_night;
 global uniform float gn_excite;
+// The terraces: how hard the home / away end sings, the song's beat (0..1), Viking arms up.
+global uniform vec4 gn_chant;
 /** x: team that just scored (0 home, 1 away, -1 none), y: seconds since. */
 global uniform vec2 gn_goal;
 global uniform float gn_tifo;

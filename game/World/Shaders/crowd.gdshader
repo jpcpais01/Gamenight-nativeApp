@@ -9,6 +9,10 @@ render_mode unshaded, cull_disabled, shadows_disabled;
 
 #include "res://World/Shaders/world.gdshaderinc"
 
+// Flares burning in the stands: position and strength (with its flicker).
+uniform vec4 flares[8];
+uniform int flare_n = 0;
+
 varying vec2 q;
 varying flat vec3 shirt;
 varying flat vec3 skin;
@@ -46,17 +50,24 @@ void vertex() {
 	float ph = h(s, 3.3) * 6.2832;
 	float t = TIME;
 
-	// Ultras bounce on the beat, rippling back up the rows; everyone is up when it's close.
-	float beat = sin(t * 7.5 - root.y * 0.5 + h(s, 4.0) * 0.6);
-	float jump = ultra * max(0.0, beat) * (0.08 + 0.1 * ex)
+	// When an end sings it bounces on the song's beat, rippling back up the rows; between songs
+	// the ultras keep their own bounce. For the Viking clap every arm goes up between booms.
+	float sing = ultra * gn_chant.x + awayEnd * gn_chant.y;
+	float singing = step(0.05, sing);
+	float viking = gn_chant.w * singing;
+	float idle = sin(t * 7.5 - root.y * 0.5 + h(s, 4.0) * 0.6);
+	float onBeat = sin((gn_chant.z - root.y * 0.025 - h(s, 0.3) * 0.06) * 6.2832);
+	float beat = mix(idle * ultra, onBeat, singing);
+	float jump = max(ultra, singing) * max(0.0, beat) * (0.08 + 0.1 * max(ex, sing)) * (1.0 - viking)
 		+ (1.0 - ultra) * max(0.0, sin(t * (7.0 + h(s, 1.1) * 3.0) + ph)) * ex2 * 0.16
 		+ ours * max(0.0, sin(t * (8.5 + h(s, 2.1) * 4.0) + ph)) * 0.4;
-	float stand = max(max(ultra, awayEnd * 0.7), clamp(ex * 2.4 - 1.25 - h(s, 6.6) * 0.5, 0.0, 1.0));
+	float stand = max(max(ultra, awayEnd * max(0.7, singing)), clamp(ex * 2.4 - 1.25 - h(s, 6.6) * 0.5, 0.0, 1.0));
 	stand = max(stand, ours) * (1.0 - theirs * step(0.3, h(s, 8.1)) * (1.0 - ultra));
 	float tall = 0.92 + 0.14 * h(s, 2.9);
 	float wide = 0.85 + 0.3 * h(s, 1.7);
-	scarf = step(h(s, 5.5), max(max(ultra, awayEnd) * 0.7, ex2 * 0.75)) * (1.0 - ours);
+	scarf = step(h(s, 5.5), max(max(max(ultra, awayEnd) * 0.7, ex2 * 0.75), sing * 0.95)) * (1.0 - ours) * (1.0 - viking);
 	arms = max(max(scarf, ultra * step(0.6, beat) * step(0.5, h(s, 7.7))), ours * step(0.15, h(s, 9.9)));
+	arms = max(arms, viking * step(h(s, 2.2) * 0.25, gn_chant.z + 0.3));
 
 	// Card display for the kick-off: held up overhead, edge to edge, they make the picture.
 	cardOn = 0.0;
@@ -91,6 +102,11 @@ void vertex() {
 	// Light: sky and floodlights, and the sun where the stands don't shade him.
 	float shade = COLOR.b;
 	light = (gn_amb_sky * 1.05 + gn_amb_ground * 0.4 + gn_sun * 0.5 * COLOR.a + gn_flood_col * gn_flood * 0.55) * shade;
+	// Flares: a hot red glow on everyone near one, stronger as it gets dark.
+	for (int i = 0; i < flare_n; i++) {
+		vec3 d = flares[i].xyz - (root + vec3(0.0, 1.4, 0.0));
+		light += vec3(1.0, 0.32, 0.12) * flares[i].w * (0.3 + gn_night * 0.9) * 2.0 / (1.0 + dot(d, d) * 0.12);
+	}
 	// Phone torches once it's dark.
 	torch = step(0.9965, h(s + floor(t * 3.0 + h(s, 0.5) * 10.0), 5.0)) * gn_night;
 }
