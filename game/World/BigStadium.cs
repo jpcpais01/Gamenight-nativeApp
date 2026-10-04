@@ -167,6 +167,7 @@ public sealed class BigStadium : Ground
         float lowerSlope = (Lower1 - Lower0).Length();
         float cz = BowlZ - BowlR;
         Crowd.Tier(path, Lower0, Lower1, new TierFans { Shade = new(9, 17), Vom = new(7.2f, 10.2f), Tifo = EndTifos(cz, lowerSlope) });
+        WaveFlags(path, Lower0, Lower1);
         Crowd.Tier(path, Upper0, Upper1, new TierFans { Shade = new(-2, 10) });
         Crowd.Tier(main, Top0, Top1, new TierFans { Shade = new(-2, 6), Fill = 0.9f });
         Crowd.Tier(near, new(0.4f, 1.2f), new(11, 5.6f), new TierFans { Fill = 0.85f });

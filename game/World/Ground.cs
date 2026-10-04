@@ -37,6 +37,7 @@ public abstract class Ground
     /// <summary>Solid but never drawn: casts the stand shadows only (the near stand behind the camera).</summary>
     protected readonly MeshData ShadowOnly = new();
     protected readonly Crowd Crowd = new();
+    protected readonly Flags Flags = new();
     /// <summary>Floodlight banks (positions), for the pitch's light pools and the glows.</summary>
     protected Vector3[] Lamps = Array.Empty<Vector3>();
     protected BannerArt[] Banners = Array.Empty<BannerArt>();
@@ -73,6 +74,10 @@ public abstract class Ground
     protected virtual void Setup() { }
 
     protected abstract void Build();
+
+    /// <summary>Fans waving flags over a tier from a to b (offset, height), by the path's zones.</summary>
+    protected void WaveFlags(List<PathPt> path, Vector2 a, Vector2 b) =>
+        Flags.Add(path, a, b, HomeColor, AwayColor, Art.Crest != null ? 0.35f : 0);
 
     /// <summary>Debug: `-- --cam=x,y,z,tx,ty,tz[,progress]` holds the camera there (to look at the ground).</summary>
     float[] _debugCam;
@@ -177,9 +182,10 @@ public abstract class Ground
         };
         Root.AddChild(mi);
         Crowd.Build(Root, bake);
+        Flags.Build(Root, bake, Art.Crest);
         if (GlowSpots.Length > 0) _glows = new GlowView(Root, GlowSpots);
         Root.AddChild(new Signage(ClubName, HomeColor, AwayColor, Banners, BoardArt, Paint, Art));
-        GD.Print($"Ground {GetType().Name}: {Static.Count / 3} triangles, {Crowd.Fans} fans; built in {tBuild} ms, total {clock.ElapsedMilliseconds} ms");
+        GD.Print($"Ground {GetType().Name}: {Static.Count / 3} triangles, {Crowd.Fans} fans, {Flags.Count} flags; built in {tBuild} ms, total {clock.ElapsedMilliseconds} ms");
         return this;
     }
 

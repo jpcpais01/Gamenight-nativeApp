@@ -243,6 +243,9 @@ public sealed class OldGround : Ground
         Crowd.Tier(shed, new(0.4f, 1.4f), new(18, Tier(18)), new TierFans { Aisles = false, Shade = new(-1, 9), Tifo = EndTifos(29, shedSlope) });
         Crowd.Tier(away, new(0.4f, 1.4f), new(17, top), new TierFans { Aisles = false, Fill = 0.35f, Tifo = EndTifos(20, awaySlope * 0.55f + 1) });
         Crowd.Tier(near, new(0.4f, 1.4f), new(8, Tier(8)), new TierFans { Fill = 0.6f });
+        WaveFlags(main, new(0.4f, 1.4f), new(15, Tier(15)));
+        WaveFlags(shed, new(0.4f, 1.4f), new(18, Tier(18)));
+        WaveFlags(away, new(0.4f, 1.4f), new(17, top));
     }
 
     /// <summary>Rows of terraced houses, the trees between them and the church.</summary>
