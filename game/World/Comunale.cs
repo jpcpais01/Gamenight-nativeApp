@@ -193,7 +193,7 @@ public sealed class Comunale : Ground
         RailBanners(m, path, 20.9f, 13.7f, 34, 4.2f);
 
         float lowerSlope = (Lower1 - Lower0).Length();
-        Crowd.Tier(path, Lower0, Lower1, new TierFans { Vom = new(7.2f, 10.2f), Tifo = EndTifos(BowlZ - BowlR, lowerSlope) });
+        Crowd.Tier(path, Lower0, Lower1, new TierFans { Vom = new(7.2f, 10.2f), Tifo = CurvaTifos(BowlZ - BowlR, lowerSlope) });
         WaveFlags(path, Lower0, Lower1);
         var homeEnd = path.Where(p => p.Zone == 1 && p.NX < -0.999f).ToList();
         var farSide = path.Where(p => p.Zone == 0 && p.NZ < -0.999f).ToList();

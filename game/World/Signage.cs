@@ -14,6 +14,7 @@ public record struct BannerArt(string Text, uint Bg, uint Fg, int Style);
 ///   home tifo  x 512..1024, y 288..448  the ultras' card display
 ///   away tifo  x 512..1024, y 448..608  the travelling fans' display
 ///   fascia     x 0..512,    y 512..576  the club's name along the roof fronts
+///   swatches   x 0..192,    y 576..608  card colours for a curva's stripes
 ///   ribbon     x 0..1024,   y 608..640  scrolling LED ribbon messages
 ///   banners    y 768..1008, two columns of 5 rows of 48 (railing banners)
 ///   ground's own  y 640..768 (gables, clocks, signs: see Ground.Paint)
@@ -88,6 +89,10 @@ public sealed partial class Signage : Node
         Rect(new Rect2(0, 512, 512, 5), 0x000000, 0.25f);
         Rect(new Rect2(0, 571, 512, 5), 0x000000, 0.25f);
         Text(new Rect2(0, 514, 512, 62), Spaced(clubName), 0xf4f0e6, 40);
+        // Card swatches for a curva's stripes (Ground.CurvaTifos): home, cream, away.
+        Rect(new Rect2(0, 576, 64, 32), home);
+        Rect(new Rect2(64, 576, 64, 32), 0xf2eee0);
+        Rect(new Rect2(128, 576, 64, 32), away);
         // Ribbon: four messages along 1024 px.
         var segs = new (string, uint, uint)[] { ("GAMENIGHT", 0x0d1030, 0xffd447), ("SEASON 01", home, 0xffffff), ("BIG NIGHT", 0x0d1030, 0x9fd0ff), ("MATCHDAY", 0xf2ede1, 0x14123a) };
         for (int i = 0; i < 4; i++)

@@ -77,6 +77,7 @@ public abstract class Ground
     ShaderMaterial _crowdMat;
     Main _main;
     bool _pyroDone;
+    bool? _debugTifo;
     const float HLx = 52.5f;
 
     /// <summary>The player's club (set once by the app): its crest, motto and tifos dress the
@@ -171,7 +172,8 @@ public abstract class Ground
             _kits[1] = a;
         }
         var club = Club?.S;
-        if (club == null || setup?.Teams?[0] != null && setup.Teams[0].Info.Name != club.Name) return;
+        // The player's club is the home side in every match (as in the PWA).
+        if (club == null) return;
         Art.Crest = CrestArt.Texture(club.Crest, 256);
         Art.Founded = club.Crest.Year ?? "";
         var (text, bg, fg) = Club.BannerColors();
@@ -292,10 +294,13 @@ public abstract class Ground
             _crowdMat.SetShaderParameter("flare_n", count);
         }
 
-        // The kick-off card displays, at the start of each half.
-        bool kickoff = (s.Phase == Phase.Kickoff || s.SetPiece == SetPieceKind.Kickoff && s.Phase == Phase.SetPiece)
-            && (s.Minute == 0 || s.Minute == 45) && s.Score[0] + s.Score[1] == _lastScore0 + _lastScore1 && since > 20;
-        float want = kickoff ? 1 : 0;
+        // The card displays (as the PWA): at every kick-off, and held up through the first few
+        // seconds of play of each half (a game minute is 3.3 s).
+        bool kickoff = s.Phase == Phase.Kickoff || s.SetPiece == SetPieceKind.Kickoff && s.Phase == Phase.SetPiece
+            || s.Phase == Phase.Play && s.Minute - (s.Half >= 2 ? 45 : 0) < 3;
+        // Debug: `-- --tifo` holds the card displays up.
+        _debugTifo ??= Array.IndexOf(OS.GetCmdlineUserArgs(), "--tifo") >= 0;
+        float want = kickoff || _debugTifo == true ? 1 : 0;
         _tifo += (want - _tifo) * (1 - Mathf.Exp(-dt * 2.5f));
         RenderingServer.GlobalShaderParameterSet("gn_tifo", _tifo);
         // The giant tifo unrolls in about three seconds and is wound back up a little slower.
@@ -320,6 +325,21 @@ public abstract class Ground
         float v = (sv - 0.6f) / (slope - 1f);
         return new Vector2(512 + u * 512, (zone == 1 ? 288 : 448) + (1 - v) * 160) / 1024f;
     };
+
+    /// <summary>A curva's card display (the Comunale's): the picture over the middle of each
+    /// end as EndTifos, and stripes of the end's colour and cream every 9 m everywhere else in
+    /// it (swatches at the atlas's y 576..608).</summary>
+    protected static Func<Vector3, float, int, Vector2?> CurvaTifos(float cz, float slope)
+    {
+        var picture = EndTifos(cz, slope);
+        return (p, sv, zone) =>
+        {
+            if (picture(p, sv, zone) is Vector2 uv) return uv;
+            if (zone == 0 || sv < 0.6f || sv > slope - 0.4f) return null;
+            bool cream = Mathf.PosMod(Mathf.Atan2(p.Z, Mathf.Abs(p.X)) * 60 / 9, 2) >= 1;
+            return new Vector2(cream ? 96 : zone == 1 ? 32 : 160, 592) / 1024f;
+        };
+    }
 
     protected static void RailBanners(MeshData m, List<PathPt> path, float dropO, float dropY, float dropW, float dropH)
     {
