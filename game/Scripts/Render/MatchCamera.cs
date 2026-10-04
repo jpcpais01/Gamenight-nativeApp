@@ -329,6 +329,14 @@ public sealed class MatchCamera
         Camera.LookAtFromPosition(pos, look, Vector3.Up);
     }
 
+    /// <summary>A directed shot from outside the rig (a replay, a cutscene): placed exactly, no pixel snap.</summary>
+    public void Cut(Vector3 pos, Vector3 look, float fov)
+    {
+        SubPixelX = SubPixelY = 0;
+        if (MathF.Abs(Camera.Fov - fov) > 0.01f) Camera.Fov = fov;
+        Camera.LookAtFromPosition(pos, look, Vector3.Up);
+    }
+
     static float Smooth(float x) => x * x * (3 - 2 * x);
 
     static float KeepIn(float aim, float p, float far, float near)

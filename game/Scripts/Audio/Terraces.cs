@@ -170,6 +170,8 @@ public sealed class Terraces
             _shotTeam = -1;
         }
         // Now and then, a shower of confetti from one of the ends.
+        // (Nobody drawing confetti yet: keep only the latest few.)
+        if (Confetti.Count > 8) Confetti.RemoveRange(0, Confetti.Count - 8);
         if (t > _nextConfetti && m.Phase == Phase.Play)
         {
             Confetti.Add((Rnd() < 0.7f ? 0 : 1, 140 + Rnd() * 120));
