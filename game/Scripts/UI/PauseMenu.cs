@@ -14,13 +14,15 @@ public sealed partial class PauseMenu : Control
     public Action Leave;
     /// <summary>The weather: its name, and the next one (set by Main; switches live).</summary>
     public Func<string> WeatherName, CycleWeather;
+    /// <summary>Saves the frame-time report (FPS DETAIL on); returns where it went, for the button.</summary>
+    public Func<string> SaveReport;
 
     static readonly string[] CameraNames = { "Close", "Normal", "Far" };
 
     readonly Button _pause;
     readonly Control _menu;
     readonly VBoxContainer _card;
-    readonly Button _camera, _graphics, _pixels, _weather, _fps, _sound, _leave;
+    readonly Button _camera, _graphics, _pixels, _weather, _fps, _sound, _leave, _report;
 
     public bool IsOpen => _menu.Visible;
 
@@ -93,6 +95,9 @@ public sealed partial class PauseMenu : Control
         _sound = Ghost("");
         _sound.Pressed += () => { MatchSettings.Sound = !MatchSettings.Sound; Changed(); };
         card.AddChild(Row(_fps, _sound));
+        _report = Ghost("SAVE PERFORMANCE REPORT");
+        _report.Pressed += () => { if (SaveReport != null) _report.Text = SaveReport(); };
+        card.AddChild(_report);
         Labels();
     }
 
@@ -171,6 +176,8 @@ public sealed partial class PauseMenu : Control
         _fps.Text = "FPS COUNTER: " + (!MatchSettings.ShowFps ? "OFF" : MatchSettings.Profile ? "DETAIL" : "ON");
         _sound.Text = "SOUND: " + (MatchSettings.Sound ? "ON" : "OFF");
         _weather.Visible = WeatherName != null;
+        _report.Visible = MatchSettings.ShowFps && MatchSettings.Profile && SaveReport != null;
+        _report.Text = "SAVE PERFORMANCE REPORT";
         if (WeatherName != null) _weather.Text = "MATCH: " + WeatherName().ToUpperInvariant();
     }
 
