@@ -16,6 +16,7 @@ public record struct BannerArt(string Text, uint Bg, uint Fg, int Style);
 ///   fascia     x 0..512,    y 512..576  the club's name along the roof fronts
 ///   ribbon     x 0..1024,   y 608..640  scrolling LED ribbon messages
 ///   banners    y 768..1008, two columns of 5 rows of 48 (railing banners)
+///   ground's own  y 640..768 (gables, clocks, signs: see Ground.Paint)
 /// </summary>
 public sealed partial class Signage : Node
 {
@@ -31,7 +32,7 @@ public sealed partial class Signage : Node
     readonly Font _font;
     int _frames;
 
-    public Signage(string clubName, uint home, uint away, BannerArt[] banners, (string text, uint bg, uint fg)[] boards = null)
+    public Signage(string clubName, uint home, uint away, BannerArt[] banners, (string text, uint bg, uint fg)[] boards = null, Action<Signage> paint = null)
     {
         _vp = new SubViewport
         {
@@ -75,19 +76,23 @@ public sealed partial class Signage : Node
         }
         for (int i = 0; i < banners.Length && i < 10; i++)
             Banner(new Rect2(i / 5 * 512, 768 + i % 5 * 48, 512, 48), banners[i]);
+        paint?.Invoke(this);
     }
 
     static string Spaced(string s) => string.Join(' ', s.ToUpperInvariant().ToCharArray());
 
-    static Color Col(uint hex, float a = 1) => new(((hex >> 16) & 255) / 255f, ((hex >> 8) & 255) / 255f, (hex & 255) / 255f, a);
+    public static Color Col(uint hex, float a = 1) => new(((hex >> 16) & 255) / 255f, ((hex >> 8) & 255) / 255f, (hex & 255) / 255f, a);
 
-    void Rect(Rect2 r, uint hex, float a = 1) => Rect(r, Col(hex, a));
+    public void Rect(Rect2 r, uint hex, float a = 1) => Rect(r, Col(hex, a));
 
-    void Rect(Rect2 r, Color c) => _root.AddChild(new ColorRect { Position = r.Position, Size = r.Size, Color = c });
+    public void Rect(Rect2 r, Color c) => _root.AddChild(new ColorRect { Position = r.Position, Size = r.Size, Color = c });
 
-    void Poly(uint hex, params Vector2[] pts) => _root.AddChild(new Polygon2D { Polygon = pts, Color = Col(hex) });
+    public void Line(uint hex, float width, params Vector2[] pts) =>
+        _root.AddChild(new Line2D { Points = pts, Width = width, DefaultColor = Col(hex), JointMode = Line2D.LineJointMode.Sharp });
 
-    void Text(Rect2 r, string text, uint fg, int size, uint? outline = null, int outlineSize = 0)
+    public void Poly(uint hex, params Vector2[] pts) => _root.AddChild(new Polygon2D { Polygon = pts, Color = Col(hex) });
+
+    public void Text(Rect2 r, string text, uint fg, int size, uint? outline = null, int outlineSize = 0)
     {
         // Shrink to fit the width.
         float wantW = r.Size.X * 0.92f;
@@ -107,7 +112,7 @@ public sealed partial class Signage : Node
         });
     }
 
-    void Star(Vector2 c, float r0, float r1, uint hex)
+    public void Star(Vector2 c, float r0, float r1, uint hex)
     {
         var pts = new Vector2[10];
         for (int i = 0; i < 10; i++)
@@ -117,6 +122,16 @@ public sealed partial class Signage : Node
             pts[i] = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * r;
         }
         Poly(hex, pts);
+    }
+
+    /// <summary>The club crest stand-in: a shield in the club colour with a gold star, `h` px tall.</summary>
+    public void Crest(Vector2 c, float h, uint home)
+    {
+        float k = h / 150f;
+        Vector2 P(float x, float y) => c + new Vector2(x, y) * k;
+        Poly(0xf4efe2, P(-60, -75), P(60, -75), P(60, 15), P(0, 75), P(-60, 15));
+        Poly(home, P(-52, -67), P(52, -67), P(52, 11), P(0, 63), P(-52, 11));
+        Star(P(0, -9), 18 * k, 42 * k, 0xffd447);
     }
 
     void Screen(string name, uint home)
@@ -165,7 +180,7 @@ public sealed partial class Signage : Node
         Star(new Vector2(x0 + 256, y0 + 80), 22, 54, away);
     }
 
-    static Vector2[] Circle(Vector2 c, float r)
+    public static Vector2[] Circle(Vector2 c, float r)
     {
         var pts = new Vector2[24];
         for (int i = 0; i < 24; i++) pts[i] = c + new Vector2(Mathf.Cos(i * Mathf.Tau / 24), Mathf.Sin(i * Mathf.Tau / 24)) * r;
