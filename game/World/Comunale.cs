@@ -195,6 +195,10 @@ public sealed class Comunale : Ground
         float lowerSlope = (Lower1 - Lower0).Length();
         Crowd.Tier(path, Lower0, Lower1, new TierFans { Vom = new(7.2f, 10.2f), Tifo = EndTifos(BowlZ - BowlR, lowerSlope) });
         WaveFlags(path, Lower0, Lower1);
+        var homeEnd = path.Where(p => p.Zone == 1 && p.NX < -0.999f).ToList();
+        var farSide = path.Where(p => p.Zone == 0 && p.NZ < -0.999f).ToList();
+        HoldBanner(homeEnd[homeEnd.Count / 2], 6.5f, Lower0, Lower1, 10);
+        HoldBanner(farSide[(int)(farSide.Count * 0.38f)], 4, Lower0, Lower1, 8);
         Crowd.Tier(left, Upper0, Upper1, new TierFans());
         Crowd.Tier(right, Upper0, Upper1, new TierFans());
         Crowd.Tier(main, Upper0, Upper1, new TierFans { Shade = new(4, 16), Fill = 0.92f });

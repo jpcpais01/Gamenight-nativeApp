@@ -30,6 +30,7 @@ public sealed class GiantTifo
     public void Attach(Node3D root, ClubArt art, string name, uint home, string motto)
     {
         _mat = new ShaderMaterial { Shader = GD.Load<Shader>("res://World/Shaders/giant.gdshader") };
+        _mat.SetShaderParameter("cut_y", 1000f);
         _cloth = new MeshInstance3D { Mesh = Cloth(), MaterialOverride = _mat, Transform = _top, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off, Visible = false, ExtraCullMargin = 4 };
         root.AddChild(_cloth);
         var m = new MeshData();

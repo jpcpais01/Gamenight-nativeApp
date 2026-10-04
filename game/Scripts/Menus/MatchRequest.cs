@@ -46,5 +46,6 @@ public static class Grounds
         new Ground { Id = "comunale", Name = "Stadio Comunale", About = "An Italian bowl: the open Curva, spiral towers, umbrella pines" },
         new Ground { Id = "old", Name = "Old Ground", About = "Terraces, the Shed, pylons and the town beyond" },
         new Ground { Id = "training", Name = "Training ground", About = "The club's own: clean, modern, no crowd" },
+        new Ground { Id = "bare", Name = "Bare pitch", About = "Just the field: no stands, no crowd" },
     };
 }

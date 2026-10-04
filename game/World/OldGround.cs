@@ -245,6 +245,8 @@ public sealed class OldGround : Ground
         Crowd.Tier(near, new(0.4f, 1.4f), new(8, Tier(8)), new TierFans { Fill = 0.6f });
         WaveFlags(main, new(0.4f, 1.4f), new(15, Tier(15)));
         WaveFlags(shed, new(0.4f, 1.4f), new(18, Tier(18)));
+        HoldBanner(shed[shed.Count / 2], 6.5f, new(0.4f, 1.4f), new(18, Tier(18)), 10);
+        HoldBanner(main[(int)(main.Count * 0.38f)], 4, new(0.4f, 1.4f), new(15, Tier(15)), 8);
         WaveFlags(away, new(0.4f, 1.4f), new(17, top));
     }
 

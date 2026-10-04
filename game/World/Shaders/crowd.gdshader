@@ -109,6 +109,9 @@ void vertex() {
 	}
 	// Phone torches once it's dark.
 	torch = step(0.9965, h(s + floor(t * 3.0 + h(s, 0.5) * 10.0), 5.0)) * gn_night;
+	// Camera flashes popping round the ground on the big moments: a chance, a goal.
+	float moment = max(fresh, smoothstep(0.75, 1.0, gn_excite));
+	torch = max(torch, step(1.0 - 0.004 * moment, h(s + floor(t * 9.0 + h(s, 0.6) * 10.0), 6.0)) * 1.4);
 }
 
 void fragment() {

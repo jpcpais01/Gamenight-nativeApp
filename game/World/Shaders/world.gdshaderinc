@@ -18,6 +18,8 @@ global uniform vec2 gn_goal;
 global uniform float gn_tifo;
 global uniform vec3 gn_home;
 global uniform vec3 gn_away;
+// The big screens' live picture (World/ScreenView.cs).
+global uniform sampler2D gn_screen : source_color, filter_linear, repeat_disable;
 global uniform sampler2D gn_atlas : source_color, filter_linear_mipmap, repeat_disable;
 
 // Light from the time of day on a surface facing n, with the sun's share scaled by vis.

@@ -103,7 +103,7 @@ void fragment() {
 		float vom = par > 1.5 ? step(abs(fract(uv.x / 30.0 + 0.25) - 0.5) * 30.0, 1.5) * step(7.2, uv.y) * step(uv.y, 10.2) : 0.0;
 		alb = mix(alb, vec3(0.002), vom);
 	} else if (look == LOOK_SCREEN) {
-		vec3 s = texture(gn_atlas, px(vec2(512.0 + clamp(uv.x, 0.0, 1.0) * 511.0, (1.0 - clamp(uv.y, 0.0, 1.0)) * 287.0))).rgb;
+		vec3 s = texture(gn_screen, vec2(clamp(uv.x, 0.0, 1.0), 1.0 - clamp(uv.y, 0.0, 1.0))).rgb;
 		emis = s * (0.6 + gn_flood * 0.6);
 		alb = vec3(0.0);
 	} else if (look == LOOK_CLOTH) {

@@ -12,7 +12,7 @@ namespace GameNight.Grounds;
 /// motto banner and the supporters' own tifo pictures (any may be missing).</summary>
 public sealed class ClubArt
 {
-    public Texture2D Crest, EndTifo, GiantTifo;
+    public Texture2D Crest, EndTifo, GiantTifo, FanTifo;
     public string Founded = "1903";
     public (string text, uint bg, uint fg)? Motto;
 }
@@ -55,6 +55,11 @@ public abstract class Ground
 
     public uint HomeColor = 0xc8393b, AwayColor = 0x2a4a8c;
     public string ClubName = "Rossoneri";
+    public string HomeShort = "ROS", AwayShort = "ATL";
+    /// <summary>The ground has big screens (they show the live score).</summary>
+    protected bool HasScreen;
+    protected readonly FanBanners FanBanners = new();
+    ScreenView _screen;
     /// <summary>The substitutes' kits on the benches.</summary>
     protected BenchKit HomeKit = Pitchside.HomeKit, AwayKit = Pitchside.AwayKit;
     protected readonly ClubArt Art = new();
@@ -87,6 +92,14 @@ public abstract class Ground
     /// <summary>Drop the giant tifo now (true) or let it wind back up (false). It also comes
     /// down by itself at each kick-off and goes back up once play is under way.</summary>
     public void ShowGiantTifo(bool show = true) => _showGiant = show;
+
+    /// <summary>The supporters' own banner held up at `p`, `o` m back on a tier from a to b
+    /// (offset, height), `w` m wide: only when they've made one.</summary>
+    protected void HoldBanner(PathPt p, float o, Vector2 a, Vector2 b, float w)
+    {
+        if (Art.FanTifo == null) return;
+        FanBanners.Hold(Static, p, p.At(o, a.Y + (o - a.X) / (b.X - a.X) * (b.Y - a.Y)), w);
+    }
 
     /// <summary>Fans waving flags over a tier from a to b (offset, height), by the path's zones.</summary>
     protected void WaveFlags(List<PathPt> path, Vector2 a, Vector2 b) =>
@@ -130,6 +143,7 @@ public abstract class Ground
         {
             "comunale" => new Comunale(),
             "old" => new OldGround(),
+            "bare" => new BarePitch(),
             "training" => new TrainingGround(),
             _ => new BigStadium(),
         };
@@ -145,6 +159,8 @@ public abstract class Ground
             HomeColor = (uint)h.Shirt;
             AwayColor = (uint)a.Shirt;
             if (!string.IsNullOrWhiteSpace(t[0].Info.Name)) ClubName = t[0].Info.Name;
+            if (!string.IsNullOrWhiteSpace(t[0].Info.Short)) HomeShort = t[0].Info.Short;
+            if (!string.IsNullOrWhiteSpace(t[1].Info.Short)) AwayShort = t[1].Info.Short;
             HomeKit = new((uint)h.Shirt, (uint)h.Shorts, (uint)h.Socks, (uint)h.GkShirt);
             AwayKit = new((uint)a.Shirt, (uint)a.Shorts, (uint)a.Socks, (uint)a.GkShirt);
         }
@@ -156,6 +172,7 @@ public abstract class Ground
         if (!string.IsNullOrWhiteSpace(text)) Art.Motto = (text.ToUpperInvariant(), (uint)bg, (uint)fg);
         Art.EndTifo = Tifos.Texture(TifoKind.End);
         Art.GiantTifo = Tifos.Texture(TifoKind.Giant);
+        Art.FanTifo = Tifos.Texture(TifoKind.Fan);
     }
 
     /// <summary>Builds the ground under `parent`: geometry, baked light, crowd, signage.</summary>
@@ -179,6 +196,9 @@ public abstract class Ground
 
         var clock = System.Diagnostics.Stopwatch.StartNew();
         Build();
+        // The land runs on to the horizon under everything (the pitch's own plane stops at 160 m).
+        Static.Hex(((uint)(Land.X * 255) << 16) | ((uint)(Land.Y * 255) << 8) | (uint)(Land.Z * 255));
+        Static.Quad(new Vector3(-1500, -0.08f, 1500), new Vector3(1500, -0.08f, 1500), new Vector3(1500, -0.08f, -1500), new Vector3(-1500, -0.08f, -1500), 3000, 3000);
         long tBuild = clock.ElapsedMilliseconds;
 
         var bake = new LightBake(BakeArea.Position.X, BakeArea.Position.Y, BakeArea.End.X, BakeArea.End.Y);
@@ -204,6 +224,8 @@ public abstract class Ground
         if (GlowSpots.Length > 0) _glows = new GlowView(Root, GlowSpots);
         Root.AddChild(new Signage(ClubName, HomeColor, AwayColor, Banners, BoardArt, Paint, Art));
         Giant?.Attach(Root, Art, ClubName, HomeColor, Art.Motto?.text ?? "ONE CLUB · ONE NIGHT");
+        FanBanners.Build(Root, Art.FanTifo, HomeColor);
+        if (HasScreen) Root.AddChild(_screen = new ScreenView(ClubName, HomeShort, AwayShort, HomeColor, AwayColor, Art));
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--hang") >= 0) { _debugHang = true; _drop = 1; }
         GD.Print($"Ground {GetType().Name}: {Static.Count / 3} triangles, {Crowd.Fans} fans, {Flags.Count} flags; built in {tBuild} ms, total {clock.ElapsedMilliseconds} ms");
         return this;
@@ -245,6 +267,7 @@ public abstract class Ground
         }
         double since = time - _goalAt;
         RenderingServer.GlobalShaderParameterSet("gn_goal", since < 20 ? new Vector2(_goalTeam, (float)since) : new Vector2(-1, 100));
+        _screen?.Show(s.Score[0], s.Score[1], s.Minute, since < 8 ? _goalTeam : -1, (int)(since * 3) % 2 == 0);
         RenderingServer.GlobalShaderParameterSet("gn_excite", s.Excitement);
         RenderingServer.GlobalShaderParameterSet("gn_chant", terraces == null ? Vector4.Zero : new Vector4(terraces.Home, terraces.Away, terraces.Beat, terraces.Arms));
         if (_fx != null)

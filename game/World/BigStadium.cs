@@ -35,6 +35,7 @@ public sealed class BigStadium : Ground
 
     protected override void Setup()
     {
+        HasScreen = true;
         Banners = new[]
         {
             new BannerArt("CURVA ROSSA", HomeColor, 0xf3eee2, 1),
@@ -169,6 +170,10 @@ public sealed class BigStadium : Ground
         float cz = BowlZ - BowlR;
         Crowd.Tier(path, Lower0, Lower1, new TierFans { Shade = new(9, 17), Vom = new(7.2f, 10.2f), Tifo = EndTifos(cz, lowerSlope) });
         WaveFlags(path, Lower0, Lower1);
+        var homeEnd = path.Where(p => p.Zone == 1 && p.NX < -0.999f).ToList();
+        var farSide = path.Where(p => p.Zone == 0 && p.NZ < -0.999f).ToList();
+        HoldBanner(homeEnd[homeEnd.Count / 2], 6.5f, Lower0, Lower1, 10);
+        HoldBanner(farSide[(int)(farSide.Count * 0.38f)], 4, Lower0, Lower1, 8);
         Crowd.Tier(path, Upper0, Upper1, new TierFans { Shade = new(-2, 10) });
         Crowd.Tier(main, Top0, Top1, new TierFans { Shade = new(-2, 6), Fill = 0.9f });
         Crowd.Tier(near, new(0.4f, 1.2f), new(11, 5.6f), new TierFans { Fill = 0.85f });
