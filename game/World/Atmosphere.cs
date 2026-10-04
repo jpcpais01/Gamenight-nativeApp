@@ -189,8 +189,14 @@ public sealed class Atmosphere
         if (f > 0.01f || u < 0.6f) _sky.SetShaderParameter("flash", f);
     }
 
+    /// <summary>How cold the air is (0..1): breath shows on a cold night and in the rain.</summary>
+    public float Cold => Weather == Weather.Rain ? 1 : Weather == Weather.Sunny ? 0 : _night;
+    public float Rain => Weather == Weather.Rain ? 1 : 0;
+    float _night;
+
     void Globals(Color sun, float energy, Color amb, Color gnd, float flood, Color fog, float night, Vector2 fogRange, float haze)
     {
+        _night = night;
         _sun.LightColor = sun.LinearToSrgb();
         _sun.LightEnergy = energy;
         _env.AmbientLightColor = amb.LinearToSrgb();
