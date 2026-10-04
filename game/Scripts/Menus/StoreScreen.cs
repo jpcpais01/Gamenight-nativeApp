@@ -8,17 +8,57 @@ namespace GameNight.Menus;
 public sealed partial class StoreScreen : PxCanvas
 {
     readonly Menus _ui;
+    readonly Fx.World _fx = new();
+    readonly Rect2[] _arts = new Rect2[Packs.All.Length];
+    double _sparkle;
     ClubState Club => _ui.Club;
 
     public StoreScreen(Menus ui)
     {
         _ui = ui;
+        AddChild(new Fx.Light(DrawLight));
+    }
+
+    public override void _Process(double delta)
+    {
+        base._Process(delta);
+        if (!IsVisibleInTree()) return;
+        float dt = (float)delta;
+        _fx.Step(dt);
+        _fx.Motes(Size, Px.Hex(0xc9b6ff), 6, dt, Size.Y);
+        // Now and then a glint pops on one of the packs, more often on the rare ones.
+        _sparkle -= delta;
+        if (_sparkle <= 0)
+        {
+            _sparkle = 0.25 + _fx.Rng.NextDouble() * 0.5;
+            int i = _fx.Rng.Next(Packs.All.Length);
+            var r = _arts[i];
+            if (r.Size.X > 0)
+            {
+                var p = r.Position + new Vector2((float)_fx.Rng.NextDouble(), (float)_fx.Rng.NextDouble()) * r.Size;
+                _fx.Add(new Fx.Bit { P = p, C = Px.Hex(Packs.All[i].Colors[2]), Life = 0.6f, Max = 0.6f, Size = 4 + i * 1.2f, Drag = 1, Spin = 6, Kind = Fx.Kind.Star });
+            }
+        }
+        GetChild<Control>(0).QueueRedraw();
+    }
+
+    /// <summary>The bright layer: the shine sweeping over each pack, glints and dust.</summary>
+    void DrawLight(CanvasItem ci)
+    {
+        for (int i = 0; i < _arts.Length; i++)
+        {
+            if (_arts[i].Size.X <= 0) continue;
+            float period = 3.2f;
+            float k = (float)((T + i * 0.55) % period) / (period * 0.55f);
+            Fx.Shine(ci, _arts[i], k, new Color(1, 1, 1, 0.14f + i * 0.03f));
+        }
+        _fx.Draw(ci);
     }
 
     protected override void Paint()
     {
         float W = Size.X, H = Size.Y;
-        NightBackdrop(new[] { Px.Hex(0x120a2a), Px.Hex(0x1c0f3e), Px.Hex(0x2a1450), Px.Hex(0x3a1a58) });
+        Fx.Vault(this, Size, Px.Hex(0xb05cff), (float)T, Mathf.Round(H * 0.58f));
         BackButton(new Vector2(14, 12), () => _ui.Go(_ui.Home));
         Title(new Vector2(66, 44), "STORE");
         Coins(W - 16, 14, Club.S.Coins);
@@ -33,13 +73,21 @@ public sealed partial class StoreScreen : PxCanvas
             var p = Packs.All[i];
             var r = new Rect2(14 + i * (tw + gap), top, tw, th);
             bool free = p.Price == 0;
-            Px.Frame(this, r, free ? new Color(20 / 255f, 60 / 255f, 40 / 255f, 0.5f) : new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.7f), free ? Px.Hex(0x2fc070) : Px.Line, Px.Shadow);
+            var pc = Px.Hex(p.Colors[0]);
+            Px.Frame(this, r, free ? new Color(20 / 255f, 60 / 255f, 40 / 255f, 0.45f) : new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.55f), free ? Px.Hex(0x2fc070) : new Color(pc, 0.45f), Px.Shadow);
+            // A lamp over each pack; the better the pack, the bigger the show.
+            var lamp = new Vector2(r.GetCenter().X, r.Position.Y + 3);
+            Fx.Spot(this, lamp, new Vector2(lamp.X, r.Position.Y + th * 0.52f), 18, tw * 0.8f, pc.Lerp(Colors.White, 0.4f), 0.08f + i * 0.015f);
             // The pack, gently bobbing out of step with its neighbours.
             float ah = Mathf.Min(th * 0.5f, (tw - 30) * 1.4f);
             float aw = ah / 1.4f;
             float bob = ((int)(T * 2 + i) % 4) switch { 1 => -2, 2 => -4, 3 => -2, _ => 0 };
             var art = new Rect2(r.GetCenter().X - aw / 2, r.Position.Y + 14 + bob, aw, ah);
+            if (i >= 3) Fx.Beams(this, art.GetCenter(), pc, 10, aw * 0.85f, 0.08f, (float)T * (0.2f + (i - 3) * 0.25f), 0.1f + (i - 3) * 0.05f);
+            Fx.Glow(this, art.GetCenter(), aw * 0.9f, pc, 0.1f + i * 0.03f);
+            DrawColoredPolygon(Px.Ellipse(new Vector2(art.GetCenter().X, art.End.Y + 8 - bob), aw * 0.42f + bob, 4, 16), new Color(0, 0, 0, 0.4f));
             Art.Pack(this, art, p);
+            _arts[i] = art;
             int idx = i;
             Tap("art" + i, art, () => Buy(Packs.All[idx]));
             float y = art.End.Y + 30 - bob;

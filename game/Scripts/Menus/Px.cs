@@ -24,6 +24,8 @@ public static class Px
     public static readonly Color[] GoldBands = { Hex(0xfff3a0), Hex(0xffe066), Hex(0xffbf1f), Hex(0xe69a10) };
     public static readonly float[] GoldStops = { 0, 0.18f, 0.55f, 0.82f };
 
+    public static Rect2 Translated(this Rect2 r, Vector2 d) => new(r.Position + d, r.Size);
+
     public static Color Hex(int c, float a = 1) => new(((c >> 16) & 255) / 255f, ((c >> 8) & 255) / 255f, (c & 255) / 255f, a);
 
     public static Color Shade(int c, float k) => Hex(c).Darkened(1 - k);

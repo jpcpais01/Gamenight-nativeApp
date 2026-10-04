@@ -55,6 +55,15 @@ public sealed partial class App : Node
             if (arg == "--screen=drills") PickDrill();
             if (arg == "--screen=player") _menus.OpenPlayer(_club.S.Cards[0]);
             if (arg == "--screen=opening") _menus.Open(new PackOpening(_menus, Packs.All[3], Packs.Open(Packs.All[3], 7)));
+            if (arg.StartsWith("--phase="))
+            {
+                // --phase=name@seconds[@pack]: a held moment of a pack opening.
+                var a = arg[8..].Split('@');
+                var pk = Packs.All[a.Length > 2 ? int.Parse(a[2]) : 4];
+                var po = new PackOpening(_menus, pk, Packs.Open(pk, 11));
+                _menus.Open(po);
+                po.Hold(a[0], double.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture));
+            }
         }
     }
 

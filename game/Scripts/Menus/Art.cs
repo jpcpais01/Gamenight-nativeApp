@@ -121,9 +121,25 @@ public static class Art
         var col = RarityColor(rarity);
         Px.Frame(ci, r, Px.Night2, col.Darkened(0.3f), new Color(0, 0, 0, 0.5f), Math.Max(2, (int)(u * 0.3f)), Math.Max(3, (int)(u * 0.5f)));
         var inner = r.Grow(-u * 0.8f);
-        Px.Ring(ci, inner, new Color(col, 0.6f), Math.Max(1, (int)(u * 0.2f)));
-        for (float y = inner.Position.Y + u; y < inner.End.Y - u * 0.5f; y += u * 1.2f) ci.DrawRect(new Rect2(inner.Position.X + u * 0.6f, y, inner.Size.X - u * 1.2f, Mathf.Max(1, u * 0.12f)), new Color(col, 0.18f));
-        Px.TextC(ci, Px.Big, r.GetCenter().X, r.GetCenter().Y + u * 1.2f, "GN", (int)(u * 3.6f), col, new Color(0, 0, 0, 0.5f), u * 0.25f);
+        Px.Bands(ci, inner, new[] { Px.Night3, Px.Night2, Px.Night, Px.Hex(0x0d0b2a) }, new[] { 0, 0.25f, 0.6f, 0.85f });
+        // A lattice of diamonds in the rarity's colour, brightest in the middle.
+        var c = inner.GetCenter();
+        float step = u * 1.6f;
+        for (float y = inner.Position.Y + step / 2; y < inner.End.Y; y += step)
+            for (float x = inner.Position.X + step / 2; x < inner.End.X; x += step)
+            {
+                float d = Mathf.Clamp(1 - (new Vector2(x, y) - c).Length() / (inner.Size.Y * 0.6f), 0, 1);
+                float s = u * (0.2f + d * 0.35f);
+                ci.DrawColoredPolygon(new[] { new Vector2(x, y - s), new Vector2(x + s, y), new Vector2(x, y + s), new Vector2(x - s, y) }, new Color(col, 0.1f + d * 0.3f));
+            }
+        Px.Ring(ci, inner, new Color(col, 0.7f), Math.Max(1, (int)(u * 0.2f)));
+        // The gem: a big diamond with the GN mark.
+        float g = u * 3.2f;
+        ci.DrawColoredPolygon(new[] { c + new Vector2(0, -g * 1.25f), c + new Vector2(g, 0), c + new Vector2(0, g * 1.25f), c + new Vector2(-g, 0) }, col.Darkened(0.45f));
+        g -= u * 0.4f;
+        ci.DrawColoredPolygon(new[] { c + new Vector2(0, -g * 1.25f), c + new Vector2(g, 0), c + new Vector2(0, g * 1.25f), c + new Vector2(-g, 0) }, col.Darkened(0.15f));
+        ci.DrawColoredPolygon(new[] { c + new Vector2(0, -g * 1.25f), c + new Vector2(g, 0), c, c + new Vector2(-g, 0) }, new Color(1, 1, 1, 0.14f));
+        Px.TextC(ci, Px.Big, c.X, c.Y + u * 0.75f, "GN", (int)(u * 2.2f), col.Luminance > 0.6f ? Px.Dark : Px.Ink, new Color(0, 0, 0, 0.35f), Mathf.Max(1, u * 0.2f));
     }
 
     /// <summary>Mini token for the tactics board (about 46 x 56 plus the name below).</summary>
