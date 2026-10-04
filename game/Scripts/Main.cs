@@ -89,8 +89,8 @@ public partial class Main : Node
         _runner?.Stop();
         _match = Request != null ? new Match(Request.Seed, Request.Setup) : new Match(seed: DateTime.Now.Ticks % 2147483647);
         if (Request?.Demo == true) _match.AutoPlay = true;
-        if (Request?.Setup != null) _players.SetKits(_match.Teams[0].Info.Kit, _match.Teams[1].Info.Kit);
         // Names and kits are read before the match's own thread starts.
+        _players.SetMatch(_match);
         _hud.SetMatch(_match);
         _runner = new MatchRunner(_match);
         if (Request?.Drill is DrillKind kind)
@@ -173,7 +173,7 @@ public partial class Main : Node
         if (_cur.Goal >= 0) _camera.Bump(0.4f);
         if (_cur.Post > 0) _camera.Bump(0.6f);
         _camera.Update(_prev, _cur, alpha, _pause.IsOpen ? 0 : dt);
-        _players.Update(_prev, _cur, alpha);
+        _players.Update(_prev, _cur, alpha, _time, (float)_match.SwitchT);
         _delivery.Update(_cur);
         _view.Present(_camera.SubPixelX, _camera.SubPixelY);
 
