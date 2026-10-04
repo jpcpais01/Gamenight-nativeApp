@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.35", "Slide tackles win the ball far more often: the slide now aims where the ball will be when your boot gets there (near balls straight away, far ones further ahead), both legs sweep it, and a ball run into the slider's body is stopped too."),
         ("0.34", "Stronger automatic defending: your player closes the carrier down and races loose balls flat out by himself. The stick now only nudges his run, unless you point it back against it. Running hard costs stamina, button or not. PRESS still adds the tackle."),
         ("0.33", "Your stadium now stands at the edge of a city by the sea: a plaza, boulevards, car parks and a fan zone, modern blocks and parks, a palm promenade, beach, lighthouse and boats, green hills inland, and the big city's skyline across the bay, lit up at night."),
         ("0.32", "A new crowd, built from scratch: thousands of voices that talk, buzz, roar and sing, rising as your team closes in and sinking when it fizzles. Songs swell out of the ends in time and fade back, with oohs, groans, eruptions, applause, whistles, laughter and the PA."),

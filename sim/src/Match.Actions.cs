@@ -326,7 +326,7 @@ public sealed partial class Match
                     : LastKicker != null && LastKicker.Team != p.Team && Time - LastKickTime < 0.6 ? LastKicker : null;
                 // Contact means real contact: the leg capsule against his legs (not a radius round him).
                 bool bodyHit = victim != null && !Down(victim) && SegDist(victim.Pos.X, victim.Pos.Z, leg) < (slide ? SlideLegR : TackleLegR) + VictimLegR;
-                bool ballHit = HeldBy == null && b.Pos.Y < (slide ? 0.45 : 0.6) && SegDist(b.Pos.X, b.Pos.Z, leg) < (slide ? SlideLegR : TackleLegR) + BallK.Radius + 0.04;
+                bool ballHit = HeldBy == null && b.Pos.Y < (slide ? 0.5 : 0.6) && SegDist(b.Pos.X, b.Pos.Z, leg) < (slide ? SlideSweepR : TackleLegR) + BallK.Radius + 0.04;
                 if (ballHit || bodyHit)
                 {
                     p.ActionDone = true;
@@ -362,7 +362,8 @@ public sealed partial class Match
         if (ext < 0.35) return false;
         double lx = p.LegX;
         double lz = p.LegZ;
-        double from = slide ? -0.15 : 0.15;
+        // (A slide's capsule runs back up the body on the grass: a ball into his hip is stopped too.)
+        double from = slide ? -0.6 : 0.15;
         double to = slide ? 0.2 + 0.85 * ext : 0.25 + 0.6 * ext;
         leg = new Leg { Ax = p.Pos.X + lx * from, Az = p.Pos.Z + lz * from, Bx = p.Pos.X + lx * to, Bz = p.Pos.Z + lz * to };
         return true;

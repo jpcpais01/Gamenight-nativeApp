@@ -162,8 +162,10 @@ public sealed partial class Match
     const int StretchN = 7;
     /// <summary>Tackling leg (boot and shin) radius, and the radius of a standing player's legs.</summary>
     const double TackleLegR = 0.12;
-    /// <summary>A slide sweeps more: the whole leg and the trailing knee and thigh are on the grass.</summary>
+    /// <summary>A slide's leading leg against a man's legs; against the ball it sweeps wider: both
+    /// legs, studs and shins, are on the grass together.</summary>
     const double SlideLegR = 0.15;
+    const double SlideSweepR = 0.24;
     const double VictimLegR = 0.2;
     /// <summary>How long a human Pass/Shoot/Through stays queued waiting for the ball (s).</summary>
     const double HumanBuffer = 2.5;

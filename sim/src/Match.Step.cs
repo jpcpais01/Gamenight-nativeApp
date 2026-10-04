@@ -644,10 +644,7 @@ public sealed partial class Match
     {
         var c = Controlled;
         if (c.IsBusy) return;
-        double tx = Ball.Pos.X - c.Pos.X;
-        double tz = Ball.Pos.Z - c.Pos.Z;
-        double d = Math.Max(0.01, JsMath.Hypot(tx, tz));
-        StartTackle(c, tx / d, tz / d, slide);
+        LungeAt(c, slide);
     }
 
     /// <summary>
@@ -698,10 +695,26 @@ public sealed partial class Match
         return !behind || BallDist(carrier) > 0.5;
     }
 
-    /// <summary>Strike toward where the ball will be as the foot arrives.</summary>
+    /// <summary>
+    /// Strike toward where the ball will be as the boot gets there. A slide covers
+    /// v0·t − ½·decel·t² on the grass with the boot about a metre past the hip, so the meeting
+    /// time comes from the distance (a ball a stride away is met almost at once, one three
+    /// metres off a third of a second later); a standing tackle just leads it a touch.
+    /// </summary>
     void LungeAt(Player c, bool slide)
     {
-        double lead = slide ? 0.28 : 0.15;
+        double lead = 0.15;
+        if (slide)
+        {
+            double v0 = M.Clamp(c.Speed + 1.2, 4.5, 8.5);
+            double stop = v0 / Player.SlideDecel;
+            for (lead = 0; lead < 0.6; lead += 0.02)
+            {
+                double ts = Math.Min(lead, stop);
+                double reach = v0 * ts - 0.5 * Player.SlideDecel * ts * ts + 0.95;
+                if (reach >= M.Dist2D(c.Pos.X, c.Pos.Z, Ball.Pos.X + Ball.Vel.X * lead, Ball.Pos.Z + Ball.Vel.Z * lead)) break;
+            }
+        }
         double tx = Ball.Pos.X + Ball.Vel.X * lead - c.Pos.X;
         double tz = Ball.Pos.Z + Ball.Vel.Z * lead - c.Pos.Z;
         double d = Math.Max(0.01, JsMath.Hypot(tx, tz));
