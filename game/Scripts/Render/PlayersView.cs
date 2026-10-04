@@ -19,13 +19,14 @@ public sealed class PlayersView
 
 
     readonly MultiMesh _mm;
+    readonly ShaderMaterial _mat;
     readonly MeshInstance3D _ball;
     readonly MeshInstance3D _ring;
     const int SkinSlots = 6;
 
     public PlayersView(Node3D root)
     {
-        var mat = Geo.Material("res://Shaders/player.gdshader");
+        var mat = _mat = Geo.Material("res://Shaders/player.gdshader");
         // Kits from the PWA's two teams (Rossoneri Athletic, Atlantic Rovers).
         mat.SetShaderParameter("shirt", new[] { Hex(0xc8393b), Hex(0xf1ebdc), Hex(0xe9c24a), Hex(0x2ba59a) });
         mat.SetShaderParameter("trim", new[] { Hex(0x8f1f24), Hex(0x23345e), Hex(0x2a2a2a), Hex(0x163a36) });
@@ -84,7 +85,7 @@ public sealed class PlayersView
             // The engine's run cycle: 2 pi per stride (it only ever grows; wrap it for the GPU).
             float phase = Mathf.Lerp(a.StridePhase[i], b.StridePhase[i], alpha) % MathF.Tau;
             float run = Math.Clamp(b.Speed[i] / 4f, 0, 1);
-            float s = b.Height[i] / ModelHeight;
+            float s = b.Height[i]; // Look.Height: a factor on the 1.8 m model
             var basis = new Basis(Vector3.Up, -face).Scaled(new Vector3(s, s, s));
             _mm.SetInstanceTransform(i, new Transform3D(basis, new Vector3(x, y, z)));
             int kit = b.Team[i] + (b.Role[i] == Role.GK ? 2 : 0);
@@ -100,6 +101,15 @@ public sealed class PlayersView
         _ring.Visible = c >= 0 && b.Phase != Phase.Goal;
         if (c >= 0)
             _ring.Position = new Vector3(Mathf.Lerp(a.X[c], b.X[c], alpha), 0.03f, Mathf.Lerp(a.Z[c], b.Z[c], alpha));
+    }
+
+    /// <summary>The two teams' kits (home, away), outfield then keepers, as the match was set up.</summary>
+    public void SetKits(Kit home, Kit away)
+    {
+        _mat.SetShaderParameter("shirt", new[] { Hex(home.Shirt), Hex(away.Shirt), Hex(home.GkShirt), Hex(away.GkShirt) });
+        _mat.SetShaderParameter("trim", new[] { Hex(home.Shirt2), Hex(away.Shirt2), Hex(home.GkShorts), Hex(away.GkShorts) });
+        _mat.SetShaderParameter("shorts", new[] { Hex(home.Shorts), Hex(away.Shorts), Hex(home.GkShorts), Hex(away.GkShorts) });
+        _mat.SetShaderParameter("socks", new[] { Hex(home.Socks), Hex(away.Socks), Hex(home.GkShirt), Hex(away.GkShirt) });
     }
 
     /// <summary>The snapshot's skin byte is an index, or (for now) the tone's low colour byte.</summary>

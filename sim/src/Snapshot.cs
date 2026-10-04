@@ -33,6 +33,12 @@ public sealed class MatchSnapshot
     /// <summary>Slide: when the grass stops it; tackle leg direction; keeper: catch height and dive pose.</summary>
     public readonly float[] SlideStop = new float[N], LegX = new float[N], LegZ = new float[N], CatchY = new float[N];
     public readonly float[] DiveRoll = new float[N], DiveLift = new float[N];
+    /// <summary>For the skeleton: forward acceleration, time since and height of the last touch,
+    /// the last shirt pull (direction and match time, -1 = none), the strike's power, height and
+    /// release point, and the slide's starting speed.</summary>
+    public readonly float[] AccelFwd = new float[N], SinceTouch = new float[N], TouchH = new float[N];
+    public readonly float[] PullX = new float[N], PullZ = new float[N], PullT = new float[N];
+    public readonly float[] KickPower = new float[N], KickHeight = new float[N], KickRel = new float[N], SlideV0 = new float[N];
     public readonly bool[] Sprinting = new bool[N];
     public readonly float[] Stamina = new float[N];
     public readonly byte[] Cards = new byte[N];
@@ -40,6 +46,7 @@ public sealed class MatchSnapshot
     public readonly byte[] Team = new byte[N], Index = new byte[N], Number = new byte[N];
     public readonly Role[] Role = new Role[N];
     public readonly sbyte[] Foot = new sbyte[N];
+    /// <summary>Look.Height and Look.Build: body scale factors (about 0.95-1.1), not metres.</summary>
     public readonly float[] Height = new float[N], Build = new float[N];
     /// <summary>Skin and hair: indices into TeamData.SkinTones / HairColors (0 if a line-up brings its own colour).</summary>
     public readonly byte[] Skin = new byte[N], Hair = new byte[N], HairStyle = new byte[N];
@@ -67,8 +74,27 @@ public sealed class MatchSnapshot
     public SetPieceKind? SetPiece;
     public int SetPieceTeam, SetPieceTaker = -1;
     public float SetPieceX, SetPieceZ;
+    public bool SetPieceDirect;
+    /// <summary>The delivery ring of an aimed corner or goal kick (SetPiece.Target).</summary>
+    public bool HasSetPieceTarget;
+    public float SetPieceTargetX, SetPieceTargetZ;
+    /// <summary>The dead-ball camera (Match.DeadBallView): taker id (-1 when none), the point it frames, the kind.</summary>
+    public int DeadBallTaker = -1;
+    public float DeadBallX, DeadBallZ;
+    public SetPieceKind DeadBallKind;
+    /// <summary>The human is aiming a corner / goal kick / dead-ball shot (Match.AimingCorner, ...).</summary>
+    public bool AimingCorner, AimingGoalKick, AimingShot;
+    /// <summary>The dead-ball shot's aim point on the goal mouth (Match.AimPoint()).</summary>
+    public bool HasAimPoint;
+    public float AimX, AimY, AimZ;
+    /// <summary>The aimed delivery's dotted flight (DeliveryPreview): ArcCount points from the foot to where
+    /// it comes down, to draw faint to strong, and the ring where it lands.</summary>
+    public bool HasArc;
+    public int ArcCount;
+    public readonly float[] ArcX = new float[DeliveryPreview.Dots], ArcY = new float[DeliveryPreview.Dots], ArcZ = new float[DeliveryPreview.Dots];
+    public float ArcRingX, ArcRingZ;
     public CelebrationKind? Celebration;
-    public float CelebrationAt;
+    public float CelebrationAt, CelebrationTurn;
     public float Excitement;
 
     // ---- this step's events (sound, camera, HUD)
@@ -93,6 +119,9 @@ public sealed class MatchSnapshot
         Array.Copy(o.KickLofted, KickLofted, N); Array.Copy(o.ThrowIn, ThrowIn, N);
         Array.Copy(o.SlideStop, SlideStop, N); Array.Copy(o.LegX, LegX, N); Array.Copy(o.LegZ, LegZ, N); Array.Copy(o.CatchY, CatchY, N);
         Array.Copy(o.DiveRoll, DiveRoll, N); Array.Copy(o.DiveLift, DiveLift, N);
+        Array.Copy(o.AccelFwd, AccelFwd, N); Array.Copy(o.SinceTouch, SinceTouch, N); Array.Copy(o.TouchH, TouchH, N);
+        Array.Copy(o.PullX, PullX, N); Array.Copy(o.PullZ, PullZ, N); Array.Copy(o.PullT, PullT, N);
+        Array.Copy(o.KickPower, KickPower, N); Array.Copy(o.KickHeight, KickHeight, N); Array.Copy(o.KickRel, KickRel, N); Array.Copy(o.SlideV0, SlideV0, N);
         Array.Copy(o.Sprinting, Sprinting, N); Array.Copy(o.Stamina, Stamina, N); Array.Copy(o.Cards, Cards, N);
         Array.Copy(o.Team, Team, N); Array.Copy(o.Index, Index, N); Array.Copy(o.Number, Number, N);
         Array.Copy(o.Role, Role, N); Array.Copy(o.Foot, Foot, N);
@@ -108,7 +137,13 @@ public sealed class MatchSnapshot
         Controlled = o.Controlled; Owner = o.Owner; HeldBy = o.HeldBy; PassTarget = o.PassTarget; Scorer = o.Scorer;
         PossTeam = o.PossTeam; HumanAttacking = o.HumanAttacking;
         SetPiece = o.SetPiece; SetPieceTeam = o.SetPieceTeam; SetPieceTaker = o.SetPieceTaker; SetPieceX = o.SetPieceX; SetPieceZ = o.SetPieceZ;
-        Celebration = o.Celebration; CelebrationAt = o.CelebrationAt; Excitement = o.Excitement;
+        SetPieceDirect = o.SetPieceDirect; HasSetPieceTarget = o.HasSetPieceTarget; SetPieceTargetX = o.SetPieceTargetX; SetPieceTargetZ = o.SetPieceTargetZ;
+        DeadBallTaker = o.DeadBallTaker; DeadBallX = o.DeadBallX; DeadBallZ = o.DeadBallZ; DeadBallKind = o.DeadBallKind;
+        AimingCorner = o.AimingCorner; AimingGoalKick = o.AimingGoalKick; AimingShot = o.AimingShot;
+        HasAimPoint = o.HasAimPoint; AimX = o.AimX; AimY = o.AimY; AimZ = o.AimZ;
+        HasArc = o.HasArc; ArcCount = o.ArcCount; ArcRingX = o.ArcRingX; ArcRingZ = o.ArcRingZ;
+        Array.Copy(o.ArcX, ArcX, ArcX.Length); Array.Copy(o.ArcY, ArcY, ArcY.Length); Array.Copy(o.ArcZ, ArcZ, ArcZ.Length);
+        Celebration = o.Celebration; CelebrationAt = o.CelebrationAt; CelebrationTurn = o.CelebrationTurn; Excitement = o.Excitement;
         KickCount = o.KickCount; KickMax = o.KickMax;
         Whistle = o.Whistle; Goal = o.Goal; Foul = o.Foul; Card = o.Card; Offside = o.Offside;
         Post = o.Post; Net = o.Net; Bounce = o.Bounce; Save = o.Save; Tackle = o.Tackle;
@@ -177,6 +212,16 @@ public sealed partial class Match
             s.KickBallL[i] = (float)p.KickBallL;
             s.KickLofted[i] = p.KickLofted;
             s.ThrowIn[i] = p.ThrowIn;
+            s.AccelFwd[i] = (float)p.AccelFwd;
+            s.SinceTouch[i] = (float)p.SinceTouch;
+            s.TouchH[i] = (float)p.TouchH;
+            s.PullX[i] = (float)p.PullX;
+            s.PullZ[i] = (float)p.PullZ;
+            s.PullT[i] = (float)p.PullT;
+            s.KickPower[i] = (float)p.KickPower;
+            s.KickHeight[i] = (float)p.KickHeight;
+            s.KickRel[i] = (float)p.KickRel;
+            s.SlideV0[i] = (float)p.SlideV0;
             s.SlideStop[i] = (float)p.SlideStop;
             s.LegX[i] = (float)p.LegX;
             s.LegZ[i] = (float)p.LegZ;
@@ -232,8 +277,27 @@ public sealed partial class Match
         s.SetPieceTaker = SetPiece?.Taker.Id ?? -1;
         s.SetPieceX = (float)(SetPiece?.X ?? 0);
         s.SetPieceZ = (float)(SetPiece?.Z ?? 0);
+        s.SetPieceDirect = SetPiece?.Direct ?? false;
+        var target = SetPiece?.Target;
+        s.HasSetPieceTarget = target != null;
+        s.SetPieceTargetX = (float)(target?.X ?? 0);
+        s.SetPieceTargetZ = (float)(target?.Z ?? 0);
+        var view = DeadBallView;
+        s.DeadBallTaker = view?.taker.Id ?? -1;
+        s.DeadBallX = (float)(view?.x ?? 0);
+        s.DeadBallZ = (float)(view?.z ?? 0);
+        s.DeadBallKind = view?.kind ?? SetPieceKind.Kickoff;
+        s.AimingCorner = AimingCorner;
+        s.AimingGoalKick = AimingGoalKick;
+        s.AimingShot = AimingShot;
+        var aim = AimPoint();
+        s.HasAimPoint = aim != null;
+        s.AimX = (float)(aim?.x ?? 0);
+        s.AimY = (float)(aim?.y ?? 0);
+        s.AimZ = (float)(aim?.z ?? 0);
         s.Celebration = Celebration?.Kind;
         s.CelebrationAt = (float)(Celebration?.At ?? 0);
+        s.CelebrationTurn = (float)(Celebration?.Turn ?? 0);
         s.Excitement = (float)Excitement;
     }
 }

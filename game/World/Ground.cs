@@ -88,12 +88,8 @@ public abstract class Ground
         var bake = new LightBake(BakeArea.Position.X, BakeArea.Position.Y, BakeArea.End.X, BakeArea.End.Y);
         bake.AddCaster(Static);
         bake.AddCaster(ShadowOnly);
-        long tH = clock.ElapsedMilliseconds;
         bake.BakeVertices(Static);
-        long tV = clock.ElapsedMilliseconds;
         bake.PublishLightMap(Lamps);
-        long tL = clock.ElapsedMilliseconds;
-        GD.Print($"bake: height {tH - tBuild} verts {tV - tH} map {tL - tV}");
 
         var mi = new MeshInstance3D
         {

@@ -44,6 +44,8 @@ runner.Invoke(m => m.SetControlled(p));     // anything else runs between steps
   facing, look target, run cycle and lean, action and its timing, kick leg/type/reach, slide and
   dive pose, look and kit indices; the ball (with spin); phase, clock, score, set piece,
   celebration, and the step's events.
+- `DeliveryPreview` — the dotted flight and ring of an aimed corner, goal kick or cross (the
+  PWA's corner aim). `MatchRunner` keeps it in the snapshot (`HasArc`, `ArcX/Y/Z`, `ArcRingX/Z`).
 - `MatchSetup` — club line-ups (names, numbers, attributes, looks, formation slots, captain).
 - `Drill` — training (free kicks, penalties, one on one, 2 v 2, goalkeeper): call `Step()` after
   each `Match.Step` (or set `MatchRunner.AfterStep`).

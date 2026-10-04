@@ -44,12 +44,10 @@ public sealed partial class Signage : Node
         AddChild(_vp);
         _root = new Control { Size = new Vector2(1024, 1024) };
         _vp.AddChild(_root);
-        _font = new FontVariation
-        {
-            BaseFont = ThemeDB.FallbackFont,
-            VariationEmbolden = 1.1f,
-            VariationTransform = new Transform2D(new Vector2(0.82f, 0), new Vector2(0, 1), Vector2.Zero),
-        };
+        // The PWA's lettering (Barlow Condensed ExtraBold).
+        _font = ResourceLoader.Exists("res://Fonts/BarlowCondensed-ExtraBold.ttf")
+            ? GD.Load<Font>("res://Fonts/BarlowCondensed-ExtraBold.ttf")
+            : new FontVariation { BaseFont = ThemeDB.FallbackFont, VariationEmbolden = 1.1f };
 
         for (int i = 0; i < Boards.Length; i++)
         {
