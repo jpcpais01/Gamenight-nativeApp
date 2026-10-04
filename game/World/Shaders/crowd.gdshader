@@ -65,13 +65,20 @@ void vertex() {
 	float viking = gn_chant.w * singing;
 	float idle = sin(t * 7.5 - root.y * 0.5 + h(s, 4.0) * 0.6);
 	float onBeat = sin((gn_chant.z - root.y * 0.025 - h(s, 0.3) * 0.06) * 6.2832);
+	// Round a burning flare the fans go wild: jumping, arms and scarves up, whatever the game's doing.
+	float fire = 0.0;
+	for (int i = 0; i < flare_n; i++) {
+		vec3 d = flares[i].xyz - root;
+		fire = max(fire, step(0.3, flares[i].w) * (1.0 - smoothstep(3.0, 9.0, length(d.xz))));
+	}
+	fire *= step(h(s, 1.4), 0.9);
 	// Calm by default: they bounce only while their end sings (or the place is at boiling point).
-	float boil = smoothstep(0.8, 1.0, ex) * ultra;
+	float boil = max(smoothstep(0.8, 1.0, ex) * ultra, fire);
 	float beat = mix(idle * boil, onBeat, singing);
-	float jump = max(boil, singing) * max(0.0, beat) * (0.08 + 0.1 * max(ex, sing)) * (1.0 - viking) * step(h(s, 2.8), 0.85)
+	float jump = max(boil, singing) * max(0.0, beat) * (0.08 + 0.1 * max(ex, sing) + 0.1 * fire) * (1.0 - viking) * step(h(s, 2.8), 0.85)
 		+ (1.0 - ultra) * max(0.0, sin(t * (7.0 + h(s, 1.1) * 3.0) + ph)) * ex2 * 0.16
 		+ ours * max(0.0, sin(t * (8.5 + h(s, 2.1) * 4.0) + ph)) * 0.4;
-	float stand = max(max(ultra * step(h(s, 6.2), 0.85), awayEnd * max(step(h(s, 6.2), 0.55), singing)), clamp(ex * 2.4 - 1.25 - h(s, 6.6) * 0.5, 0.0, 1.0));
+	float stand = max(max(max(ultra * step(h(s, 6.2), 0.85), fire), awayEnd * max(step(h(s, 6.2), 0.55), singing)), clamp(ex * 2.4 - 1.25 - h(s, 6.6) * 0.5, 0.0, 1.0));
 	// His team closing on goal: up out of the seat, the end they attack first, then the rest.
 	float rise = team < 0.5 ? gn_mood.x : gn_mood.y;
 	float dirT = team < 0.5 ? gn_mood.z : -gn_mood.z;
@@ -88,8 +95,8 @@ void vertex() {
 	float tall = 0.92 + 0.14 * h(s, 2.9);
 	float wide = 0.85 + 0.3 * h(s, 1.7);
 	// Scarves come up for the songs (most of a singing end), hardly ever otherwise.
-	float scarf = step(h(s, 5.5), max(sing * 0.8, ex2 * ex2 * 0.2)) * (1.0 - ours) * (1.0 - viking);
-	float arms = max(singing * ultra * step(0.6, beat) * step(0.5, h(s, 7.7)), viking * step(h(s, 2.2) * 0.25, gn_chant.z + 0.3));
+	float scarf = step(h(s, 5.5), max(max(sing * 0.8, ex2 * ex2 * 0.2), fire * 0.45)) * (1.0 - ours) * (1.0 - viking);
+	float arms = max(fire * step(0.3, beat) * step(0.4, h(s, 7.7)), max(singing * ultra * step(0.6, beat) * step(0.5, h(s, 7.7)), viking * step(h(s, 2.2) * 0.25, gn_chant.z + 0.3)));
 
 	// Card display for the kick-off: held up overhead, edge to edge, they make the picture.
 	cardOn = 0.0;
