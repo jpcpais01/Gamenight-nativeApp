@@ -10,7 +10,7 @@ render_mode unshaded, cull_disabled, shadows_disabled, depth_draw_opaque;
 
 const float LOOK_ROOF = 1.0, LOOK_GLASS = 2.0, LOOK_CURTAIN = 3.0, LOOK_FASCIA = 4.0, LOOK_RIBBON = 5.0,
 	LOOK_LAMP = 6.0, LOOK_ROOFLIGHT = 7.0, LOOK_BOARD = 8.0, LOOK_TIER = 9.0, LOOK_SCREEN = 10.0,
-	LOOK_CLOTH = 11.0, LOOK_STIPPLE = 12.0, LOOK_UNLIT = 13.0;
+	LOOK_CLOTH = 11.0, LOOK_STIPPLE = 12.0, LOOK_UNLIT = 13.0, LOOK_ARCADE = 14.0, LOOK_COFFER = 15.0, LOOK_WALL = 16.0, LOOK_BRICK = 17.0;
 
 varying vec3 wpos;
 varying vec3 wnrm;
@@ -116,6 +116,37 @@ void fragment() {
 	} else if (look == LOOK_STIPPLE) {
 		// See-through glass without blending: one pixel in four (the post pass reads depth).
 		if (mod(floor(FRAGCOORD.x), 2.0) + mod(floor(FRAGCOORD.y), 2.0) > 0.5) discard;
+	} else if (look == LOOK_ARCADE) {
+		// Arches: piers and round-headed openings, par = bay + 1000 x storey (metres, storey
+		// to a tenth). Dark inside by day; at night most of them glow with the concourse lights.
+		float s10 = floor(par / 100.0);
+		float storey = s10 / 10.0;
+		float bay = par - s10 * 100.0;
+		vec2 size = vec2(bay, storey);
+		vec2 cell = floor(uv / size);
+		vec2 c = (fract(uv / size) - vec2(0.5, 0.0)) * size;
+		float r = bay * 0.3;
+		float spring = storey * 0.8 - r;
+		float open = step(storey * 0.12, c.y) * max(step(abs(c.x), r) * step(c.y, spring), step(length(vec2(c.x, c.y - spring)), r));
+		float on = step(0.3, world_hash(cell));
+		float stone = 0.94 + 0.08 * world_hash(cell + 7.1);
+		alb *= mix(stone * (1.0 + 0.14 * step(c.y, 0.3)), 0.06, open);
+		emis = vec3(1.0, 0.55, 0.2) * open * on * gn_flood * 0.5;
+	} else if (look == LOOK_COFFER) {
+		// A cast concrete canopy's underside: coffers between the ribs.
+		vec2 k = fract(uv / vec2(3.2, 2.6));
+		float rib = max(step(0.86, k.x), step(0.84, k.y));
+		alb *= mix(0.84, 1.0, rib) * mix(0.88, 1.0, smoothstep(0.0, 14.0, uv.y));
+		emis = alb * 0.12;
+	} else if (look == LOOK_WALL) {
+		// The pitch wall: painted in the club colour (COLOR), a white band along the top.
+		alb = mix(alb, vec3(0.83, 0.81, 0.75), step(1.05, uv.y)) * (1.0 - 0.18 * step(0.96, fract(uv.x / 2.0)));
+	} else if (look == LOOK_BRICK) {
+		// Old brick: courses, uneven firing, soot low down.
+		vec2 b = vec2(uv.x / 0.9, uv.y / 0.32);
+		b.x += 0.5 * step(0.5, fract(b.y * 0.5));
+		float mortar = max(step(0.9, fract(b.y)), step(0.94, fract(b.x)));
+		alb *= mix(0.86 + 0.2 * world_hash(floor(b)), 1.35, mortar) * (1.0 - 0.25 * smoothstep(3.0, 0.0, uv.y));
 	} else if (look == LOOK_UNLIT) {
 		emis = alb;
 		alb = vec3(0.0);

@@ -192,6 +192,8 @@ public sealed partial class App : Node
         Play(new MatchRequest
         {
             Setup = _club.MatchSetup(seed), Seed = seed, Drill = kind, DrillBest = _club.DrillBest(kind),
+            // Drills run at the training ground once it's built.
+            Ground = Grounds.All.Any(g => g.Id == "training") ? "training" : Grounds.All[0].Id,
             Done = o => CallDeferred(nameof(DrillOver), (int)kind, o.DrillBest),
         });
     }
