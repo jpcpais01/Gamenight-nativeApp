@@ -109,11 +109,32 @@ public sealed partial class HomeScreen : PxCanvas
 
         // Actions.
         float by = inner.End.Y - 82;
-        float bw = Mathf.Min(260, inner.Size.X * 0.48f);
-        GoldButton("play", new Rect2(x, by, bw, 48), "PLAY MATCH  >", 32, () => _ui.App.PickGround());
-        float tw = Mathf.Min(150, (inner.Size.X - bw - 54));
-        GhostButton("train", new Rect2(x + bw + 16, by, tw, 48), "TRAINING", 24, () => _ui.App.PickDrill());
+        float avail = inner.Size.X - 36 - 24;
+        float bw = Mathf.Min(240, Mathf.Round(avail * 0.42f));
+        float lw = Mathf.Min(150, Mathf.Round(avail * 0.3f));
+        float tw = Mathf.Min(150, avail - bw - lw);
+        GoldButton("play", new Rect2(x, by, bw, 48), "PLAY MATCH  >", Fit("PLAY MATCH  >", 32, bw - 18), () => _ui.App.PickGround());
+        LeagueButton(new Rect2(x + bw + 12, by, lw, 48));
+        GhostButton("train", new Rect2(x + bw + lw + 24, by, tw, 48), "TRAINING", Fit("TRAINING", 24, tw - 14), () => _ui.App.PickDrill());
         Px.Text(this, Px.Big, new Vector2(x, inner.End.Y - 14), "Win +1,500 · Draw +800 · +150 per goal", 17, Px.Hex(0xffe6d2, 0.85f));
+    }
+
+    static int Fit(string s, int size, float w)
+    {
+        while (size > 14 && Px.Width(Px.Big, s, size) > w) size -= 2;
+        return size;
+    }
+
+    /// <summary>The league: a pink key, with where you stand on a tab above it.</summary>
+    void LeagueButton(Rect2 r)
+    {
+        GhostButton("league", r, "LEAGUE", Fit("LEAGUE", 24, r.Size.X - 14), () => _ui.Go(_ui.League), Px.Neon);
+        var lg = _ui.Season;
+        string tag = !lg.Active ? "NEW!" : lg.SeasonOver ? "SEASON OVER" : $"MD {lg.S.Round + 1} · {(lg.S.Round > 0 ? global::GameNight.League.LeagueState.Ordinal(lg.Place(0)) : "KO")}";
+        float w = Px.Width(Px.Small, tag, 8) + 12;
+        var t = new Rect2(r.GetCenter().X - w / 2 + (Held("league") ? 3 : 0), r.Position.Y - 9 + (Held("league") ? 3 : 0), w, 15);
+        Px.Frame(this, t, Px.Neon, Px.Hex(0x9a1f5c), null, 2, 3);
+        Px.TextC(this, Px.Small, t.GetCenter().X, t.GetCenter().Y + 4, tag, 8, Px.Hex(0x2a0414));
     }
 
     void Team(Vector2 p, TeamInfo t, int ovr, float w, int main, int second, Crest crest = null)

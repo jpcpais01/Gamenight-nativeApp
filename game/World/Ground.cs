@@ -67,6 +67,8 @@ public abstract class Ground
         new() { Shirt = 0xf1ebdc, Shirt2 = 0x23345e, Shorts = 0x23345e, Socks = 0xf1ebdc, GkShirt = 0x2ba59a, GkShorts = 0x1d1d1d },
     };
     bool _hasBench;
+    /// <summary>An away day: the match's side 0 is the visitors here (see Create).</summary>
+    bool _flip;
     BenchView _bench;
     protected readonly ClubArt Art = new();
     /// <summary>The giant hanging tifo, at grounds that have one.</summary>
@@ -143,8 +145,9 @@ public abstract class Ground
 
     /// <summary>Builds the ground with this id, in the colours of the match's two clubs (the
     /// home side's shirt for the home fans and the stadium, the visitors' for the away end).
-    /// Debug: `-- --ground=id` overrides the id.</summary>
-    public static Ground Create(string id, MatchSetup setup = null)
+    /// Debug: `-- --ground=id` overrides the id. With a `host` crest it's an away day (the
+    /// league): side 1 are the hosts, so the stadium, the home fans and the badge are theirs.</summary>
+    public static Ground Create(string id, MatchSetup setup = null, Crest host = null)
     {
         foreach (var arg in OS.GetCmdlineUserArgs())
             if (arg.StartsWith("--ground=")) id = arg[9..];
@@ -158,22 +161,32 @@ public abstract class Ground
             "custom:preview" => new Build.BuiltGround(Club?.S.Stadium, true),
             _ => new BigStadium(),
         };
-        g.Dress(setup);
+        g.Dress(setup, host);
         return g;
     }
 
-    void Dress(MatchSetup setup)
+    void Dress(MatchSetup setup, Crest host)
     {
         if (setup?.Teams is { Length: 2 } t && t[0] != null && t[1] != null)
         {
-            GameNight.Sim.Kit h = t[0].Info.Kit, a = t[1].Info.Kit;
+            // The hosts: side 0 normally, side 1 on an away day.
+            var (ht, at) = host != null ? (t[1], t[0]) : (t[0], t[1]);
+            GameNight.Sim.Kit h = ht.Info.Kit, a = at.Info.Kit;
             HomeColor = (uint)h.Shirt;
             AwayColor = (uint)a.Shirt;
-            if (!string.IsNullOrWhiteSpace(t[0].Info.Name)) ClubName = t[0].Info.Name;
-            if (!string.IsNullOrWhiteSpace(t[0].Info.Short)) HomeShort = t[0].Info.Short;
-            if (!string.IsNullOrWhiteSpace(t[1].Info.Short)) AwayShort = t[1].Info.Short;
-            _kits[0] = h;
-            _kits[1] = a;
+            if (!string.IsNullOrWhiteSpace(ht.Info.Name)) ClubName = ht.Info.Name;
+            if (!string.IsNullOrWhiteSpace(ht.Info.Short)) HomeShort = ht.Info.Short;
+            if (!string.IsNullOrWhiteSpace(at.Info.Short)) AwayShort = at.Info.Short;
+            _kits[0] = t[0].Info.Kit;
+            _kits[1] = t[1].Info.Kit;
+        }
+        if (host != null)
+        {
+            _flip = _mood.Flip = true;
+            // Away: their badge and founding year; your banners and tifos stay at home.
+            Art.Crest = CrestArt.Texture(host, 256);
+            Art.Founded = host.Year ?? "";
+            return;
         }
         var club = Club?.S;
         // The player's club is the home side in every match (as in the PWA).
@@ -281,19 +294,21 @@ public abstract class Ground
         // A goal: whoever's score went up. The scoring side's fans go wild for a while.
         if (s.Score[0] != _lastScore0 || s.Score[1] != _lastScore1)
         {
-            if (s.Score[0] > _lastScore0) { _goalTeam = 0; _goalAt = time; _fx?.Goal(0, -20); }
-            else if (s.Score[1] > _lastScore1) { _goalTeam = 1; _goalAt = time; _fx?.Goal(1, 20); }
+            // The stands' side: home 0, away 1 (an away day swaps the match's sides round).
+            int f = _flip ? 1 : 0;
+            if (s.Score[0] > _lastScore0) { _goalTeam = f; _goalAt = time; _fx?.Goal(f, f == 0 ? -20 : 20); }
+            else if (s.Score[1] > _lastScore1) { _goalTeam = 1 - f; _goalAt = time; _fx?.Goal(1 - f, f == 0 ? 20 : -20); }
             _lastScore0 = s.Score[0];
             _lastScore1 = s.Score[1];
         }
         double since = time - _goalAt;
         RenderingServer.GlobalShaderParameterSet("gn_goal", since < 20 ? new Vector2(_goalTeam, (float)since) : new Vector2(-1, 100));
-        _screen?.Show(s.Score[0], s.Score[1], s.Minute, since < 8 ? _goalTeam : -1, (int)(since * 3) % 2 == 0);
+        _screen?.Show(s.Score[_flip ? 1 : 0], s.Score[_flip ? 0 : 1], s.Minute, since < 8 ? _goalTeam : -1, (int)(since * 3) % 2 == 0);
         RenderingServer.GlobalShaderParameterSet("gn_excite", s.Excitement);
         _bench?.Update(s, dt);
         if (Crowd.Fans > 0) _mood.Update(s, terraces, dt);
         _fx?.Air(s, dt, Atmosphere.Cold, Atmosphere.Rain, _steamSpots);
-        RenderingServer.GlobalShaderParameterSet("gn_chant", terraces == null ? Vector4.Zero : new Vector4(terraces.Home, terraces.Away, terraces.Beat, terraces.Arms));
+        RenderingServer.GlobalShaderParameterSet("gn_chant", terraces == null ? Vector4.Zero : _flip ? new Vector4(terraces.Away, terraces.Home, terraces.Beat, terraces.Arms) : new Vector4(terraces.Home, terraces.Away, terraces.Beat, terraces.Arms));
         if (_fx != null)
         {
             var (flares, count) = _fx.Update(dt, time, terraces);

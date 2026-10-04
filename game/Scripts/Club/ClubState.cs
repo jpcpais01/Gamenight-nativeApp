@@ -369,6 +369,14 @@ public sealed class ClubState
         return v;
     }
 
+    /// <summary>Coins earned outside a match result (league bonuses, prize money).</summary>
+    public void Earn(int coins)
+    {
+        if (coins <= 0) return;
+        S.Coins += coins;
+        Save();
+    }
+
     public bool Spend(int coins)
     {
         if (S.Coins < coins) return false;
