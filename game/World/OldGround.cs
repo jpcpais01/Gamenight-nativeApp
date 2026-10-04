@@ -233,7 +233,7 @@ public sealed class OldGround : Ground
         Town(m);
         Pitchside.AdBoards(m);
         Pitchside.CornerFlags(m);
-        Pitchside.Dugouts(m, HomeKit, AwayKit);
+        Dugouts(m);
         var all = new List<PathPt>(main);
         all.AddRange(shed);
         all.AddRange(away);

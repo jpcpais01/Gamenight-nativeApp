@@ -162,7 +162,7 @@ public sealed class BigStadium : Ground
 
         Pitchside.AdBoards(m);
         Pitchside.CornerFlags(m);
-        Pitchside.Dugouts(m, HomeKit, AwayKit);
+        Dugouts(m);
         RailBanners(m, path, 20.9f, 13.7f, 34, 4.2f);
 
         // ---- the crowd
