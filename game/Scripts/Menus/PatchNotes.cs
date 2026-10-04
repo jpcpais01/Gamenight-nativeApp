@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.31", "In the stadium builder, tap the stadium itself to hide the menus and see it alone, centred; tap again to bring them back. Dragging, sliding and pinching still work while they are hidden."),
         ("0.30", "Smooth motion in the menus: cards rising in the pack opening, the pack dropping and bobbing, walkout slams, the summary deal, pop-ups and toasts now glide at full frame rate instead of moving in steps."),
         ("0.29", "Pitch invaders: every game minute there is a tiny chance a fan jumps the boards. Play stops, the camera follows him, the stewards in high-vis give chase while the crowd laughs and cheers, and once they walk him off the referee drops the ball. Hold FOUL to call one."),
         ("0.28", "LEAGUE mode: draw a 16-club league of made-up rivals (crests, kits, squads), play your 30 matchdays home and away, watch scores come in from around the grounds with the table moving live, read the paper every morning, chase the golden boot, prize money and the trophy."),

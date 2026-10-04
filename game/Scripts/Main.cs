@@ -299,6 +299,12 @@ public partial class Main : Node
     /// <summary>The stadium builder: the camera dragged round (see <see cref="MatchCamera.Orbit"/>).</summary>
     public void Orbit(float yaw, float tilt, float zoom, Vector2 slide) => _camera?.Orbit(yaw, tilt, zoom, slide);
 
+    /// <summary>The stadium builder's menus hidden: the camera frames the ground in the middle.</summary>
+    public void Centre(bool on)
+    {
+        if (_camera != null) _camera.Centred = on;
+    }
+
     /// <summary>The demo match behind the menus: hidden (and not drawn or stepped) under a full screen.</summary>
     public void Backdrop(bool shown)
     {
