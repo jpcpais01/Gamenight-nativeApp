@@ -35,15 +35,17 @@ void fragment() {
 	vec2 px = fwidth(m);
 	// Sized on the less foreshortened axis, so a grazing roof doesn't blow the cells up.
 	float wpx = min(px.x, px.y);
-	float level = clamp(ceil(log2(wpx * 5.0 / 0.14)), 0.0, 3.0);
+	float level = clamp(ceil(log2(wpx * 4.0 / 0.14)), 0.0, 3.0);
 	float cell = 0.14 * exp2(level);
 	vec2 g = m / cell;
 	vec2 dpx = (0.5 - abs(fract(g) - 0.5)) * cell / max(px, vec2(1e-5));
 	bool cord = min(dpx.x, dpx.y) < 0.5;
 	// Farther than even the coarsest cell can show: a soft stipple haze.
-	float far = smoothstep(1.2, 2.0, wpx * 5.0 / (0.14 * 8.0));
+	float far = smoothstep(1.2, 2.0, wpx * 4.0 / (0.14 * 8.0));
 	float a = mix(cord ? 1.0 : 0.0, 0.24, far);
 	if (bayer4(FRAGCOORD.xy) >= a) discard;
-	// The side panels sit a touch darker than the roof and back, for depth.
-	ALBEDO = pow(color * mix(0.82, 1.0, step(0.6, COLOR.g)), vec3(2.2));
+	// The side panels sit a touch darker than the roof and back, for depth; a tight mesh is
+	// greyer, so a fine net reads as cord and not as a white sheet.
+	float tight = 1.0 - smoothstep(4.0, 8.0, cell / wpx);
+	ALBEDO = pow(color * mix(0.82, 1.0, step(0.6, COLOR.g)) * (1.0 - 0.28 * tight), vec3(2.2));
 }
