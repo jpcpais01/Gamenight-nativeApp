@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.36", "Five new stand sets in the builder: Membrane (white fabric peaks on masts), Brutalist (raw concrete and raking frames), Barrio (three steep tiers stacked high), Timber (arched wooden roof grown green) and Lumen (a cushioned skin that glows in your colour at night)."),
         ("0.35", "Slide tackles win the ball far more often: the slide now aims where the ball will be when your boot gets there (near balls straight away, far ones further ahead), both legs sweep it, and a ball run into the slider's body is stopped too."),
         ("0.34", "Stronger automatic defending: your player closes the carrier down and races loose balls flat out by himself. The stick now only nudges his run, unless you point it back against it. Running hard costs stamina, button or not. PRESS still adds the tackle."),
         ("0.33", "Your stadium now stands at the edge of a city by the sea: a plaza, boulevards, car parks and a fan zone, modern blocks and parks, a palm promenade, beach, lighthouse and boats, green hills inland, and the big city's skyline across the bay, lit up at night."),

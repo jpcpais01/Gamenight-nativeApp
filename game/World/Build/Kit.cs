@@ -113,7 +113,8 @@ public static class Kit
     public const uint Concrete = 0x8b8f96, DarkConcrete = 0x5c6068, Steel = 0x4a5058;
 
     public static readonly StandSet[] Sets = { new Arena(), new Terrace(), new Curva(), new TheWall(), new Citadel(),
-        new Harbour(), new Pagoda(), new Deco(), new Crater(), new Orbital() };
+        new Harbour(), new Pagoda(), new Deco(), new Crater(), new Orbital(),
+        new Membrane(), new Brutalist(), new Barrio(), new Timber(), new Lumen() };
 
     /// <summary>Which way the builder's camera looks from to see a slot (yaw round the pitch).</summary>
     public static float ViewAngle(Slot s) => s switch

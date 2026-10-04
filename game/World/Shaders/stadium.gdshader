@@ -11,7 +11,7 @@ render_mode unshaded, cull_disabled, shadows_disabled, depth_draw_opaque;
 const float LOOK_ROOF = 1.0, LOOK_GLASS = 2.0, LOOK_CURTAIN = 3.0, LOOK_FASCIA = 4.0, LOOK_RIBBON = 5.0,
 	LOOK_LAMP = 6.0, LOOK_ROOFLIGHT = 7.0, LOOK_BOARD = 8.0, LOOK_TIER = 9.0, LOOK_SCREEN = 10.0,
 	LOOK_CLOTH = 11.0, LOOK_STIPPLE = 12.0, LOOK_UNLIT = 13.0, LOOK_ARCADE = 14.0, LOOK_COFFER = 15.0, LOOK_WALL = 16.0, LOOK_BRICK = 17.0,
-	LOOK_DECAL = 18.0, LOOK_HOUSE = 19.0, LOOK_TOWER = 20.0, LOOK_SKYLINE = 21.0, LOOK_WATER = 22.0, LOOK_ROAD = 23.0;
+	LOOK_DECAL = 18.0, LOOK_HOUSE = 19.0, LOOK_TOWER = 20.0, LOOK_SKYLINE = 21.0, LOOK_WATER = 22.0, LOOK_ROAD = 23.0, LOOK_CUSHION = 24.0;
 
 // The near stand's own draw (Ground.Near): cut where it would hide the pitch.
 uniform bool near_cut = false;
@@ -219,6 +219,16 @@ void fragment() {
 			? max(step(abs(uv.y - w * 0.5), 0.12) * step(0.5, fract(uv.x / 6.0)), step(min(uv.y, w - uv.y), 0.3) * step(0.0, min(uv.y, w - uv.y) - 0.15))
 			: step(fract(uv.x / 2.6), 0.05) * (1.0 - step(5.0, mod(uv.y, 16.0)) * step(mod(uv.y, 16.0), 11.0));
 		alb = mix(alb * (0.92 + 0.08 * world_hash(floor(uv * 0.7))), vec3(0.7, 0.68, 0.6), line);
+	} else if (look == LOOK_CUSHION) {
+		// Inflated diamond cushions: bright in the middle, dark seams; lit from within in the
+		// home colour under the floodlights.
+		vec2 g = uv / vec2(4.0, 2.6);
+		vec2 d = fract(vec2(g.x + g.y, g.x - g.y));
+		vec2 e = min(d, 1.0 - d) * 2.0;
+		float edge = min(e.x, e.y);
+		float seam = 1.0 - step(0.1, edge);
+		alb = mix(alb * (0.85 + 0.25 * edge), vec3(0.25), seam);
+		emis = mix(gn_home, vec3(1.0), 0.15) * (1.0 - seam) * (0.3 + 0.7 * edge) * gn_flood * 0.9;
 	} else if (look == LOOK_UNLIT) {
 		emis = alb;
 		alb = vec3(0.0);
