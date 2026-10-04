@@ -49,7 +49,7 @@ public partial class Main : Node
         _view = new PixelView();
         AddChild(_view);
         World.Build(_view.WorldRoot);
-        _ground = Ground.Create("big").AddTo(_view.WorldRoot);
+        _ground = Ground.Create(Request?.Ground ?? "big").AddTo(_view.WorldRoot);
         _players = new PlayersView(_view.WorldRoot);
         _delivery = new DeliveryView(_view.WorldRoot);
         _camera = new MatchCamera(_view.Camera);

@@ -48,7 +48,7 @@ public sealed class ClubSave
     /// <summary>The captain's card (unset, or not in the XI: the best-rated starter).</summary>
     public string Captain = "";
     /// <summary>The ground last played at: preselected next time.</summary>
-    public string Ground = "stadium";
+    public string Ground = "big";
     /// <summary>Unix ms when the free pack is next available.</summary>
     public long FreePackAt;
     /// <summary>Best streak per training drill.</summary>
