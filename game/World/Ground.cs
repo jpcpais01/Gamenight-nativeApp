@@ -74,6 +74,8 @@ public abstract class Ground
     bool _showGiant, _debugHang;
     float _drop;
     StandFx _fx;
+    Vector3[] _steamSpots = Array.Empty<Vector3>();
+    readonly CrowdMood _mood = new();
     ShaderMaterial _crowdMat;
     Main _main;
     bool _pyroDone;
@@ -215,6 +217,8 @@ public abstract class Ground
         Static.Hex(((uint)(Land.X * 255) << 16) | ((uint)(Land.Y * 255) << 8) | (uint)(Land.Z * 255));
         Static.Quad(new Vector3(-1500, -0.08f, 1500), new Vector3(1500, -0.08f, 1500), new Vector3(1500, -0.08f, -1500), new Vector3(-1500, -0.08f, -1500), 3000, 3000);
         long tBuild = clock.ElapsedMilliseconds;
+        if (Crowd.Fans > 0) _steamSpots = Crowd.Sample(240);
+        if (Crowd.Fans > 0 && _hasBench) Pitchside.Staff(Crowd);
 
         var bake = new LightBake(BakeArea.Position.X, BakeArea.Position.Y, BakeArea.End.X, BakeArea.End.Y);
         bake.AddCaster(Static);
@@ -287,6 +291,8 @@ public abstract class Ground
         _screen?.Show(s.Score[0], s.Score[1], s.Minute, since < 8 ? _goalTeam : -1, (int)(since * 3) % 2 == 0);
         RenderingServer.GlobalShaderParameterSet("gn_excite", s.Excitement);
         _bench?.Update(s, dt);
+        if (Crowd.Fans > 0) _mood.Update(s, terraces, dt);
+        _fx?.Air(s, dt, Atmosphere.Cold, Atmosphere.Rain, _steamSpots);
         RenderingServer.GlobalShaderParameterSet("gn_chant", terraces == null ? Vector4.Zero : new Vector4(terraces.Home, terraces.Away, terraces.Beat, terraces.Arms));
         if (_fx != null)
         {

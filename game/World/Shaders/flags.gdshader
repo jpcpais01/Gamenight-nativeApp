@@ -33,6 +33,16 @@ void vertex() {
 	float th = TIME * sp + ph;
 	float sway = sin(th) * A;
 	float swayVel = cos(th) * A * sp;
+	// When his end sings, the flag swings on the song's beat (and is held up still for the
+	// Viking clap). Home end behind the -x goal, away end behind +x.
+	float ox = MODEL_MATRIX[3].x;
+	float sing = ox < -45.0 ? gn_chant.x : ox > 45.0 ? gn_chant.y : 0.0;
+	if (sing > 0.01) {
+		float bt = (gn_chant.z + fract(ph) * 0.08) * 6.2832;
+		float k2 = smoothstep(0.0, 0.5, sing) * (1.0 - gn_chant.w * 0.8);
+		sway = mix(sway, sin(bt) * A * 1.2, k2) * (1.0 - gn_chant.w * 0.7);
+		swayVel = mix(swayVel, cos(bt) * A * 1.2 * 6.0, k2);
+	}
 	// Waves run faster mid-swing: the phase integrates |cos| (2n + sin of the remainder).
 	float n = floor(th / PI + 0.5);
 	float t = TIME * 4.0 + (2.0 * n + sin(th - n * PI)) * 0.75;

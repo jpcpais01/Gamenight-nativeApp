@@ -93,4 +93,30 @@ public static class Pitchside
             m.Box(new Vector3(cx - 3.3f, 0, cz - 0.8f), new Vector3(cx + 3.3f, 0.45f, cz - 0.3f));
         }
     }
+
+    /// <summary>The people working the match round the pitch: ball boys sitting by the boards,
+    /// photographers crouched behind each goal line either side of the goal, stewards behind
+    /// the boards with their backs to the game, watching the stands. Drawn with the crowd.</summary>
+    public static void Staff(Crowd c, float side = HW + 3.8f, float end = HL + 4.5f)
+    {
+        var toPitchZ = new Vector3(0, 0, -1);
+        foreach (float x in new[] { -40f, -15f, 15f, 40f }) c.Staff(new Vector3(x, 0, side - 0.8f), toPitchZ, Crowd.Role.BallBoy);
+        foreach (float x in new[] { -42f, -26f, 26f, 42f }) c.Staff(new Vector3(x, 0, -side + 0.8f), -toPitchZ, Crowd.Role.BallBoy);
+        foreach (int sx in new[] { -1, 1 })
+        {
+            var toPitch = new Vector3(-sx, 0, 0);
+            foreach (int sz in new[] { -1, 1 })
+            {
+                c.Staff(new Vector3(sx * (end - 0.8f), 0, sz * 24), toPitch, Crowd.Role.BallBoy);
+                for (int k = 0; k < 6; k++)
+                    c.Staff(new Vector3(sx * (end - 1.1f - (k % 2) * 0.5f), 0, sz * (GoalHalf + 1.6f + k * 1.7f)), toPitch, Crowd.Role.Photographer);
+                foreach (float z in new[] { 9f, 26f }) c.Staff(new Vector3(sx * (end + 0.7f), 0, sz * z), -toPitch, Crowd.Role.Steward);
+            }
+        }
+        for (float x = -45; x <= 45.1f; x += 15)
+        {
+            c.Staff(new Vector3(x + 3, 0, side + 0.7f), -toPitchZ, Crowd.Role.Steward);
+            if (Mathf.Abs(x) > 14) c.Staff(new Vector3(x, 0, -side - 0.7f), toPitchZ, Crowd.Role.Steward);
+        }
+    }
 }

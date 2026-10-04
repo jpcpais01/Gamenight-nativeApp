@@ -69,7 +69,7 @@ public sealed class Crowd
                 if (rng.NextDouble() > Mathf.Min(fill, 0.995f)) return;
                 var pos = new Vector3(p.X, sec.Y, p.Z);
                 var tifo = o.Tifo?.Invoke(pos, sv, zone) ?? new Vector2(-1, -1);
-                Add(pos, new Vector3(-nrm.X, 0, -nrm.Y), zone, shade, tifo, o.SeatW);
+                Add(pos, new Vector3(-nrm.X, 0, -nrm.Y), zone, shade, tifo);
             });
         }
     }
@@ -107,10 +107,33 @@ public sealed class Crowd
         return path[best].Zone;
     }
 
-    void Add(Vector3 root, Vector3 face, int zone, float shade, Vector2 tifo, float seatW)
+    /// <summary>Someone working at the match, on the flat round the pitch (zone 3): a steward
+    /// watching the crowd, a photographer crouched behind the goal line, a ball boy.</summary>
+    public enum Role { Steward, Photographer, BallBoy }
+
+    public void Staff(Vector3 at, Vector3 face, Role role) => Add(at, face, 3, 1f, new Vector2(-1, -1), (int)role / 4f + 0.01f);
+
+    /// <summary>Spots in the stands, a few hundred picked at random (for the rain's steam).</summary>
+    public Vector3[] Sample(int n)
+    {
+        var rng = new Random(77);
+        int fans = _v.Count / 4;
+        if (fans == 0) return Array.Empty<Vector3>();
+        var a = new Vector3[n];
+        for (int i = 0; i < n; i++)
+        {
+            int f = rng.Next(fans) * 4;
+            if (_c[f].G > 0.7f) { i--; continue; }
+            a[i] = _v[f];
+        }
+        return a;
+    }
+
+    /// <summary>One person. COLOR = (role / 4 for staff, zone / 4, roof shade, sun visibility).</summary>
+    void Add(Vector3 root, Vector3 face, int zone, float shade, Vector2 tifo, float role = 0)
     {
         int i0 = _v.Count;
-        var col = new Color(seatW, zone * 0.5f, shade, 1f);
+        var col = new Color(role, zone * 0.25f, shade, 1f);
         for (int c = 0; c < 4; c++)
         {
             _v.Add(root);

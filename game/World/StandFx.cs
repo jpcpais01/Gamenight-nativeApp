@@ -16,7 +16,7 @@ namespace GameNight.Grounds;
 public sealed class StandFx
 {
     const int Max = 2048, Stride = 20, MaxFlares = 8;
-    enum Kind : byte { Spark, Smoke, Confetti, Landed, Glow }
+    enum Kind : byte { Spark, Smoke, Confetti, Landed, Glow, Mist }
 
     readonly float[] _px = new float[Max], _py = new float[Max], _pz = new float[Max];
     readonly float[] _vx = new float[Max], _vy = new float[Max], _vz = new float[Max];
@@ -94,6 +94,32 @@ public sealed class StandFx
             Spawn(Kind.Confetti, cx + (R() - 0.5f) * 90, 6 + R() * 12, -(HW + 8 + R() * 14), (R() - 0.3f) * 1.5f, -0.4f - R() * 0.8f, 1.5f + R() * 2.5f, 4 + R() * 2.5f, 0.09f + R() * 0.05f, ConfettiColour(col));
     }
 
+    /// <summary>The night air (per frame): on a cold night every player's breath puffs out in
+    /// front of him, quicker when he's sprinting; on a rainy night steam comes off the players
+    /// and off the packed stands, curling up through the floodlights. `cold` and `rain` 0..1.</summary>
+    public void Air(GameNight.Sim.MatchSnapshot s, float dt, float cold, float rain, Vector3[] stands)
+    {
+        if (dt <= 0 || s == null) return;
+        if (cold > 0.05f || rain > 0.05f)
+            for (int i = 0; i < GameNight.Sim.MatchSnapshot.N; i++)
+            {
+                if (!s.Active[i]) continue;
+                float fx = Mathf.Cos(s.Facing[i]), fz = Mathf.Sin(s.Facing[i]);
+                float vx = s.VX[i], vz = s.VZ[i], head = 1.6f * s.Height[i];
+                if (R() < (0.55f + (s.Sprinting[i] ? 0.9f : 0)) * cold * dt)
+                    Spawn(Kind.Mist, s.X[i] + fx * 0.22f, s.Y[i] + head, s.Z[i] + fz * 0.22f, vx * 0.35f + fx * 0.5f, 0.2f, vz * 0.35f + fz * 0.5f, 0.8f + R() * 0.3f, 0.13f + R() * 0.05f, new Color(1.5f, 1.55f, 1.65f));
+                if (R() < 0.7f * rain * dt)
+                    Spawn(Kind.Mist, s.X[i] + (R() - 0.5f) * 0.3f, s.Y[i] + head * 0.85f, s.Z[i] + (R() - 0.5f) * 0.3f, vx * 0.2f + Wind.X * 0.3f, 0.45f, vz * 0.2f + Wind.Y * 0.3f, 1.4f + R() * 0.6f, 0.22f + R() * 0.1f, new Color(1.3f, 1.35f, 1.45f));
+            }
+        if (rain > 0.05f && stands.Length > 0)
+            for (float k = 22f * rain * dt; k > 0; k--)
+            {
+                if (R() > k) break;
+                var p = stands[(int)(R() * stands.Length) % stands.Length];
+                Spawn(Kind.Mist, p.X, p.Y + 2.2f, p.Z, Wind.X * 0.5f, 0.3f + R() * 0.2f, Wind.Y * 0.5f, 5 + R() * 3, 1.6f + R() * 0.8f, new Color(1.2f, 1.25f, 1.35f));
+            }
+    }
+
     /// <summary>Per frame: light what the terraces light, move everything, upload. Returns the
     /// burning flares (position, strength) for the crowd's light, and how many.</summary>
     public (Vector4[] flares, int count) Update(float dt, double time, Terraces t)
@@ -142,6 +168,10 @@ public sealed class StandFx
                 case Kind.Spark:
                     vy -= 4 * dt;
                     break;
+                case Kind.Mist:
+                    vx *= 1 - dt * 1.5f;
+                    vz *= 1 - dt * 1.5f;
+                    break;
                 case Kind.Smoke:
                     vx += (Wind.X * 1.2f - vx) * dt * 0.4f;
                     vz += (Wind.Y * 1.2f - vz) * dt * 0.4f;
@@ -189,6 +219,11 @@ public sealed class StandFx
                     Write(n++, _px[i], _py[i], _pz[i], _col[i], _kind[i], size, alpha, _seed[i], u);
                     continue;
                 case Kind.Confetti: alpha = Mathf.Min(1, (1 - u) * 3); break;
+                case Kind.Mist:
+                    // Breath and steam: drawn as smoke, faint, swelling as it thins away.
+                    alpha = Mathf.SmoothStep(0, 0.12f, u) * (1 - Mathf.SmoothStep(0.25f, 1, u)) * (_size[i] > 1 ? 0.3f : 0.55f);
+                    Write(n++, _px[i], _py[i], _pz[i], _col[i], Kind.Smoke, size * (1 + u * 1.8f), alpha, _seed[i], u * 0.3f);
+                    continue;
                 default: alpha = Mathf.Min(0.95f, _life[i] / 6); break;
             }
             Write(n++, _px[i], _py[i], _pz[i], _col[i], _kind[i], size, alpha, _seed[i], (float)time * 9 + i);

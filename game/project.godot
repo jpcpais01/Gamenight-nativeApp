@@ -122,6 +122,18 @@ gn_night={
 "type": "float",
 "value": 0.0
 }
+gn_mood={
+"type": "vec4",
+"value": Vector4(0, 0, 1, 0)
+}
+gn_gasp={
+"type": "vec4",
+"value": Vector4(-1, 99, 0, 0)
+}
+gn_ballout={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
 gn_chant={
 "type": "vec4",
 "value": Vector4(0, 0, 0, 0)
