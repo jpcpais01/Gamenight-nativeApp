@@ -7,9 +7,10 @@ namespace GameNight.UI;
 
 /// <summary>
 /// The PWA's FIFA-Mobile style controls (src/ui/controls.ts), drawn by the engine: a floating
-/// joystick on the left, Pass / Through / Kick (Tackle / Switch / Press in defence) around a
-/// big Sprint button on the right. Sliding up on a held Pass or Through lofts it; in defence,
-/// sliding down on Sprint tackles and sliding left slides in. Layout is in the same units as
+/// joystick on the left, Pass / Through / Kick (Tackle / Switch in defence) around a big
+/// Sprint button on the right, which reads PRESS in defence: one button for going hard.
+/// Sliding up on a held Pass or Through lofts it; in defence, sliding down on Press tackles
+/// and sliding left slides in. Layout is in the same units as
 /// the PWA's CSS pixels.
 /// </summary>
 public sealed partial class TouchControls : Control
@@ -22,7 +23,7 @@ public sealed partial class TouchControls : Control
     static readonly string[][] Labels =
     {
         new[] { "PASS", "THROUGH", "KICK", "SPRINT" },
-        new[] { "TACKLE", "SWITCH", "PRESS", "SPRINT" },
+        new[] { "TACKLE", "SWITCH", "", "PRESS" },
         new[] { "WHIP", "SHORT", "FLOAT", "SPRINT" },
         new[] { "DRIVE", "SHORT", "FLOAT", "SPRINT" },
         new[] { "DIVE", "DIVE", "DIVE", "QUICK\nSTEP" },
@@ -87,6 +88,9 @@ public sealed partial class TouchControls : Control
     }
 
     Vector2 BtnCentre(int i) => Size - BtnOffset[i];
+
+    /// <summary>Defence has no middle button: pressing is the big one.</summary>
+    bool Shown(int i) => !(i == 2 && Current == Mode.Defend);
 
     /// <summary>Let go of everything (the pause menu opened): like every finger lifting at once.</summary>
     public void ReleaseAll()
@@ -157,7 +161,7 @@ public sealed partial class TouchControls : Control
         for (int i = 0; i < 4; i++)
         {
             float d = p.DistanceTo(BtnCentre(i));
-            if (d < BtnRadius[i] + 8 && d < best) { best = d; hit = i; }
+            if (Shown(i) && d < BtnRadius[i] + 8 && d < best) { best = d; hit = i; }
         }
         if (hit >= 0 && hit < 3)
         {
@@ -275,7 +279,7 @@ public sealed partial class TouchControls : Control
             case Key.J: if (down) Press(0); else Release(0); return;
             case Key.K: if (down) Press(1); else Release(1); return;
             case Key.L:
-            case Key.Space: if (down) Press(2); else Release(2); return;
+            case Key.Space: if (down) { if (Shown(2)) Press(2); } else Release(2); return;
             case Key.U:
             case Key.O:
             {
@@ -308,6 +312,7 @@ public sealed partial class TouchControls : Control
         double now = Time.GetTicksMsec() / 1000.0;
         for (int i = 0; i < 4; i++)
         {
+            if (!Shown(i)) continue;
             bool down = i < 3 ? Input.Held[i] : _sprintDown;
             var c = BtnCentre(i);
             float r = BtnRadius[i] * (down ? 0.92f : 1f);

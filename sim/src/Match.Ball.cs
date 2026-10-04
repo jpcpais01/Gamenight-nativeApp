@@ -46,24 +46,23 @@ public sealed partial class Match
         double opp = Pitch.HalfL * team.Dir;
         SetPieceKind? setPieceKind = SetPiece?.Kind;
 
-        // A through ball is planned now, at the strike. The computer's player looks again if the
-        // run he picked has gone; with no runner left, he plays it to feet instead.
+        // A through ball is planned now, at the strike. Yours goes where you put it (AimedThrough).
+        // The computer's player looks again if the run he picked has gone; with no runner left,
+        // he plays it to feet instead.
         ThroughPlan? through = null;
-        if (plan.Type == KickType.Through)
+        if (plan.Type == KickType.Through && plan.Aimed != null)
+            through = AI.AimedThrough(p, plan.DirX, plan.DirZ, plan.Aimed == true, plan.Power, plan.Lofted == true);
+        else if (plan.Type == KickType.Through)
         {
-            ThroughPlan? Ask(Player? only) =>
-                AI.PlanThrough(p, plan.DirX, plan.DirZ, plan.Aimed == true, plan.Aimed == null ? 0.5 : plan.Power, plan.Lofted == true, only);
-            through = Ask(plan.TargetId >= 0 ? All[plan.TargetId] : null);
-            if (through == null && plan.Aimed == null)
+            bool lofted = plan.Lofted == true;
+            if (plan.TargetId >= 0) through = AI.PlanThrough(p, lofted, All[plan.TargetId]);
+            through ??= AI.PlanThrough(p, lofted, null);
+            if (through == null)
             {
-                through = Ask(null);
-                if (through == null)
-                {
-                    plan = plan.Clone();
-                    plan.Type = KickType.Pass;
-                    plan.TargetId = -1;
-                    plan.Aimed = false;
-                }
+                plan = plan.Clone();
+                plan.Type = KickType.Pass;
+                plan.TargetId = -1;
+                plan.Aimed = false;
             }
         }
 
@@ -270,7 +269,7 @@ public sealed partial class Match
             bool lob = plan.Type == KickType.Lob;
             // Nobody to feet where the stick points: into the path of a team-mate who gets there
             // first along it (the through-ball planner, held to the stick).
-            var space = receiver == null && plan.Aimed == true && (plan.Type == KickType.Pass || lob) ? AI.PlanThrough(p, plan.DirX, plan.DirZ, true, plan.Power, lob, null) : null;
+            var space = receiver == null && plan.Aimed == true && (plan.Type == KickType.Pass || lob) ? AI.AimedThrough(p, plan.DirX, plan.DirZ, true, plan.Power, lob) : null;
             if (space != null)
             {
                 receiver = space.Receiver;

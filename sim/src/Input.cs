@@ -9,7 +9,7 @@ public static class Btn
     public const int A = 0;
     /// <summary>Top button. Attack: Through ball · Defence: Switch</summary>
     public const int B = 1;
-    /// <summary>Middle button. Attack: Shoot · Defence: Press</summary>
+    /// <summary>Middle button. Attack: Shoot · Defence: hidden (pressing is the Sprint button)</summary>
     public const int C = 2;
 }
 

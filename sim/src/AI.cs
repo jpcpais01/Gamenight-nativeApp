@@ -68,7 +68,6 @@ public sealed class AI
 
     static readonly double[,] BoxSpots = { { -6, -2 }, { -8, 3 }, { -11, -4 }, { -5, 4.5 }, { -12, 1 }, { -14, -6 } };
     static readonly double[] Leads = { 4, 7, 11, 15, 19 };
-    static readonly double[] StickSpots = { 9, 13, 17, 22, 27 };
     static readonly int[] BoxOrder = { 2, 3, 9, 6, 7, 10, 8, 5, 1, 4 };
 
     sealed class Curve
@@ -350,15 +349,116 @@ public sealed class AI
     public double OffsideLineFor(int team) => offside[team];
 
     /// <summary>
-    /// Through ball, planned as the strike it is: a direction and a pace for the ball. For each
+    /// Your through ball, kept simple. The stick picks the runner (the team-mate it points at,
+    /// with the space he's heading for; forwards first), his run goes on toward goal bent the
+    /// way the stick points, and the hold says how far ahead of him it goes: a tap into his
+    /// stride, a full hold into the space in behind. It's struck to get there just before he
+    /// does, still rolling. Whether it beats the defenders is your read, not the game's.
+    /// </summary>
+    public ThroughPlan? AimedThrough(Player p, double aimX, double aimZ, bool aimed, double power, bool lofted)
+    {
+        var team = m.Teams[p.Team];
+        double dir = team.Dir;
+        var b = m.Ball.Pos;
+        double line = offside[p.Team];
+        if (!aimed)
+        {
+            aimX = dir;
+            aimZ = 0;
+        }
+        double cone = aimed ? 0.6 : -0.2;
+        Player? q = null;
+        double best = -1e9;
+        foreach (var o in team.Players)
+        {
+            if (o == p || o.Role == Role.GK) continue;
+            double dx = o.Pos.X + dir * 5 - b.X;
+            double dz = o.Pos.Z - b.Z;
+            double d = JsMath.Hypot(dx, dz);
+            if (d < 4 || d > 48) continue;
+            double align = (dx * aimX + dz * aimZ) / d;
+            if (align < cone) continue;
+            double ahead = (o.Pos.X - b.X) * dir;
+            bool offsideNow = o.Pos.X * dir > line + 0.3 && ahead > 0;
+            double open = 99;
+            foreach (var e in m.Teams[1 - p.Team].Players) open = Math.Min(open, M.Dist2D(e.Pos.X, e.Pos.Z, o.Pos.X, o.Pos.Z));
+            double s = align * 3 + M.Clamp(ahead / 20, -0.5, 1) + M.Clamp(open / 6, 0, 1) * 0.6 - d / 40 + (o.Role == Role.FWD ? 0.3 : 0) - (offsideNow ? 2 : 0);
+            if (s > best)
+            {
+                best = s;
+                q = o;
+            }
+        }
+        if (q == null) return null;
+        // His run: on along the one he's making, or toward goal; bent by the stick; never back.
+        double rx, rz;
+        if (q.Speed > 2.5 && q.Vel.X * dir > 0)
+        {
+            rx = q.Vel.X / q.Speed;
+            rz = q.Vel.Z / q.Speed;
+        }
+        else
+        {
+            double gx = Pitch.HalfL * dir - q.Pos.X;
+            double gz = -q.Pos.Z * 0.5;
+            double gn = JsMath.Or1(JsMath.Hypot(gx, gz));
+            rx = gx / gn;
+            rz = gz / gn;
+        }
+        if (aimed)
+        {
+            rx += aimX * 0.8;
+            rz += aimZ * 0.8;
+        }
+        if (rx * dir < 0) rx = 0;
+        double rn = JsMath.Hypot(rx, rz);
+        if (rn < 0.05)
+        {
+            rx = dir;
+            rz = 0;
+        }
+        else
+        {
+            rx /= rn;
+            rz /= rn;
+        }
+        // How far ahead: the hold, at most. A passer with his head up plays it shorter, onto the
+        // runner, when a defender would get to that space first.
+        double x, z, tr;
+        for (double lead = 3 + 11 * M.Clamp(power, 0, 1); ; lead -= 3)
+        {
+            x = M.Clamp(q.Pos.X + q.Vel.X * 0.2 + rx * lead, -Pitch.HalfL + 3, Pitch.HalfL - 3);
+            z = M.Clamp(q.Pos.Z + q.Vel.Z * 0.2 + rz * lead, -Pitch.HalfW + 2, Pitch.HalfW - 2);
+            tr = RunTime(q, x, z, PlanReactRun, PlayerK.Reach * 0.8);
+            if (lead <= 4) break;
+            double tOpp = 1e9;
+            foreach (var o in m.Teams[1 - p.Team].Players) tOpp = Math.Min(tOpp, RunTime(o, x, z, PlanReactOpp, PlayerK.Reach * 0.8));
+            if (tOpp > tr + 0.1) break;
+        }
+        double D = Math.Max(0.5, M.Dist2D(b.X, b.Z, x, z));
+        double kx = (x - b.X) / D;
+        double kz = (z - b.Z) / D;
+        var tp = new ThroughPlan { Receiver = q, X = x, Z = z, Time = tr, Dx = kx, Dz = kz, LandX = x, LandZ = z, V0 = 19 };
+        if (lofted)
+        {
+            // Dropping a little short, to bounce on into his path.
+            tp.LandX = b.X + kx * D * 0.88;
+            tp.LandZ = b.Z + kz * D * 0.88;
+        }
+        else if (Kick.RollingPass(D, Math.Max(0.4, tr - 0.15), out var rp)) tp.V0 = rp.V0;
+        return tp;
+    }
+
+    /// <summary>
+    /// The computer's through ball, planned as the strike it is: a direction and a pace for the ball. For each
     /// candidate runner, run lines and lead distances give directions, and the pace that has the
     /// ball there as he arrives (or a little firmer). On each such ball's exact path, the
     /// defenders' and the keeper's earliest arrivals are worked out by how they really run, and
     /// the runner's meeting point by the same rule he'll use to go and get it (Meeting). Only a
     /// ball he gets to safely first is a through ball; among those: progress, danger, the
-    /// margin, a ball he can take in his stride, offside, and the stick and the weight asked for.
+    /// margin, a ball he can take in his stride, and offside.
     /// </summary>
-    public ThroughPlan? PlanThrough(Player p, double aimX, double aimZ, bool aimed, double power, bool lofted, Player? only)
+    public ThroughPlan? PlanThrough(Player p, bool lofted, Player? only)
     {
         var team = m.Teams[p.Team];
         double dir = team.Dir;
@@ -367,7 +467,6 @@ public sealed class AI
         near.Clear();
         near.AddRange(m.Teams[1 - p.Team].Players);
         double line = offside[p.Team];
-        double prefLead = 5 + 13 * power;
         var P = (x: pathX, y: pathY, z: pathZ, v: pathV);
         ThroughPlan? best = null;
         double bestS = -1e9;
@@ -396,10 +495,8 @@ public sealed class AI
             dirs.Add((dir * JsMath.Cos(0.45), JsMath.Sin(0.45)));
             dirs.Add((dir * JsMath.Cos(0.45), -JsMath.Sin(0.45)));
             if (q.Speed > 2) dirs.Add((q.Vel.X / q.Speed, q.Vel.Z / q.Speed));
-            if (aimed) dirs.Add((aimX, aimZ));
             tried.Clear();
-            // Where he'll meet it: along each run line at each lead; and, when the stick asks, on
-            // the stick's own line, so a ball can always go where it is aimed.
+            // Where he'll meet it: along each run line at each lead.
             spots.Clear();
             foreach (var (ux, uz) in dirs)
             {
@@ -409,17 +506,6 @@ public sealed class AI
                     spots.Add(q.Pos.X + ux * L);
                     spots.Add(q.Pos.Z + uz * L);
                     spots.Add(L);
-                }
-            }
-            if (aimed)
-            {
-                foreach (double s in StickSpots)
-                {
-                    double sx = b.X + aimX * s;
-                    double sz = b.Z + aimZ * s;
-                    spots.Add(sx);
-                    spots.Add(sz);
-                    spots.Add(M.Dist2D(q.Pos.X, q.Pos.Z, sx, sz));
                 }
             }
             for (int si = 0; si < spots.Count; si += 3)
@@ -500,7 +586,7 @@ public sealed class AI
                     // a ball that could beat the best so far is worth asking the defenders about.)
                     int k0 = Meeting(q, P.x, P.y, P.z, n, first, 1e9, PlanReactRun, 0);
                     if (k0 < 0) continue;
-                    double ub = ((P.x[k0] - b.X) * dir) / 20 * 0.9 + (1 - M.Clamp(M.Dist2D(P.x[k0], P.z[k0], gx, 0) / 38, 0, 1)) * 0.9 + 0.8 + q.Attrs.Pace * 0.25 + (q.Role == Role.FWD ? 0.2 : 0) + (aimed ? 2.2 : 0);
+                    double ub = ((P.x[k0] - b.X) * dir) / 20 * 0.9 + (1 - M.Clamp(M.Dist2D(P.x[k0], P.z[k0], gx, 0) / 38, 0, 1)) * 0.9 + 0.8 + q.Attrs.Pace * 0.25 + (q.Role == Role.FWD ? 0.2 : 0);
                     if (ub - (offsideNow ? 4 : 0) <= bestS) continue;
                     // The other side: the first of them to the ball (no need to look past where he'd take it).
                     int look = (int)Math.Min(n, k0 + Math.Ceiling(PlanMargin / SampleDT) + 2);
@@ -532,14 +618,6 @@ public sealed class AI
                         q.Attrs.Pace * 0.25 +
                         (q.Role == Role.FWD ? 0.2 : 0);
                     if (offsideNow) sc -= 4;
-                    if (aimed)
-                    {
-                        // Where the stick points is where it goes: within AimCone of it, or not at all.
-                        double align = kx * aimX + kz * aimZ;
-                        if (align < AimCone) continue;
-                        sc += align * 2.2;
-                        sc -= Math.Abs(md - prefLead) / 7;
-                    }
                     if (sc > bestS)
                     {
                         bestS = sc;
@@ -1469,7 +1547,7 @@ public sealed class AI
             if (m.Time >= throughLook[p.Id])
             {
                 throughLook[p.Id] = m.Time + 0.45;
-                tp = PlanThrough(p, dir, 0, false, 0.5, false, null);
+                tp = PlanThrough(p, false, null);
             }
             if (tp != null && tp.Score + ThroughBias > bestScore)
             {
