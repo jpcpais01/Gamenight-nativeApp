@@ -161,20 +161,12 @@ public sealed class BigStadium : Ground
         Pitchside.AdBoards(m);
         Pitchside.CornerFlags(m);
         Pitchside.Dugouts(m, Pitchside.HomeKit, Pitchside.AwayKit);
-        RailBanners(m, path);
+        RailBanners(m, path, 20.9f, 13.7f, 34, 4.2f);
 
         // ---- the crowd
         float lowerSlope = (Lower1 - Lower0).Length();
         float cz = BowlZ - BowlR;
-        Vector2? EndTifo(Vector3 p, float sv, int zone)
-        {
-            // Card displays over the straight of each end (the corners stay as they are).
-            if (zone == 0 || Mathf.Abs(p.Z) > cz - 1 || sv < 0.6f || sv > lowerSlope - 0.4f) return null;
-            float u = zone == 1 ? (cz - p.Z) / (2 * cz) : (p.Z + cz) / (2 * cz);
-            float v = (sv - 0.6f) / (lowerSlope - 1f);
-            return new Vector2(512 + u * 512, (zone == 1 ? 288 : 448) + (1 - v) * 160) / 1024f;
-        }
-        Crowd.Tier(path, Lower0, Lower1, new TierFans { Shade = new(9, 17), Vom = new(7.2f, 10.2f), Tifo = EndTifo });
+        Crowd.Tier(path, Lower0, Lower1, new TierFans { Shade = new(9, 17), Vom = new(7.2f, 10.2f), Tifo = EndTifos(cz, lowerSlope) });
         Crowd.Tier(path, Upper0, Upper1, new TierFans { Shade = new(-2, 10) });
         Crowd.Tier(main, Top0, Top1, new TierFans { Shade = new(-2, 6), Fill = 0.9f });
         Crowd.Tier(near, new(0.4f, 1.2f), new(11, 5.6f), new TierFans { Fill = 0.85f });
@@ -238,36 +230,5 @@ public sealed class BigStadium : Ground
             var x = basis.X * 1.7f; var y = basis.Y * 0.55f;
             m.QuadUV(c - x - y, c + x - y, c + x + y, c - x + y, new(0, 0), new(1, 0), new(1, 1), new(0, 1));
         }
-    }
-
-    /// <summary>Supporters' banners over the railings at the front of the lower tier, and the
-    /// ultras' big drop banner over the boxes behind the home goal.</summary>
-    void RailBanners(MeshData m, List<PathPt> path)
-    {
-        var straights = new[] { 0, 1, 2 }.Select(z => path.Where(p => p.Zone == z && (z == 0 ? p.NZ < -0.999f : Mathf.Abs(p.NX) > 0.999f)).ToList()).ToArray();
-        void Hang(int row, PathPt p, float o, float y, float w, float h)
-        {
-            m.Hex(0xffffff, Look.Cloth, row);
-            var c = p.At(o, y);
-            var right = new Vector3(-p.NZ, 0, p.NX);
-            int seg = Mathf.Max(2, (int)(w / 1.5f));
-            for (int s = 0; s < seg; s++)
-            {
-                float u0 = s / (float)seg, u1 = (s + 1) / (float)seg;
-                var a = c + right * (w * (u0 - 0.5f));
-                var b = c + right * (w * (u1 - 0.5f));
-                var dy = new Vector3(0, h / 2, 0);
-                m.QuadUV(a - dy, b - dy, b + dy, a + dy, new(u0, 0), new(u1, 0), new(u1, 1), new(u0, 1));
-            }
-        }
-        void Rail(int row, int zone, float f, float w)
-        {
-            var pts = straights[zone];
-            Hang(row, pts[Mathf.Min(pts.Count - 1, (int)(f * pts.Count))], -0.08f, 0.72f, w, 1.35f);
-        }
-        Rail(0, 1, 0.22f, 15); Rail(1, 1, 0.5f, 11); Rail(2, 1, 0.8f, 14);
-        Rail(3, 0, 0.12f, 13); Rail(4, 0, 0.36f, 11); Rail(5, 0, 0.6f, 9); Rail(6, 0, 0.86f, 13);
-        Rail(7, 2, 0.3f, 15); Rail(8, 2, 0.72f, 10);
-        Hang(9, straights[1][straights[1].Count / 2], 20.9f, 13.7f, 34, 4.2f);
     }
 }

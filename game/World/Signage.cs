@@ -31,7 +31,7 @@ public sealed partial class Signage : Node
     readonly Font _font;
     int _frames;
 
-    public Signage(string clubName, uint home, uint away, BannerArt[] banners)
+    public Signage(string clubName, uint home, uint away, BannerArt[] banners, (string text, uint bg, uint fg)[] boards = null)
     {
         _vp = new SubViewport
         {
@@ -49,9 +49,10 @@ public sealed partial class Signage : Node
             ? GD.Load<Font>("res://Fonts/BarlowCondensed-ExtraBold.ttf")
             : new FontVariation { BaseFont = ThemeDB.FallbackFont, VariationEmbolden = 1.1f };
 
-        for (int i = 0; i < Boards.Length; i++)
+        boards ??= Boards;
+        for (int i = 0; i < 8; i++)
         {
-            var (t, bg, fg) = Boards[i];
+            var (t, bg, fg) = boards[i % boards.Length];
             Rect(new Rect2(0, i * 64, 512, 64), bg);
             Rect(new Rect2(0, i * 64, 512, 22), 0xffffff, 0.06f);
             Text(new Rect2(0, i * 64 + 4, 512, 60), t, fg, 46);
