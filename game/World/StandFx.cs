@@ -67,6 +67,10 @@ public sealed class StandFx
 
     static Color Lin(uint hex) => MeshData.Srgb(hex);
 
+    /// <summary>A smoke bomb's colour: the club's, a touch lighter (smoke is never as deep as the
+    /// shirt) and varied a little puff to puff.</summary>
+    Color Tint(Color c) => c.Lerp(Colors.White, 0.12f + R() * 0.1f) * (0.92f + R() * 0.12f);
+
     Color ConfettiColour(Color team)
     {
         float r = R();
@@ -108,14 +112,17 @@ public sealed class StandFx
                 if (f.Smoke)
                 {
                     // A smoke bomb billows in the club's colour.
-                    if (R() < 4.5f * dt * fade)
-                        Spawn(Kind.Smoke, f.X + (R() - 0.5f) * 1.2f, f.Y - 0.6f, f.Z + (R() - 0.5f) * 1.2f, Wind.X * 0.6f + (R() - 0.5f) * 1.2f, 0.5f + R() * 0.6f, Wind.Y * 0.6f + (R() - 0.5f) * 1.2f, 7 + R() * 3, 2.5f, f.End == 0 ? _home : _away);
+                    // A smoke bomb pours out a thick plume in the club's colour: puffs burst out
+                    // low and wide, then rise and roll away on the breeze.
+                    if (R() < 9f * dt * fade)
+                        Spawn(Kind.Smoke, f.X + (R() - 0.5f) * 0.8f, f.Y - 0.3f, f.Z + (R() - 0.5f) * 0.8f, Wind.X * 0.6f + (R() - 0.5f) * 2.2f, 0.7f + R() * 0.9f, Wind.Y * 0.6f + (R() - 0.5f) * 2.2f, 8 + R() * 4, 1.8f + R() * 0.8f, Tint(f.End == 0 ? _home : _away));
                     continue;
                 }
                 if (dt > 0 && R() < 0.6f * fade)
                     Spawn(Kind.Spark, f.X + (R() - 0.5f) * 0.35f, f.Y + R() * 0.2f, f.Z + (R() - 0.5f) * 0.35f, (R() - 0.5f) * 1.6f, 0.6f + R() * 1.6f, (R() - 0.5f) * 1.6f, 0.18f + R() * 0.15f, 0.2f + R() * 0.25f, R() < 0.4f ? Lin(0xffd9a0) : Lin(0xff4a2a));
-                if (R() < 2.2f * dt * fade)
-                    Spawn(Kind.Smoke, f.X, f.Y + 0.4f, f.Z, Wind.X * 0.8f + (R() - 0.5f) * 0.5f, 0.55f + R() * 0.45f, Wind.Y * 0.8f + (R() - 0.5f) * 0.5f, 8 + R() * 3, 1.7f, R() < 0.5f ? Lin(0xe2b3ad) : Lin(0xc9b8b6));
+                // A flare's own smoke: a pinkish-grey column off the fire.
+                if (R() < 4f * dt * fade)
+                    Spawn(Kind.Smoke, f.X, f.Y + 0.4f, f.Z, Wind.X * 0.8f + (R() - 0.5f) * 0.6f, 0.8f + R() * 0.6f, Wind.Y * 0.8f + (R() - 0.5f) * 0.6f, 7 + R() * 3, 1.1f + R() * 0.5f, R() < 0.5f ? Lin(0xe8b8b0) : Lin(0xcdbdbb));
                 if (nf < MaxFlares)
                 {
                     float flick = 0.75f + 0.25f * Mathf.Sin((float)time * 31 + f.Seed * 40) * Mathf.Sin((float)time * 17.3f + f.Seed * 13);
@@ -175,7 +182,12 @@ public sealed class StandFx
             switch (_kind[i])
             {
                 case Kind.Spark: alpha = 0.95f * (1 - u); size *= 0.8f + R() * 0.4f; break;
-                case Kind.Smoke: alpha = 0.42f * Mathf.Sin(Mathf.Min(1, u * 1.3f) * Mathf.Pi); size *= 1 + u * 4.5f; break;
+                case Kind.Smoke:
+                    // Thick from the start, thinning over its last half; it swells as it rises.
+                    alpha = Mathf.SmoothStep(0, 0.06f, u) * (1 - Mathf.SmoothStep(0.45f, 1, u)) * 1.05f;
+                    size *= 1 + u * 3.2f;
+                    Write(n++, _px[i], _py[i], _pz[i], _col[i], _kind[i], size, alpha, _seed[i], u);
+                    continue;
                 case Kind.Confetti: alpha = Mathf.Min(1, (1 - u) * 3); break;
                 default: alpha = Mathf.Min(0.95f, _life[i] / 6); break;
             }

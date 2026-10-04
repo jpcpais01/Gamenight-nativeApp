@@ -51,12 +51,33 @@ void fragment() {
 		if (r > 1.0 || cus.y < bayer4(fc)) discard;
 		o = col.rgb * 1.6;
 	} else if (kind < 1.5) {
-		// Smoke: a lumpy puff, densest in the middle, lit by the sky and the floodlights.
-		float lump = 0.6 + 0.4 * sin(c.x * 3.1 + cus.z * 20.0) * sin(c.y * 2.7 + cus.z * 13.0);
-		float d = cus.y * pow(max(0.0, 1.0 - r), 1.4) * lump;
-		if (r > 1.0 || d < bayer4(fc)) discard;
+		// Smoke: a cel-shaded billow, a cluster of round lobes turning slowly as it rises, lit
+		// from above in three flat bands (it reads as smoke at a few pixels across). Solid
+		// while it's thick; it thins out by an ordered dither, the lobes' rims going first.
+		float age = cus.w;
+		float sd = cus.z * 40.0;
+		float rot = cus.z * 6.2832 + age * 1.6;
+		float m = 1.0 - r / 0.6;
+		float top = 0.0;
+		for (int i = 0; i < 5; i++) {
+			float a = rot + float(i) * 1.2566;
+			vec2 off = vec2(cos(a), sin(a)) * 0.4 * (0.75 + 0.25 * sin(sd + float(i) * 1.7));
+			float rr = 0.42 + 0.1 * sin(sd * 1.3 + float(i) * 2.3);
+			float d = 1.0 - length(c - off) / rr;
+			if (d > m) { m = d; top = off.y; }
+		}
+		if (m <= 0.0) discard;
+		float thin = bayer4(fc);
+		if (cus.y < thin || m < 0.18 && cus.y * 0.75 < thin) discard;
+		// Brighter on top (and on each lobe's own top), darker underneath.
+		float lit = clamp(0.45 + 0.45 * c.y + 0.25 * top + 0.3 * m, 0.0, 1.0);
+		lit = floor(lit * 3.0 + 0.5) / 3.0;
 		vec3 light = gn_amb_sky * 1.1 + gn_amb_ground * 0.5 + gn_sun * 0.45 + gn_flood_col * gn_flood * 0.5;
-		o = world_fog(col.rgb * light, dist, 0.06);
+		vec3 sc = mix(col.rgb, vec3(dot(col.rgb, vec3(0.3, 0.5, 0.2))) * 0.85, age * 0.55);
+		o = sc * mix(0.5, 1.12, lit) * light;
+		// Fresh flare smoke glows red from the fire underneath.
+		if (col.r > col.b * 1.05) o += vec3(1.0, 0.28, 0.1) * (1.0 - smoothstep(0.0, 0.22, age)) * (1.0 - lit * 0.5) * (0.25 + gn_night * 0.6);
+		o = world_fog(o, dist, 0.06);
 	} else if (kind < 3.5) {
 		// Confetti and ticker tape: little lit squares.
 		if (cus.y < bayer4(fc)) discard;
