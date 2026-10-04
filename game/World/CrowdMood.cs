@@ -63,7 +63,15 @@ public sealed class CrowdMood
         _rise1 += (w1 - _rise1) * (1 - MathF.Exp(-dt * (w1 > _rise1 ? 4f : 0.8f)));
 
         bool outBall = s.Phase == Phase.Out || s.SetPiece is SetPieceKind.Throw or SetPieceKind.Corner or SetPieceKind.GoalKick;
-        RenderingServer.GlobalShaderParameterSet("gn_mood", new Vector4(_rise0, _rise1, s.Dir[0] == 0 ? 1 : s.Dir[0], 0));
+        // What each end is doing in the sound (Terraces): clapping, jeering, hands on heads, fists up;
+        // the home end hushed after an away goal; whether the song is the jumping one.
+        if (terraces != null)
+        {
+            RenderingServer.GlobalShaderParameterSet("gn_react_home", new Vector4(terraces.Clapping[0], terraces.Jeering[0], terraces.Heads[0], terraces.Fists[0]));
+            RenderingServer.GlobalShaderParameterSet("gn_react_away", new Vector4(terraces.Clapping[1], terraces.Jeering[1], terraces.Heads[1], terraces.Fists[1]));
+        }
+        float bounce = terraces?.Singing?.Chant?.Name == "bounce" ? 1 : 0;
+        RenderingServer.GlobalShaderParameterSet("gn_mood", new Vector4(_rise0, _rise1, s.Dir[0] == 0 ? 1 : s.Dir[0], (terraces?.Hush ?? 0) + bounce * 2));
         RenderingServer.GlobalShaderParameterSet("gn_gasp", new Vector4(_gaspTeam, (float)Math.Min(99, t - _gaspAt), _gaspKind, 0));
         RenderingServer.GlobalShaderParameterSet("gn_ballout", new Vector4(s.BallX, s.BallZ, outBall ? 1 : 0, 0));
     }

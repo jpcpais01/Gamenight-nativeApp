@@ -20,6 +20,9 @@ uniform sampler2D sprites : filter_nearest;
 global uniform vec4 gn_mood;
 global uniform vec4 gn_gasp;
 global uniform vec4 gn_ballout;
+// From the terraces' sound, per end (clapping, jeering, hands on heads, fists up).
+global uniform vec4 gn_react_home;
+global uniform vec4 gn_react_away;
 
 // Few varyings (mobile GPUs have as few as 16 slots, and a shader over the limit doesn't
 // draw at all): the fan's colours go packed four to a uvec4, 8 bits a channel.
@@ -73,7 +76,10 @@ void vertex() {
 	}
 	fire *= step(h(s, 1.4), 0.9);
 	// Calm by default: they bounce only while their end sings (or the place is at boiling point).
-	float boil = max(smoothstep(0.8, 1.0, ex) * ultra, fire);
+	// The jumping song ("bounce"): the whole singing end leaps on every beat.
+	float bounceSong = step(1.5, gn_mood.w);
+	float hush = fract(gn_mood.w) * (1.0 - team);
+	float boil = max(max(smoothstep(0.8, 1.0, ex) * ultra, fire), bounceSong * singing);
 	float beat = mix(idle * boil, onBeat, singing);
 	float jump = max(boil, singing) * max(0.0, beat) * (0.08 + 0.1 * max(ex, sing) + 0.1 * fire) * (1.0 - viking) * step(h(s, 2.8), 0.85)
 		+ (1.0 - ultra) * max(0.0, sin(t * (7.0 + h(s, 1.1) * 3.0) + ph)) * ex2 * 0.16
@@ -95,7 +101,13 @@ void vertex() {
 	float tall = 0.92 + 0.14 * h(s, 2.9);
 	float wide = 0.85 + 0.3 * h(s, 1.7);
 	// Scarves come up for the songs (most of a singing end), hardly ever otherwise.
-	float scarf = step(h(s, 5.5), max(max(sing * 0.8, ex2 * ex2 * 0.2), fire * 0.45)) * (1.0 - ours) * (1.0 - viking);
+	float scarf = step(h(s, 5.5), max(max(sing * 0.8 * (1.0 - bounceSong * 0.6), ex2 * ex2 * 0.2), fire * 0.45)) * (1.0 - ours) * (1.0 - viking);
+	// What his end is doing in the sound: who joins in depends on him (and less in the side stands).
+	vec4 react = (team < 0.5 ? gn_react_home : gn_react_away) * mix(0.55, 1.0, max(ultra, awayEnd));
+	float rk = h(s, 9.4);
+	stand = max(stand, step(rk * 0.9 + 0.08, react.w));
+	// An away goal: the home support sinks into its seats, stunned.
+	stand *= 1.0 - hush * step(h(s, 8.2), 0.75) * (1.0 - fire);
 	float arms = max(fire * step(0.3, beat) * step(0.4, h(s, 7.7)), max(singing * ultra * step(0.6, beat) * step(0.5, h(s, 7.7)), viking * step(h(s, 2.2) * 0.25, gn_chant.z + 0.3)));
 
 	// Card display for the kick-off: held up overhead, edge to edge, they make the picture.
@@ -118,6 +130,16 @@ void vertex() {
 		// Up with the shot... then hands on heads (a few still reaching, a few pointing at the ref).
 		float k = h(s, 3.9);
 		pose = gAge < 0.3 + h(s, 3.8) * 0.35 ? 2.0 + step(0.5, h(s, 7.3)) : k < 0.66 ? 8.0 : k < 0.86 ? 3.0 : 11.0;
+	} else if (react.w > rk * 0.9 + 0.08) {
+		// Cheering: fists and arms up.
+		pose = h(s, 9.5) < 0.5 ? 10.0 : 2.0 + step(0.5, h(s, 7.3));
+	} else if (react.z > rk * 0.9 + 0.08) {
+		pose = 8.0;
+	} else if (react.x > rk * 0.9 + 0.08) {
+		pose = 4.0 + clapK;
+	} else if (react.y > rk * 0.9 + 0.12) {
+		// Jeering: pointing at the referee, or a shake of the fist.
+		pose = h(s, 9.6) < 0.6 ? 11.0 : 10.0 * step(0.0, sin(t * 9.0 + ph));
 	} else if (scarf > 0.5) {
 		// Scarves stretched overhead, lifted on the song's beat when his end is singing.
 		pose = 6.0 + (singing > 0.5 ? step(0.5, gn_chant.z) : step(0.0, sin(t * 2.6 + ph)));

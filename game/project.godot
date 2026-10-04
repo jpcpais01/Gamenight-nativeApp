@@ -122,6 +122,14 @@ gn_night={
 "type": "float",
 "value": 0.0
 }
+gn_react_home={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+gn_react_away={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
 gn_mood={
 "type": "vec4",
 "value": Vector4(0, 0, 1, 0)
