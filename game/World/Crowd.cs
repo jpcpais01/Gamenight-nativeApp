@@ -26,8 +26,8 @@ public sealed class TierFans
 }
 
 /// <summary>
-/// The crowd: every fan is an upright sprite (CrowdSprites) on his step, all of them in one static mesh (one
-/// draw). The vertex shader dresses and animates each from a hash of where he stands: sitting
+/// The crowd: every fan is an upright sprite (CrowdSprites) on his step, in a dozen static meshes (wedges
+/// round the pitch, culled whole when out of shot). The vertex shader dresses and animates each from a hash of where he stands: sitting
 /// or standing, bouncing with the ultras, up out of their seats when it gets close, arms and
 /// scarves up, the scoring side going wild while the other sits in silence, cards held up
 /// for the kick-off tifo, phone torches at night. The CPU never touches it after building.
@@ -140,28 +140,57 @@ public sealed class Crowd
                 float vis = bake.SunVisibility(_v[f] + new Vector3(0, 1.3f, 0) + _n[f] * 0.3f);
                 for (int c = 0; c < 4; c++) { var col = _c[f + c]; col.A = vis; _c[f + c] = col; }
             });
-        var mesh = new ArrayMesh();
-        if (_v.Count > 0)
+        // In wedges round the pitch, so the camera only draws the stands it looks at (the
+        // one under it and the ends out of shot are culled whole). All share one material.
+        const int Wedges = 12;
+        var mat = Material();
+        var fans = new List<int>[Wedges];
+        for (int w = 0; w < Wedges; w++) fans[w] = new List<int>();
+        for (int f = 0; f < _v.Count; f += 4)
         {
+            float a = Mathf.Atan2(_v[f].Z, _v[f].X) / Mathf.Tau + 0.5f;
+            fans[Math.Min(Wedges - 1, (int)(a * Wedges))].Add(f);
+        }
+        MeshInstance3D first = null;
+        foreach (var list in fans)
+        {
+            if (list.Count == 0) continue;
+            int n = list.Count * 4;
+            var v = new Vector3[n]; var nn = new Vector3[n]; var uv = new Vector2[n]; var uv2 = new Vector2[n]; var c = new Color[n];
+            var idx = new int[list.Count * 6];
+            for (int k = 0; k < list.Count; k++)
+            {
+                int f = list[k];
+                for (int j = 0; j < 4; j++)
+                {
+                    v[k * 4 + j] = _v[f + j]; nn[k * 4 + j] = _n[f + j]; uv[k * 4 + j] = _uv[f + j]; uv2[k * 4 + j] = _uv2[f + j]; c[k * 4 + j] = _c[f + j];
+                }
+                int i0 = k * 4;
+                idx[k * 6] = i0; idx[k * 6 + 1] = i0 + 2; idx[k * 6 + 2] = i0 + 1;
+                idx[k * 6 + 3] = i0 + 1; idx[k * 6 + 4] = i0 + 2; idx[k * 6 + 5] = i0 + 3;
+            }
             var arrays = new Godot.Collections.Array();
             arrays.Resize((int)Mesh.ArrayType.Max);
-            arrays[(int)Mesh.ArrayType.Vertex] = _v.ToArray();
-            arrays[(int)Mesh.ArrayType.Normal] = _n.ToArray();
-            arrays[(int)Mesh.ArrayType.TexUV] = _uv.ToArray();
-            arrays[(int)Mesh.ArrayType.TexUV2] = _uv2.ToArray();
-            arrays[(int)Mesh.ArrayType.Color] = _c.ToArray();
-            arrays[(int)Mesh.ArrayType.Index] = _idx.ToArray();
+            arrays[(int)Mesh.ArrayType.Vertex] = v;
+            arrays[(int)Mesh.ArrayType.Normal] = nn;
+            arrays[(int)Mesh.ArrayType.TexUV] = uv;
+            arrays[(int)Mesh.ArrayType.TexUV2] = uv2;
+            arrays[(int)Mesh.ArrayType.Color] = c;
+            arrays[(int)Mesh.ArrayType.Index] = idx;
+            var mesh = new ArrayMesh();
             mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Triangles, arrays);
+            var mi = new MeshInstance3D
+            {
+                Mesh = mesh,
+                MaterialOverride = mat,
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                // Fans are moved up to ~2 m by the shader.
+                ExtraCullMargin = 3,
+            };
+            root.AddChild(mi);
+            first ??= mi;
         }
-        var mi = new MeshInstance3D
-        {
-            Mesh = mesh,
-            MaterialOverride = Material(),
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            // Fans are moved up to ~2 m by the shader.
-            ExtraCullMargin = 3,
-        };
-        root.AddChild(mi);
-        return mi;
+        if (first == null) root.AddChild(first = new MeshInstance3D { MaterialOverride = mat });
+        return first;
     }
 }

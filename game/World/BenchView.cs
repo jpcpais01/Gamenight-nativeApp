@@ -35,10 +35,9 @@ public sealed class BenchView
     static readonly float DugX = Pitchside.Dugout.X, DugZ = Pitchside.Dugout.Y;
     static readonly float SeatZ = DugZ - 0.55f, FrontZ = DugZ + 0.95f, AreaZ = DugZ + 1.9f;
 
-    // The same tables as PlayersView: instances per player, shader part kinds, shadow casters.
+    // The same tables as PlayersView: instances per player, shader part kinds.
     static readonly int[] PerPlayer = { 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2 };
     static readonly int[] ShaderPart = { 1, 0, 0, 2, 0, 0, 0, 3, 4, 0, 5, 6, 7, 8 };
-    static readonly bool[] NoShadow = { false, false, true, false, true, true, true, false, true, true, true, false, false, true };
     static readonly Part[] HairOfStyle = { Part.HairShort, Part.HairShort, Part.HairCurly, Part.HairBun };
     const int Stride = 20;
 
@@ -117,7 +116,7 @@ public sealed class BenchView
 
     public BenchView(Node3D root, Kit home, Kit away, Coach coach = null)
     {
-        var meshes = BodyMeshes.Build();
+        var meshes = BodyMeshes.Build(0.5f);
         var shader = GD.Load<Shader>("res://Shaders/body.gdshader");
         var shaderDouble = GD.Load<Shader>("res://Shaders/body_double.gdshader");
         var mats = new ShaderMaterial[BodyMeshes.PartCount];
@@ -137,7 +136,8 @@ public sealed class BenchView
             {
                 Multimesh = _mm[k],
                 MaterialOverride = mats[k],
-                CastShadow = NoShadow[k] ? GeometryInstance3D.ShadowCastingSetting.Off : GeometryInstance3D.ShadowCastingSetting.On,
+                // Under the dugout roof or in its shade: no shadows to cast.
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                 ExtraCullMargin = 30,
             });
         }
