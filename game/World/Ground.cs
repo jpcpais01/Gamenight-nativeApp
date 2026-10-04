@@ -58,6 +58,10 @@ public abstract class Ground
     /// <summary>The substitutes' kits on the benches.</summary>
     protected BenchKit HomeKit = Pitchside.HomeKit, AwayKit = Pitchside.AwayKit;
     protected readonly ClubArt Art = new();
+    /// <summary>The giant hanging tifo, at grounds that have one.</summary>
+    protected GiantTifo Giant;
+    bool _showGiant, _debugHang;
+    float _drop;
 
     /// <summary>The player's club (set once by the app): its crest, motto and tifos dress the
     /// ground whenever it's the home side.</summary>
@@ -74,6 +78,10 @@ public abstract class Ground
     protected virtual void Setup() { }
 
     protected abstract void Build();
+
+    /// <summary>Drop the giant tifo now (true) or let it wind back up (false). It also comes
+    /// down by itself at each kick-off and goes back up once play is under way.</summary>
+    public void ShowGiantTifo(bool show = true) => _showGiant = show;
 
     /// <summary>Fans waving flags over a tier from a to b (offset, height), by the path's zones.</summary>
     protected void WaveFlags(List<PathPt> path, Vector2 a, Vector2 b) =>
@@ -185,6 +193,8 @@ public abstract class Ground
         Flags.Build(Root, bake, Art.Crest);
         if (GlowSpots.Length > 0) _glows = new GlowView(Root, GlowSpots);
         Root.AddChild(new Signage(ClubName, HomeColor, AwayColor, Banners, BoardArt, Paint, Art));
+        Giant?.Attach(Root, Art, ClubName, HomeColor, Art.Motto?.text ?? "ONE CLUB · ONE NIGHT");
+        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--hang") >= 0) { _debugHang = true; _drop = 1; }
         GD.Print($"Ground {GetType().Name}: {Static.Count / 3} triangles, {Crowd.Fans} fans, {Flags.Count} flags; built in {tBuild} ms, total {clock.ElapsedMilliseconds} ms");
         return this;
     }
@@ -221,6 +231,13 @@ public abstract class Ground
         float want = kickoff ? 1 : 0;
         _tifo += (want - _tifo) * (1 - Mathf.Exp(-dt * 2.5f));
         RenderingServer.GlobalShaderParameterSet("gn_tifo", _tifo);
+        // The giant tifo unrolls in about three seconds and is wound back up a little slower.
+        if (Giant != null)
+        {
+            float step = Mathf.Min(dt, 0.1f);
+            _drop = _showGiant || _debugHang || _tifo > 0.5f ? Mathf.Min(1, _drop + step / 3) : Mathf.Max(0, _drop - step / 4);
+            Giant.Set(_drop * _drop * (3 - 2 * _drop));
+        }
         _lastPhase = s.Phase;
     }
 

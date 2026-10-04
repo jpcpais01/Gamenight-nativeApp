@@ -31,26 +31,45 @@ public sealed partial class Signage : Node
     readonly Control _root;
     readonly Font _font;
     readonly ClubArt _art;
+    /// <summary>Where the finished picture goes (default: the gn_atlas global).</summary>
+    readonly Action<ImageTexture> _done;
     int _frames;
 
-    public Signage(string clubName, uint home, uint away, BannerArt[] banners, (string text, uint bg, uint fg)[] boards = null, Action<Signage> paint = null, ClubArt art = null)
+    /// <summary>A one-off picture of the given size, drawn by `paint` with the same helpers,
+    /// handed to `done` as a mipmapped texture once it has rendered.</summary>
+    public Signage(Vector2I size, Action<Signage> paint, Action<ImageTexture> done, ClubArt art = null)
     {
         _art = art ?? new ClubArt();
-        _vp = new SubViewport
+        _done = done;
+        (_vp, _root, _font) = Canvas(size);
+        paint(this);
+    }
+
+    (SubViewport, Control, Font) Canvas(Vector2I size)
+    {
+        var vp = new SubViewport
         {
-            Size = new Vector2I(1024, 1024),
+            Size = size,
             Disable3D = true,
             TransparentBg = false,
             RenderTargetUpdateMode = SubViewport.UpdateMode.Once,
             RenderTargetClearMode = SubViewport.ClearMode.Once,
         };
-        AddChild(_vp);
-        _root = new Control { Size = new Vector2(1024, 1024) };
-        _vp.AddChild(_root);
+        AddChild(vp);
+        var root = new Control { Size = size };
+        vp.AddChild(root);
         // The PWA's lettering (Barlow Condensed ExtraBold).
-        _font = ResourceLoader.Exists("res://Fonts/BarlowCondensed-ExtraBold.ttf")
+        var font = ResourceLoader.Exists("res://Fonts/BarlowCondensed-ExtraBold.ttf")
             ? GD.Load<Font>("res://Fonts/BarlowCondensed-ExtraBold.ttf")
             : new FontVariation { BaseFont = ThemeDB.FallbackFont, VariationEmbolden = 1.1f };
+        return (vp, root, font);
+    }
+
+    public Signage(string clubName, uint home, uint away, BannerArt[] banners, (string text, uint bg, uint fg)[] boards = null, Action<Signage> paint = null, ClubArt art = null)
+    {
+        _art = art ?? new ClubArt();
+        _done = tex => RenderingServer.GlobalShaderParameterSet("gn_atlas", tex);
+        (_vp, _root, _font) = Canvas(new Vector2I(1024, 1024));
 
         boards ??= Boards;
         for (int i = 0; i < 8; i++)
@@ -91,6 +110,11 @@ public sealed partial class Signage : Node
 
     public void Line(uint hex, float width, params Vector2[] pts) =>
         _root.AddChild(new Line2D { Points = pts, Width = width, DefaultColor = Col(hex), JointMode = Line2D.LineJointMode.Sharp });
+
+    public void Picture(Texture2D tex, Rect2 r) =>
+        _root.AddChild(new TextureRect { Texture = tex, Position = r.Position, Size = r.Size, ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale });
+
+    public void Poly(Color c, params Vector2[] pts) => _root.AddChild(new Polygon2D { Polygon = pts, Color = c });
 
     public void Poly(uint hex, params Vector2[] pts) => _root.AddChild(new Polygon2D { Polygon = pts, Color = Col(hex) });
 
@@ -234,7 +258,7 @@ public sealed partial class Signage : Node
         var img = _vp.GetTexture().GetImage();
         img.Convert(Image.Format.Rgba8);
         img.GenerateMipmaps();
-        RenderingServer.GlobalShaderParameterSet("gn_atlas", ImageTexture.CreateFromImage(img));
+        _done(ImageTexture.CreateFromImage(img));
         SetProcess(false);
         _vp.QueueFree();
     }

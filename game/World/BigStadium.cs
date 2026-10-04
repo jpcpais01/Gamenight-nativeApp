@@ -123,6 +123,7 @@ public sealed class BigStadium : Ground
 
         // TV gantry under the main roof.
         var mid = main[main.Count / 2];
+        Giant = new GiantTifo(mid, MainEdge - 0.4f, MainH - 2.7f);
         var gantryPos = mid.At(MainEdge + 9, RoofAt(MainBack, MainEdge, MainH, MainEdge + 9) - 2.6f);
         m.Hex(0x23272e);
         m.Box(new Transform3D(Basis.Identity, gantryPos), new Vector3(34, 1.6f, 2.2f));
