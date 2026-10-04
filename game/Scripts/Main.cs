@@ -209,7 +209,12 @@ public partial class Main : Node
         if (what == NotificationApplicationPaused || what == NotificationApplicationFocusOut) _pause.Open();
     }
 
-    public override void _ExitTree() => _runner?.Stop();
+    public override void _ExitTree()
+    {
+        _runner?.Stop();
+        // Left from the pause menu: the sound it stopped comes back for the menus.
+        if (Request?.Demo != true && GameAudio.Instance != null) GameAudio.Instance.Suspended = false;
+    }
 
     /// <summary>Tells the menus the match is over (full time, or left from the pause menu).</summary>
     void Report(bool finished)
