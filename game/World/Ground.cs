@@ -50,6 +50,8 @@ public abstract class Ground
     protected float FloodScale = 1f;
     /// <summary>Haze: fog start/end distance and strength.</summary>
     protected Vector2 FogRange = new(110, 340);
+    /// <summary>How far the camera sees (its far plane): further for a ground with a horizon to show.</summary>
+    public float ViewRange { get; protected set; } = 600;
     protected float Haze = 1f;
     /// <summary>The height map's extent (must cover every caster, the near stand included).</summary>
     protected Rect2 BakeArea = new(-130, -120, 260, 230);

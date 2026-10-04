@@ -66,7 +66,10 @@ public sealed class BuiltGround : Ground
     protected override void Setup()
     {
         // The builder's camera stands well back: thin the haze for it.
-        if (_preview) FogRange = new(260, 700);
+        FogRange = _preview ? new(320, 1500) : new(180, 1200);
+        // The city round it and the bay: green land, a long view.
+        Land = new Vector3(0x46, 0x5f, 0x35) / 255f;
+        ViewRange = 1800;
         // Room for the biggest sets' backs and towers in the sun's height map.
         BakeArea = new Rect2(-150, -140, 300, 280);
         Banners = new[]
@@ -230,6 +233,7 @@ public sealed class BuiltGround : Ground
             if (h >= 25) Giant = new GiantTifo(main.Path[main.Mid], at.X, at.Y, h / 38);
         }
 
+        Surroundings.Build(m, HomeColor);
         Pitchside.Tunnel(m, -Kit.BZ, Kit.DarkConcrete);
         Pitchside.AdBoards(m);
         Pitchside.CornerFlags(m);

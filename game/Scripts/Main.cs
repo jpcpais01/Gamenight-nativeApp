@@ -69,6 +69,7 @@ public partial class Main : Node
         _goals = new Goals(_view.WorldRoot);
         _delivery = new DeliveryView(_view.WorldRoot);
         _camera = new MatchCamera(_view.Camera);
+        _view.Camera.Far = _ground.ViewRange;
         if (Request?.Showcase == true) _camera.Showcase = 0;
 
         _hud = new Hud { Name = "Hud", View = _view };
@@ -283,6 +284,7 @@ public partial class Main : Node
         old.Root.GetParent()?.RemoveChild(old.Root);
         old.Root.QueueFree();
         _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup, Request?.HostCrest).AddTo(_view.WorldRoot);
+        _view.Camera.Far = _ground.ViewRange;
         Acoustics();
     }
 

@@ -11,7 +11,7 @@ render_mode unshaded, cull_disabled, shadows_disabled, depth_draw_opaque;
 const float LOOK_ROOF = 1.0, LOOK_GLASS = 2.0, LOOK_CURTAIN = 3.0, LOOK_FASCIA = 4.0, LOOK_RIBBON = 5.0,
 	LOOK_LAMP = 6.0, LOOK_ROOFLIGHT = 7.0, LOOK_BOARD = 8.0, LOOK_TIER = 9.0, LOOK_SCREEN = 10.0,
 	LOOK_CLOTH = 11.0, LOOK_STIPPLE = 12.0, LOOK_UNLIT = 13.0, LOOK_ARCADE = 14.0, LOOK_COFFER = 15.0, LOOK_WALL = 16.0, LOOK_BRICK = 17.0,
-	LOOK_DECAL = 18.0, LOOK_HOUSE = 19.0;
+	LOOK_DECAL = 18.0, LOOK_HOUSE = 19.0, LOOK_TOWER = 20.0, LOOK_SKYLINE = 21.0, LOOK_WATER = 22.0, LOOK_ROAD = 23.0;
 
 // The near stand's own draw (Ground.Near): cut where it would hide the pitch.
 uniform bool near_cut = false;
@@ -20,7 +20,6 @@ varying vec3 wpos;
 varying vec3 wnrm;
 varying flat float look;
 varying flat float par;
-varying float dist;
 
 vec2 px(vec2 p) { return p / 1024.0; }
 
@@ -41,7 +40,6 @@ void vertex() {
 	wpos = (MODEL_MATRIX * vec4(v, 1.0)).xyz;
 	wnrm = normalize((MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz);
 	VERTEX = v;
-	dist = length((MODELVIEW_MATRIX * vec4(v, 1.0)).xyz);
 }
 
 void fragment() {
@@ -51,6 +49,8 @@ void fragment() {
 	vec3 emis = vec3(0.0);
 	float lit = 1.0;
 	vec2 uv = UV;
+	// Light that carries through the haze (a far city's windows at night).
+	vec3 late = vec3(0.0);
 
 	if (look == LOOK_ROOF) {
 		// Sheeting seen from below: rafters across, purlins along.
@@ -170,6 +170,55 @@ void fragment() {
 		float on = step(0.55, world_hash(vec2(floor(s / 2.5), floor(y / 3.0)) + 3.3));
 		alb = mix(wall, vec3(0.01), win);
 		emis = vec3(1.0, 0.5, 0.17) * win * on * gn_flood * 0.9;
+	} else if (look == LOOK_TOWER || look == LOOK_SKYLINE) {
+		// Modern blocks (world-space layout along each face). par: 0 glass curtain wall, 1 ribbon
+		// windows, 2 punched windows. Dark sky-tinted glass by day, warm and cool rooms at night,
+		// shops lit along the ground floor. The skyline's cells are bigger and their light
+		// carries through the haze.
+		if (abs(wnrm.y) < 0.5) {
+			bool isfar = look == LOOK_SKYLINE;
+			float s = dot(wpos.xz, vec2(-wnrm.z, wnrm.x));
+			float y = wpos.y;
+			vec2 size = isfar ? vec2(4.0, 4.5) : vec2(3.0, 3.4);
+			vec2 cell = floor(vec2(s, y) / size);
+			vec2 f = fract(vec2(s, y) / size);
+			float win = par < 0.5 ? step(0.1, f.x) * step(0.14, f.y) * step(f.y, 0.92)
+				: par < 1.5 ? step(0.42, f.y) * step(f.y, 0.86)
+				: step(0.25, f.x) * step(f.x, 0.75) * step(0.3, f.y) * step(f.y, 0.86);
+			float block = world_hash(floor(wpos.xz / 40.0) + cell.y * 0.0);
+			float on = step(0.52 + 0.2 * block, world_hash(cell + floor(wpos.xz / 23.0) * 1.7));
+			vec3 room = mix(vec3(1.0, 0.68, 0.36), vec3(0.72, 0.84, 1.0), step(0.72, world_hash(cell + 5.1)));
+			alb = mix(alb, mix(vec3(0.03, 0.04, 0.06), alb * 0.35, 0.3), win * (isfar ? 0.7 : 1.0));
+			emis = gn_amb_sky * 0.12 * win;
+			vec3 night = room * win * on * smoothstep(0.15, 0.7, gn_night);
+			if (isfar) late = night * 0.55;
+			else emis += night * 0.85 + vec3(1.0, 0.78, 0.5) * win * step(y, 4.2) * (0.12 + 0.8 * gn_night);
+		} else {
+			alb *= 0.82;
+		}
+	} else if (look == LOOK_WATER) {
+		// The sea: the sky and the haze in it at a glance, rippling, the sun's path glittering.
+		vec3 v = normalize(wpos - CAMERA_POSITION_WORLD);
+		vec2 p = wpos.xz;
+		float w1 = sin(p.x * 0.11 + p.y * 0.07 + TIME * 0.8), w2 = sin(p.y * 0.13 - p.x * 0.05 + TIME * 1.1);
+		vec3 wn = normalize(vec3(w1 * 0.05, 1.0, w2 * 0.05));
+		float fres = pow(1.0 - clamp(-v.y, 0.0, 1.0), 3.0);
+		vec3 r = reflect(v, wn);
+		float sun = pow(max(dot(r, -gn_sun_dir), 0.0), 60.0);
+		float glint = step(0.93, world_hash(floor(p / 3.0) + floor(TIME * 1.7 + world_hash(floor(p / 3.0)) * 7.0)));
+		vec3 skyc = mix(gn_fog, gn_amb_sky * 1.5, 0.35);
+		emis = alb * (gn_amb_sky + gn_sun * 0.25) + skyc * (0.18 + 0.62 * fres);
+		emis += gn_sun * (sun * 1.6 + glint * pow(max(dot(r, -gn_sun_dir), 0.0), 8.0) * 1.2) * (1.0 - 0.7 * gn_rain);
+		emis += gn_flood_col * glint * gn_night * 0.06;
+		alb = vec3(0.0);
+	} else if (look == LOOK_ROAD) {
+		// Asphalt (uv: along, across in metres; par: width). A dashed centre line and edge lines;
+		// par < 0: a car park, rows of bays (2.6 m) either side of a 6 m aisle every 16 m.
+		float w = abs(par);
+		float line = par > 0.0
+			? max(step(abs(uv.y - w * 0.5), 0.12) * step(0.5, fract(uv.x / 6.0)), step(min(uv.y, w - uv.y), 0.3) * step(0.0, min(uv.y, w - uv.y) - 0.15))
+			: step(fract(uv.x / 2.6), 0.05) * (1.0 - step(5.0, mod(uv.y, 16.0)) * step(mod(uv.y, 16.0), 11.0));
+		alb = mix(alb * (0.92 + 0.08 * world_hash(floor(uv * 0.7))), vec3(0.7, 0.68, 0.6), line);
 	} else if (look == LOOK_UNLIT) {
 		emis = alb;
 		alb = vec3(0.0);
@@ -180,5 +229,6 @@ void fragment() {
 	alb *= 1.0 - 0.28 * gn_rain;
 	light += gn_flood_col * gn_flood * 0.22 * gn_rain * max(n.y, 0.0);
 	vec3 c = alb * light * lit + emis;
-	ALBEDO = world_fog(c, dist, 0.06);
+	// The distance from the eye per pixel (not per vertex: the land and the sea are a few huge triangles).
+	ALBEDO = world_fog(c, length(wpos - CAMERA_POSITION_WORLD), 0.06) + late;
 }
