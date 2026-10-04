@@ -17,6 +17,12 @@ public static class MatchSettings
     /// <summary>Fast graphics: no sun shadows.</summary>
     public static bool Fast;
     public static bool Sound = true;
+    /// <summary>The frame rate limit the player picked: 60, 90 or 120.</summary>
+    public static int FpsCap = 120;
+    public static readonly int[] FpsCaps = { 60, 90, 120 };
+
+    /// <summary>Holds the game to the picked limit.</summary>
+    public static void ApplyFpsCap() => Engine.MaxFps = FpsCap;
 
     public static void Load()
     {
@@ -28,6 +34,8 @@ public static class MatchSettings
         Profile = ShowFps && (bool)cfg.GetValue("match", "profile", false);
         Fast = (bool)cfg.GetValue("match", "fast", false);
         Sound = (bool)cfg.GetValue("match", "sound", true);
+        FpsCap = (int)cfg.GetValue("match", "fpscap", 120);
+        if (System.Array.IndexOf(FpsCaps, FpsCap) < 0) FpsCap = 120;
     }
 
     public static void Save()
@@ -39,6 +47,7 @@ public static class MatchSettings
         cfg.SetValue("match", "profile", Profile);
         cfg.SetValue("match", "fast", Fast);
         cfg.SetValue("match", "sound", Sound);
+        cfg.SetValue("match", "fpscap", FpsCap);
         cfg.Save(Path);
     }
 }

@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.21", "FPS LIMIT in the pause menu: pick 60, 90 or 120 frames a second. A lower limit keeps the phone cooler and the battery fuller; it is remembered between matches."),
         ("0.20", "Back to 120 fps: the 0.17 frame pacing change held the game at 60 to 70 fps even though the phone had plenty of headroom. Android frame pacing is now off, so every frame is shown as soon as it is ready at the screen's full rate."),
         ("0.19", "Lighter players: each figure uses fewer facets (the same look at pixel size), and the referee's team no longer draws 19 invisible bodies, cutting most of the triangles the players and their shadows cost."),
         ("0.18", "The FOUL button is back beside pause, like the browser game: tap it for a free kick to you where the ball is."),

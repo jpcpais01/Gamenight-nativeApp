@@ -148,6 +148,7 @@ public sealed partial class Profiler : Control
     public void End(double delta)
     {
         if (!_on) return;
+        if (_frames % 60 == 0) _budget = Budget();
         Spikes(delta);
         _frames++;
         _t += delta;
@@ -199,6 +200,13 @@ public sealed partial class Profiler : Control
         QueueRedraw();
     }
 
+    /// <summary>A frame's time at the screen's refresh rate, or at the FPS limit when that is lower.</summary>
+    static double Budget()
+    {
+        float hz = DisplayServer.ScreenGetRefreshRate();
+        return 1000.0 / Math.Min(hz > 0 ? hz : 120, Engine.MaxFps > 0 ? Engine.MaxFps : 1000);
+    }
+
     void ResetSpikes()
     {
         for (int i = 0; i < Hist; i++) _hist[i] = new Rec { V = new float[Ch], Context = "" };
@@ -210,9 +218,7 @@ public sealed partial class Profiler : Control
         _gcPause = GC.GetTotalPauseDuration().TotalMilliseconds;
         for (int g = 0; g < 3; g++) _gcCount[g] = GC.CollectionCount(g);
         _compiles = Compiles();
-        float hz = DisplayServer.ScreenGetRefreshRate();
-        _budget = 1000.0 / (hz > 0 ? hz : 120);
-        _median = _budget;
+        _budget = _median = Budget();
     }
 
     static double Compiles() =>

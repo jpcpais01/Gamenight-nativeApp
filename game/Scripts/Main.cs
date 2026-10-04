@@ -51,9 +51,9 @@ public partial class Main : Node
 
     public override void _Ready()
     {
-        Engine.MaxFps = 0;
         DisplayServer.ScreenSetKeepOn(true);
         MatchSettings.Load();
+        MatchSettings.ApplyFpsCap();
         Kick.PrepareGroundPasses();
 
         _view = new PixelView();

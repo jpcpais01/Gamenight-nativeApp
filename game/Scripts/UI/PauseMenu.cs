@@ -27,7 +27,7 @@ public sealed partial class PauseMenu : Control
     readonly Control _menu;
     readonly VBoxContainer _card;
     readonly Button _foul;
-    readonly Button _camera, _graphics, _pixels, _weather, _fps, _sound, _leave, _report;
+    readonly Button _camera, _graphics, _pixels, _weather, _fps, _limit, _sound, _leave, _report;
 
     public bool IsOpen => _menu.Visible;
 
@@ -109,9 +109,17 @@ public sealed partial class PauseMenu : Control
         _sound = Ghost("");
         _sound.Pressed += () => { MatchSettings.Sound = !MatchSettings.Sound; Changed(); };
         card.AddChild(Row(_fps, _sound));
+        _limit = Ghost("");
+        _limit.Pressed += () =>
+        {
+            var caps = MatchSettings.FpsCaps;
+            MatchSettings.FpsCap = caps[(Array.IndexOf(caps, MatchSettings.FpsCap) + 1) % caps.Length];
+            MatchSettings.ApplyFpsCap();
+            Changed();
+        };
         _report = Ghost("SAVE PERFORMANCE REPORT");
         _report.Pressed += () => { if (SaveReport != null) _report.Text = SaveReport(); };
-        card.AddChild(_report);
+        card.AddChild(Row(_limit, _report));
         Labels();
     }
 
@@ -190,6 +198,7 @@ public sealed partial class PauseMenu : Control
         int scale = Math.Max(1, (int)MathF.Round(Render.PixelView.ScreenPixels().Y / (float)h));
         _pixels.Text = $"PIXELS: {h} · {scale}X";
         _fps.Text = "FPS COUNTER: " + (!MatchSettings.ShowFps ? "OFF" : MatchSettings.Profile ? "DETAIL" : "ON");
+        _limit.Text = $"FPS LIMIT: {MatchSettings.FpsCap}";
         _sound.Text = "SOUND: " + (MatchSettings.Sound ? "ON" : "OFF");
         _weather.Visible = WeatherName != null;
         _report.Visible = MatchSettings.ShowFps && MatchSettings.Profile && SaveReport != null;

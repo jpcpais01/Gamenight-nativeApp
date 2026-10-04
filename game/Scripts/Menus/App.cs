@@ -27,7 +27,8 @@ public sealed partial class App : Node
 
     public override void _Ready()
     {
-        Engine.MaxFps = 0;
+        UI.MatchSettings.Load();
+        UI.MatchSettings.ApplyFpsCap();
         DisplayServer.ScreenSetKeepOn(true);
         GetTree().QuitOnGoBack = false;
         GetTree().AutoAcceptQuit = true;
