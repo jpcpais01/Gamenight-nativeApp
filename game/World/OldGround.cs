@@ -27,7 +27,7 @@ public sealed class OldGround : Ground
     // Atlas: the gable (16 x 5 m) and the clock (12 x 4.5 m), side by side under the ribbon.
     static readonly Rect2 GablePx = new(0, 640, 410, 128), ClockPx = new(512, 640, 341, 128);
 
-    public OldGround()
+    protected override void Setup()
     {
         BoardArt = new (string, uint, uint)[]
         {
@@ -233,7 +233,7 @@ public sealed class OldGround : Ground
         Town(m);
         Pitchside.AdBoards(m);
         Pitchside.CornerFlags(m);
-        Pitchside.Dugouts(m, Pitchside.HomeKit, Pitchside.AwayKit);
+        Pitchside.Dugouts(m, HomeKit, AwayKit);
         var all = new List<PathPt>(main);
         all.AddRange(shed);
         all.AddRange(away);
@@ -306,7 +306,7 @@ public sealed class OldGround : Ground
         s.Rect(new Rect2(P(0, 153), new Vector2(GablePx.Size.X, 7 * k)), HomeColor);
         s.Line(0x14123a, 3 * k, P(40, 146), P(256, 16), P(472, 146));
         s.Crest(P(256, 80), 74 * k, HomeColor);
-        s.Text(new Rect2(P(150, 120), new Vector2(212 * k, 32 * k)), "EST. 1903", 0x14123a, 22);
+        s.Text(new Rect2(P(150, 120), new Vector2(212 * k, 32 * k)), string.IsNullOrWhiteSpace(Art.Founded) ? "FOOTBALL CLUB" : $"EST. {Art.Founded}", 0x14123a, 22);
 
         // The clock: quarter to eight (kick-off), the club's name, a welcome.
         x0 = ClockPx.Position.X; y0 = ClockPx.Position.Y; k = ClockPx.Size.X / 512f;

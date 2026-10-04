@@ -33,7 +33,7 @@ public sealed class BigStadium : Ground
 
     const uint Concrete = 0x8b8f96, DarkConcrete = 0x5c6068, RoofCol = 0x30353d, Panels = 0xaab6c0, Steel = 0x4a5058;
 
-    public BigStadium()
+    protected override void Setup()
     {
         Banners = new[]
         {
@@ -160,7 +160,7 @@ public sealed class BigStadium : Ground
 
         Pitchside.AdBoards(m);
         Pitchside.CornerFlags(m);
-        Pitchside.Dugouts(m, Pitchside.HomeKit, Pitchside.AwayKit);
+        Pitchside.Dugouts(m, HomeKit, AwayKit);
         RailBanners(m, path, 20.9f, 13.7f, 34, 4.2f);
 
         // ---- the crowd

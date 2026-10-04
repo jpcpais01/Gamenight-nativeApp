@@ -2,9 +2,20 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Godot;
+using GameNight.Club;
+using GameNight.Menus;
 using GameNight.Sim;
 
 namespace GameNight.Grounds;
+
+/// <summary>What a ground shows of the home club beyond its colours: crest, founding year,
+/// motto banner and the supporters' own tifo pictures (any may be missing).</summary>
+public sealed class ClubArt
+{
+    public Texture2D Crest, EndTifo, GiantTifo;
+    public string Founded = "1903";
+    public (string text, uint bg, uint fg)? Motto;
+}
 
 /// <summary>
 /// A ground: everything round the pitch (stands, roofs, floodlights, boards, dugouts, the
@@ -43,6 +54,13 @@ public abstract class Ground
 
     public uint HomeColor = 0xc8393b, AwayColor = 0x2a4a8c;
     public string ClubName = "Rossoneri";
+    /// <summary>The substitutes' kits on the benches.</summary>
+    protected BenchKit HomeKit = Pitchside.HomeKit, AwayKit = Pitchside.AwayKit;
+    protected readonly ClubArt Art = new();
+
+    /// <summary>The player's club (set once by the app): its crest, motto and tifos dress the
+    /// ground whenever it's the home side.</summary>
+    public static ClubState Club;
 
     GlowView _glows;
     int _goalTeam = -1;
@@ -50,6 +68,9 @@ public abstract class Ground
     Phase _lastPhase;
     float _tifo;
     int _lastScore0, _lastScore1;
+
+    /// <summary>Names, colours and art that depend on the clubs (runs before anything is built).</summary>
+    protected virtual void Setup() { }
 
     protected abstract void Build();
 
@@ -80,23 +101,51 @@ public abstract class Ground
     /// <summary>Banks that get a visible glow (default: all of them).</summary>
     protected virtual Vector3[] GlowSpots => Lamps;
 
-    /// <summary>Builds the ground with this id; debug `-- --ground=id` overrides it.</summary>
-    public static Ground Create(string id)
+    /// <summary>Builds the ground with this id, in the colours of the match's two clubs (the
+    /// home side's shirt for the home fans and the stadium, the visitors' for the away end).
+    /// Debug: `-- --ground=id` overrides the id.</summary>
+    public static Ground Create(string id, MatchSetup setup = null)
     {
         foreach (var arg in OS.GetCmdlineUserArgs())
             if (arg.StartsWith("--ground=")) id = arg[9..];
-        return id switch
+        Ground g = id switch
         {
             "comunale" => new Comunale(),
             "old" => new OldGround(),
             "training" => new TrainingGround(),
             _ => new BigStadium(),
         };
+        g.Dress(setup);
+        return g;
+    }
+
+    void Dress(MatchSetup setup)
+    {
+        if (setup?.Teams is { Length: 2 } t && t[0] != null && t[1] != null)
+        {
+            GameNight.Sim.Kit h = t[0].Info.Kit, a = t[1].Info.Kit;
+            HomeColor = (uint)h.Shirt;
+            AwayColor = (uint)a.Shirt;
+            if (!string.IsNullOrWhiteSpace(t[0].Info.Name)) ClubName = t[0].Info.Name;
+            HomeKit = new((uint)h.Shirt, (uint)h.Shorts, (uint)h.Socks, (uint)h.GkShirt);
+            AwayKit = new((uint)a.Shirt, (uint)a.Shorts, (uint)a.Socks, (uint)a.GkShirt);
+        }
+        var club = Club?.S;
+        if (club == null || setup?.Teams?[0] != null && setup.Teams[0].Info.Name != club.Name) return;
+        Art.Crest = CrestArt.Texture(club.Crest, 256);
+        Art.Founded = club.Crest.Year ?? "";
+        var (text, bg, fg) = Club.BannerColors();
+        if (!string.IsNullOrWhiteSpace(text)) Art.Motto = (text.ToUpperInvariant(), (uint)bg, (uint)fg);
+        Art.EndTifo = Tifos.Texture(TifoKind.End);
+        Art.GiantTifo = Tifos.Texture(TifoKind.Giant);
     }
 
     /// <summary>Builds the ground under `parent`: geometry, baked light, crowd, signage.</summary>
     public Ground AddTo(Node3D parent)
     {
+        Setup();
+        // The motto is the ultras' big drop banner (the last banner slot).
+        if (Art.Motto is var (mt, mbg, mfg) && Banners.Length >= 10) Banners[9] = new BannerArt(mt, mbg, mfg, 2);
         parent.AddChild(Root);
         Atmosphere = new Atmosphere(Root) { FloodScale = FloodScale };
         RenderingServer.GlobalShaderParameterSet("gn_home", Lin(HomeColor));
@@ -129,7 +178,7 @@ public abstract class Ground
         Root.AddChild(mi);
         Crowd.Build(Root, bake);
         if (GlowSpots.Length > 0) _glows = new GlowView(Root, GlowSpots);
-        Root.AddChild(new Signage(ClubName, HomeColor, AwayColor, Banners, BoardArt, Paint));
+        Root.AddChild(new Signage(ClubName, HomeColor, AwayColor, Banners, BoardArt, Paint, Art));
         GD.Print($"Ground {GetType().Name}: {Static.Count / 3} triangles, {Crowd.Fans} fans; built in {tBuild} ms, total {clock.ElapsedMilliseconds} ms");
         return this;
     }

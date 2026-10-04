@@ -30,7 +30,7 @@ public sealed class Comunale : Ground
         Steel = 0x3e444c, Terracotta = 0xa4532f, FinStone = 0xe8c29a;
     const float Concourse = 3.6f + 3000, Facade = 4.5f + 7500;
 
-    public Comunale()
+    protected override void Setup()
     {
         BoardArt = new (string, uint, uint)[]
         {
@@ -189,7 +189,7 @@ public sealed class Comunale : Ground
 
         Pitchside.AdBoards(m);
         Pitchside.CornerFlags(m);
-        Pitchside.Dugouts(m, Pitchside.HomeKit, Pitchside.AwayKit);
+        Pitchside.Dugouts(m, HomeKit, AwayKit);
         RailBanners(m, path, 20.9f, 13.7f, 34, 4.2f);
 
         float lowerSlope = (Lower1 - Lower0).Length();

@@ -17,7 +17,7 @@ public sealed class TrainingGround : Ground
     const uint White = 0xe8eae6, Trim = 0x2b3036, NetPole = 0x23332a, NetCol = 0x18241d;
     static readonly Rect2 SignPx = new(0, 640, 1024, 64);
 
-    public TrainingGround()
+    protected override void Setup()
     {
         Land = new Vector3(0x55, 0x7a, 0x3c) / 255f;
         FloodScale = 0.75f;
@@ -128,7 +128,7 @@ public sealed class TrainingGround : Ground
         Lamps = lamps.ToArray();
 
         Pitchside.CornerFlags(m);
-        Pitchside.Dugouts(m, Pitchside.HomeKit, Pitchside.AwayKit);
+        Pitchside.Dugouts(m, HomeKit, AwayKit);
         Trees(m);
     }
 

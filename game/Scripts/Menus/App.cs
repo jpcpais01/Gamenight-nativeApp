@@ -32,6 +32,7 @@ public sealed partial class App : Node
         Px.LoadFonts();
         Kick.PrepareGroundPasses();
         _club = new ClubState(OS.GetUserDataDir());
+        global::GameNight.Grounds.Ground.Club = _club;
 
         _layer = new CanvasLayer { Layer = 10 };
         AddChild(_layer);

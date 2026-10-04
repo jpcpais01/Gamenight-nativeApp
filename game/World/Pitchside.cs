@@ -4,7 +4,7 @@ using Godot;
 namespace GameNight.Grounds;
 
 /// <summary>A team's kit as the substitutes wear it (sRGB).</summary>
-public record struct Kit(uint Shirt, uint Shorts, uint Socks, uint Keeper);
+public record struct BenchKit(uint Shirt, uint Shorts, uint Socks, uint Keeper);
 
 /// <summary>What stands round the touchlines at any ground: LED boards, corner flags, the
 /// dugouts with the substitutes on the benches, the players' tunnel. Built into the static
@@ -14,8 +14,8 @@ public static class Pitchside
     public const float HL = 52.5f, HW = 34f, GoalHalf = 3.66f;
     /// <summary>Dugout centre: team 0's at -x, team 1's at +x, on the far touchline (the PWA's bench.ts).</summary>
     public static readonly Vector2 Dugout = new(9, -(HW + 2.6f));
-    public static readonly Kit HomeKit = new(0xc8393b, 0xf3ede0, 0xc8393b, 0xe9c24a);
-    public static readonly Kit AwayKit = new(0xf1ebdc, 0x23345e, 0xf1ebdc, 0x2ba59a);
+    public static readonly BenchKit HomeKit = new(0xc8393b, 0xf3ede0, 0xc8393b, 0xe9c24a);
+    public static readonly BenchKit AwayKit = new(0xf1ebdc, 0x23345e, 0xf1ebdc, 0x2ba59a);
     static readonly uint[] Skins = { 0xf0c8a8, 0xe0aa80, 0xc68a5c, 0x9a6440, 0x6e4426, 0x4a2c18 };
     static readonly uint[] Hairs = { 0x15100c, 0x2a1c12, 0x4a3018, 0x7a5a30, 0xb08850, 0x0c0a08 };
 
@@ -84,7 +84,7 @@ public static class Pitchside
     }
 
     /// <summary>The two dugouts on the far touchline, the substitutes sat on the benches.</summary>
-    public static void Dugouts(MeshData m, Kit home, Kit away)
+    public static void Dugouts(MeshData m, BenchKit home, BenchKit away)
     {
         var rng = new Random(77);
         foreach (int side in new[] { -1, 1 })

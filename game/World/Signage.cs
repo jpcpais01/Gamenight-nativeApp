@@ -30,10 +30,12 @@ public sealed partial class Signage : Node
     readonly SubViewport _vp;
     readonly Control _root;
     readonly Font _font;
+    readonly ClubArt _art;
     int _frames;
 
-    public Signage(string clubName, uint home, uint away, BannerArt[] banners, (string text, uint bg, uint fg)[] boards = null, Action<Signage> paint = null)
+    public Signage(string clubName, uint home, uint away, BannerArt[] banners, (string text, uint bg, uint fg)[] boards = null, Action<Signage> paint = null, ClubArt art = null)
     {
+        _art = art ?? new ClubArt();
         _vp = new SubViewport
         {
             Size = new Vector2I(1024, 1024),
@@ -127,6 +129,15 @@ public sealed partial class Signage : Node
     /// <summary>The club crest stand-in: a shield in the club colour with a gold star, `h` px tall.</summary>
     public void Crest(Vector2 c, float h, uint home)
     {
+        if (_art.Crest != null)
+        {
+            _root.AddChild(new TextureRect
+            {
+                Texture = _art.Crest, Position = c - new Vector2(h, h) / 2, Size = new Vector2(h, h),
+                ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.KeepAspectCentered,
+            });
+            return;
+        }
         float k = h / 150f;
         Vector2 P(float x, float y) => c + new Vector2(x, y) * k;
         Poly(0xf4efe2, P(-60, -75), P(60, -75), P(60, 15), P(0, 75), P(-60, 15));
@@ -140,10 +151,7 @@ public sealed partial class Signage : Node
         Rect(r, 0x0b1024);
         Rect(new Rect2(512, 144, 512, 100), 0x1a1640);
         Rect(new Rect2(512, 244, 512, 44), home);
-        // A crest stand-in: a shield in the club colour with a gold star.
-        Poly(0xf4efe2, new(708, 30), new(828, 30), new(828, 120), new(768, 180), new(708, 120));
-        Poly(home, new(716, 38), new(820, 38), new(820, 116), new(768, 168), new(716, 116));
-        Star(new Vector2(768, 96), 18, 42, 0xffd447);
+        Crest(new Vector2(768, 105), 150, home);
         Text(new Rect2(512, 244, 512, 44), name.ToUpperInvariant(), 0xffffff, 34);
         // LED pixel grid.
         for (int x = 0; x < 512; x += 4) Rect(new Rect2(512 + x, 0, 1, 288), 0x000000, 0.22f);
@@ -164,6 +172,9 @@ public sealed partial class Signage : Node
         Text(new Rect2(x0 + 40, y0 + 34, 432, 92), name.ToUpperInvariant(), 0xffd447, 92, 0x14123a, 10);
         Star(new Vector2(x0 + 30, y0 + 80), 8, 20, 0xffd447);
         Star(new Vector2(x0 + 482, y0 + 80), 8, 20, 0xffd447);
+        // The supporters' own picture, when they've made one.
+        if (_art.EndTifo != null)
+            _root.AddChild(new TextureRect { Texture = _art.EndTifo, Position = new Vector2(x0, y0), Size = new Vector2(512, 160), ExpandMode = TextureRect.ExpandModeEnum.IgnoreSize, StretchMode = TextureRect.StretchModeEnum.Scale });
     }
 
     void AwayTifo(uint away)
