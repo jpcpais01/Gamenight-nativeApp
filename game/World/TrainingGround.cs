@@ -128,7 +128,7 @@ public sealed class TrainingGround : Ground
         Lamps = lamps.ToArray();
 
         Pitchside.CornerFlags(m);
-        Pitchside.Dugouts(m, HomeKit, AwayKit);
+        Dugouts(m);
         Trees(m);
     }
 

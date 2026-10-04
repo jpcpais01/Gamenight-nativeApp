@@ -60,8 +60,14 @@ public abstract class Ground
     protected bool HasScreen;
     protected readonly FanBanners FanBanners = new();
     ScreenView _screen;
-    /// <summary>The substitutes' kits on the benches.</summary>
-    protected BenchKit HomeKit = Pitchside.HomeKit, AwayKit = Pitchside.AwayKit;
+    /// <summary>The two sides' kits (the substitutes on the benches wear them).</summary>
+    readonly GameNight.Sim.Kit[] _kits =
+    {
+        new() { Shirt = 0xc8393b, Shirt2 = 0xf3ede0, Shorts = 0xf3ede0, Socks = 0xc8393b, GkShirt = 0xe9c24a, GkShorts = 0x1d1d1d },
+        new() { Shirt = 0xf1ebdc, Shirt2 = 0x23345e, Shorts = 0x23345e, Socks = 0xf1ebdc, GkShirt = 0x2ba59a, GkShorts = 0x1d1d1d },
+    };
+    bool _hasBench;
+    BenchView _bench;
     protected readonly ClubArt Art = new();
     /// <summary>The giant hanging tifo, at grounds that have one.</summary>
     protected GiantTifo Giant;
@@ -161,8 +167,8 @@ public abstract class Ground
             if (!string.IsNullOrWhiteSpace(t[0].Info.Name)) ClubName = t[0].Info.Name;
             if (!string.IsNullOrWhiteSpace(t[0].Info.Short)) HomeShort = t[0].Info.Short;
             if (!string.IsNullOrWhiteSpace(t[1].Info.Short)) AwayShort = t[1].Info.Short;
-            HomeKit = new((uint)h.Shirt, (uint)h.Shorts, (uint)h.Socks, (uint)h.GkShirt);
-            AwayKit = new((uint)a.Shirt, (uint)a.Shorts, (uint)a.Socks, (uint)a.GkShirt);
+            _kits[0] = h;
+            _kits[1] = a;
         }
         var club = Club?.S;
         if (club == null || setup?.Teams?[0] != null && setup.Teams[0].Info.Name != club.Name) return;
@@ -173,6 +179,13 @@ public abstract class Ground
         Art.EndTifo = Tifos.Texture(TifoKind.End);
         Art.GiantTifo = Tifos.Texture(TifoKind.Giant);
         Art.FanTifo = Tifos.Texture(TifoKind.Fan);
+    }
+
+    /// <summary>The dugouts, with the substitutes and the managers in them.</summary>
+    protected void Dugouts(MeshData m)
+    {
+        Pitchside.Dugouts(m);
+        _hasBench = true;
     }
 
     /// <summary>Builds the ground under `parent`: geometry, baked light, crowd, signage.</summary>
@@ -225,6 +238,7 @@ public abstract class Ground
         Root.AddChild(new Signage(ClubName, HomeColor, AwayColor, Banners, BoardArt, Paint, Art));
         Giant?.Attach(Root, Art, ClubName, HomeColor, Art.Motto?.text ?? "ONE CLUB · ONE NIGHT");
         FanBanners.Build(Root, Art.FanTifo, HomeColor);
+        if (_hasBench) _bench = new BenchView(Root, _kits[0], _kits[1]);
         if (HasScreen) Root.AddChild(_screen = new ScreenView(ClubName, HomeShort, AwayShort, HomeColor, AwayColor, Art));
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--hang") >= 0) { _debugHang = true; _drop = 1; }
         GD.Print($"Ground {GetType().Name}: {Static.Count / 3} triangles, {Crowd.Fans} fans, {Flags.Count} flags; built in {tBuild} ms, total {clock.ElapsedMilliseconds} ms");
@@ -269,6 +283,7 @@ public abstract class Ground
         RenderingServer.GlobalShaderParameterSet("gn_goal", since < 20 ? new Vector2(_goalTeam, (float)since) : new Vector2(-1, 100));
         _screen?.Show(s.Score[0], s.Score[1], s.Minute, since < 8 ? _goalTeam : -1, (int)(since * 3) % 2 == 0);
         RenderingServer.GlobalShaderParameterSet("gn_excite", s.Excitement);
+        _bench?.Update(s, dt);
         RenderingServer.GlobalShaderParameterSet("gn_chant", terraces == null ? Vector4.Zero : new Vector4(terraces.Home, terraces.Away, terraces.Beat, terraces.Arms));
         if (_fx != null)
         {
