@@ -256,7 +256,6 @@ public partial class Main : Node
         {
             GameAudio.Instance.Suspended = false;
             GameAudio.Instance.SetRain(false);
-            GameAudio.Instance.SetTension(0);
             GameAudio.Instance.SetVenue(Venue.Default);
         }
     }

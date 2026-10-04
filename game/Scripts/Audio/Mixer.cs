@@ -37,6 +37,8 @@ public sealed class Mixer
     /// <summary>The terraces' overall level (menus sink it).</summary>
     public readonly Param EndsGain = new(1);
     public bool CrowdOn = true;
+    /// <summary>The crowd's soundtrack, mixed into the ends and the stands each block.</summary>
+    public CrowdScore Score;
     double _crowdOffAt = double.MaxValue;
 
     readonly Compressor _master, _limiter;
@@ -192,6 +194,7 @@ public sealed class Mixer
         }
         _scale += (_scaleT - _scale) * ease;
         bool crowd = CrowdOn || t0 < _crowdOffAt;
+        if (crowd) Score?.Render(_e0, _e1, _wL, _wR, t0, Sr);
 
         for (int k = _voices.Count - 1; k >= 0; k--)
         {
@@ -235,7 +238,7 @@ public sealed class Mixer
             l *= mg;
             r *= mg;
             float comp = _master.Gain(MathF.Max(MathF.Abs(l), MathF.Abs(r)));
-            outBuf[i] = new Godot.Vector2(Math.Clamp(l * comp, -1, 1), Math.Clamp(r * comp, -1, 1));
+            outBuf[i] = new Godot.Vector2(Soft(l * comp), Soft(r * comp));
         }
         _frames += Block;
     }
@@ -348,6 +351,13 @@ public sealed class Mixer
     }
 
     /// <summary>A sawtooth with its step smoothed (polyBLEP), so the high ones don't alias.</summary>
+    /// <summary>Clean up to 0.8, then rounded off into full scale (a roar never cracks).</summary>
+    static float Soft(float x)
+    {
+        float a = MathF.Abs(x);
+        return a <= 0.8f ? x : MathF.Sign(x) * (0.8f + 0.2f * MathF.Tanh((a - 0.8f) / 0.2f));
+    }
+
     internal static float Saw(double p, float dp)
     {
         double q = p + 0.5;

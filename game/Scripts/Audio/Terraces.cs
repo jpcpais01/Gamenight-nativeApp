@@ -73,6 +73,8 @@ public sealed class TerraceCue
     public Singing Singing;
     public float Level;
     public Reaction[] Reactions;
+    /// <summary>The mood: how close each team is to scoring, the match's excitement, the home end stunned.</summary>
+    public float Danger0, Danger1, Excitement, Hush;
 }
 
 /// <summary>A flare or smoke bomb in an end (for the stadium's visuals).</summary>
@@ -270,6 +272,7 @@ public sealed class Terraces
 
         // Ambient pyro: an occasional flare as the night goes on, more when it's tense.
         float ex = m.Excitement;
+        _excite = ex;
         float rate = (0.012f + 0.05f * ex) * (m.Phase == Phase.Play ? 1 : 0.4f);
         if (Rnd() < rate * dt && Pyro.Count < 9) Light(Rnd() < 0.7f ? 0 : 1, Rnd() < 0.08f, 14 + Rnd() * 18);
         Pyro.RemoveAll(f => t - f.Born >= f.Life);
@@ -381,10 +384,12 @@ public sealed class Terraces
         }
     }
 
-    /// <summary>A reaction, `delay` seconds from now.</summary>
+    float _excite;
+
     /// <summary>A reaction cued from outside the director (the pitch invader).</summary>
     public void Cue(React kind, int end, double delay, float level, float dur = 0) => Add(kind, end, delay, level, dur);
 
+    /// <summary>A reaction, `delay` seconds from now.</summary>
     void Add(React kind, int end, double delay, float level, float dur = 0)
     {
         if (dur <= 0)
@@ -525,6 +530,7 @@ public sealed class Terraces
         {
             T = T, Singing = Singing, Level = Singing?.Level ?? 0,
             Reactions = _new.Count > 0 ? _new.ToArray() : Array.Empty<Reaction>(),
+            Danger0 = Danger[0], Danger1 = Danger[1], Excitement = _excite, Hush = Hush,
         };
         _new.Clear();
         return c;
@@ -534,7 +540,11 @@ public sealed class Terraces
     void StartSong(int end, MatchSnapshot m)
     {
         int lead = m.Score[end] - m.Score[1 - end];
-        Chant Pick(params string[] names) => Array.Find(Chants, c => c.Name == names[(int)(Rnd() * names.Length)]);
+        Chant Pick(params string[] names)
+        {
+            string name = names[(int)(Rnd() * names.Length) % names.Length];
+            return Array.Find(Chants, c => c.Name == name);
+        }
         var chant = end == 1 ? Pick("away", "away", "riff", "allez", "claps", "name")
             : lead >= 2 ? Pick("ole", "ole", "riff", "claps", "bounce")
             : lead < 0 ? Pick("anthem", "allez", "allez", "claps", "capo")

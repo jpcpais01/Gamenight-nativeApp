@@ -7,10 +7,9 @@ using Godot;
 namespace GameNight.Audio;
 
 /// <summary>
-/// The PWA's sound (src/ui/audio.ts), recipe for recipe. Everything is synthesised except the
-/// crowd itself: a recorded bed (five offset, drifting copies of one loop, so the seam is never
-/// heard) that breathes with the danger on the pitch, and a recorded goal roar. Strikes,
-/// whistle, woodwork, net, the terraces' songs, menus.
+/// The game's sound, all synthesised: strikes, whistle, woodwork, net, weather, menus, and the
+/// crowd's soundtrack (<see cref="CrowdScore"/>), whose voices are baked once in the background
+/// at start-up (<see cref="CrowdBank"/>) and then only mixed.
 ///
 /// The mix runs on its own thread a block at a time into a stream generator, so a slow frame
 /// never stutters it. Calls from the game just queue the sound; it starts on the next block.
@@ -22,17 +21,15 @@ public sealed partial class GameAudio : Node
     AudioStreamPlayer _player;
     AudioStreamGeneratorPlayback _pb;
     Mixer _mx;
-    Chants _chants;
+    CrowdScore _score;
     Thread _thread;
     volatile bool _run;
     readonly ConcurrentQueue<Action> _q = new();
     readonly Godot.Vector2[] _block = new Godot.Vector2[Mixer.Block];
 
-    Recording _bed, _roar;
-    readonly List<(Param g, double next)> _drift = new();
-    Voice _rain, _tension;
+    Voice _rain;
     bool _raining;
-    float _excite = 0.2f, _mouth, _tense = -1, _placeX = 1e9f, _lift;
+    float _crowd = -1, _placeX = 1e9f, _lift;
     bool _muted, _suspended;
 
     public override void _EnterTree() => Instance = this;
@@ -49,11 +46,39 @@ public sealed partial class GameAudio : Node
         _player.Play();
         _pb = (AudioStreamGeneratorPlayback)_player.GetStreamPlayback();
         _mx = new Mixer(sr);
-        _chants = new Chants(_mx);
-        _bed = Load("res://Audio/crowd-bed.pcm");
-        _roar = Load("res://Audio/crowd-goal.pcm");
-        StartBed();
-        StartTension();
+        _score = new CrowdScore(_mx);
+        _mx.Score = _score;
+        // The crowd's voices take a moment to bake: off the main thread, then the crowd fades in.
+        System.Threading.Tasks.Task.Run(() =>
+        {
+            try
+            {
+                // Baked once; after that, loaded from where the last bake was saved.
+                string path = ProjectSettings.GlobalizePath($"user://crowd-v{CrowdBank.Version}.bin");
+                CrowdBank bank = null;
+                if (System.IO.File.Exists(path))
+                    using (var f = System.IO.File.OpenRead(path)) bank = CrowdBank.Read(f);
+                if (bank == null)
+                {
+                    bank = CrowdBank.Bake();
+                    GD.Print($"Crowd baked in {bank.BakeMs:0} ms");
+                    try
+                    {
+                        using var f = System.IO.File.Create(path);
+                        bank.Write(f);
+                    }
+                    catch (Exception e)
+                    {
+                        GD.PrintErr("Crowd bank not saved: ", e.Message);
+                    }
+                }
+                Do(() => _score.Use(bank));
+            }
+            catch (Exception e)
+            {
+                GD.PrintErr("Crowd bake: ", e);
+            }
+        });
 
         _run = true;
         _thread = new Thread(Loop) { IsBackground = true, Name = "Audio", Priority = ThreadPriority.AboveNormal };
@@ -65,12 +90,6 @@ public sealed partial class GameAudio : Node
         _run = false;
         _thread?.Join(200);
         if (Instance == this) Instance = null;
-    }
-
-    static Recording Load(string path)
-    {
-        var bytes = FileAccess.GetFileAsBytes(path);
-        return bytes.Length > 0 ? Recording.FromPcm(bytes, 44100) : null;
     }
 
     void Loop()
@@ -86,7 +105,6 @@ public sealed partial class GameAudio : Node
             long start = System.Diagnostics.Stopwatch.GetTimestamp();
             try
             {
-                Tick();
                 _mx.Render(_block);
             }
             catch (Exception e)
@@ -106,66 +124,6 @@ public sealed partial class GameAudio : Node
     public static double BlockPlayMs => Mixer.Block * 1000.0 / 44100;
 
     void Do(Action a) => _q.Enqueue(a);
-
-    // ------------------------------------------------------------------ the crowd bed
-
-    void StartBed()
-    {
-        if (_bed == null) return;
-        double len = _bed.Duration;
-        for (int i = 0; i < 5; i++)
-        {
-            var g = new Param(0.5f);
-            _mx.Add(new Voice
-            {
-                Kind = Voice.Src.Sample, Rec = _bed, Loop = true, LoopStart = 0, LoopEnd = len,
-                Rate = 0.96f + 0.02f * i + _mx.Rand() * 0.01f,
-                Pos = i / 5.0 * len * _bed.Rate,
-                Gain = g, Out = Bus.Bed,
-            });
-            _drift.Add((g, 0));
-        }
-    }
-
-    /// <summary>Each copy of the bed wanders in level, so no loop point ever stands out.</summary>
-    void Tick()
-    {
-        double now = _mx.Now;
-        for (int i = 0; i < _drift.Count; i++)
-        {
-            var (g, next) = _drift[i];
-            if (now < next) continue;
-            g.Target(0.25f + _mx.Rand() * 0.55f, now, 0.8f + _mx.Rand());
-            _drift[i] = (g, now + 1.5 + _mx.Rand() * 3);
-        }
-    }
-
-    /// <summary>
-    /// The ground holding its breath: a band of crowd noise that climbs in pitch and swells as a
-    /// team closes on goal (the rising "ohhhh" before a shot), silent the rest of the time.
-    /// </summary>
-    void StartTension()
-    {
-        var f = new Biquad(FilterType.Bandpass, 520, 0.9f);
-        _tension = _mx.NoiseVoice(0, double.MaxValue, 0.9f, new Param(0), Bus.Bowl, f, new Biquad(FilterType.Bandpass, 1250, 1.6f));
-        _tension.W2 = 0.5f;
-        _tension.Pre = 2;
-    }
-
-    /// <summary>How close a goal is, 0..1 (the director's tension).</summary>
-    public void SetTension(float k)
-    {
-        if (MathF.Abs(k - _tense) < 0.02f) return;
-        _tense = k;
-        Do(() =>
-        {
-            double t = _mx.Now;
-            float u = Math.Clamp((k - 0.25f) / 0.75f, 0, 1);
-            _tension.Gain.Target(0.16f * u * u, t, u > 0 ? 0.35f : 0.8f);
-            _tension.F1.Freq.Target(480 + 520 * u, t, 0.5f);
-            _tension.F2.Freq.Target(1150 + 700 * u, t, 0.5f);
-        });
-    }
 
     // ------------------------------------------------------------------ settings
 
@@ -223,7 +181,7 @@ public sealed partial class GameAudio : Node
         _mx.NoiseVoice(t, t + 6.6, 0.35f, g, Bus.Master,
             new Biquad(FilterType.Lowpass, 120 + 160 * near, 0.9f), new Biquad(FilterType.Peaking, 55, 1, 6));
         // A big one right overhead: the crowd jumps, whistles, then cheers itself.
-        if (near > 0.55f) _chants.Thunderstruck(t + 0.25, near);
+        if (near > 0.55f) _score.Thunder(t + 0.25, near);
     });
 
     public bool Muted
@@ -250,41 +208,22 @@ public sealed partial class GameAudio : Node
 
     // ------------------------------------------------------------------ the match
 
-    /// <summary>
-    /// The crowd's level. `e` is the match excitement (0..1); `mouth` (0..1) is how close the
-    /// ball is to the goal line in front of a goal: the last few metres make the bed surge.
-    /// </summary>
-    public void SetExcitement(float e, float mouth = 0)
+    /// <summary>The crowd's level: 1 at a match.</summary>
+    public void SetCrowdLevel(float k)
     {
-        if (MathF.Abs(e - _excite) < 0.01f && MathF.Abs(mouth - _mouth) < 0.01f) return;
-        bool fromMenus = _excite < 0;
-        _excite = e;
-        _mouth = mouth;
-        Do(() =>
-        {
-            double t = _mx.Now;
-            if (fromMenus) _mx.EndsGain.Target(1, t, 0.5f);
-            _mx.BedGain.Target((0.2f + e * 0.6f) * (1 + 6 * mouth), t, mouth > 0 ? 0.15f : 0.4f);
-        });
+        if (MathF.Abs(k - _crowd) < 0.005f) return;
+        _crowd = k;
+        Do(() => _score.Level = k);
     }
 
     /// <summary>Menus: the crowd sinks to a distant murmur (or silence inside a pack opening).</summary>
-    public void SetAmbience(float level)
-    {
-        _excite = -1;
-        Do(() =>
-        {
-            double t = _mx.Now;
-            _mx.EndsGain.Target(0.35f * level, t, 0.5f);
-            _mx.BedGain.Target(0.2f * level, t, 0.5f);
-        });
-    }
+    public void SetAmbience(float level) => SetCrowdLevel(0.35f * level);
 
-    /// <summary>Sing what the terraces are singing (call every frame the director runs).</summary>
+    /// <summary>Follow the terraces' director (call every frame it runs).</summary>
     public void Terraces(Terraces dir)
     {
         var cue = dir.TakeCue();
-        Do(() => _chants.Update(cue));
+        Do(() => _score.Cue(cue));
     }
 
     public void Kick(float strength) => Do(() =>
@@ -342,55 +281,9 @@ public sealed partial class GameAudio : Node
         float v = MathF.Min(1, speed / 20) * 0.35f;
         foreach (var (f, d) in new[] { (523f, 0.9), (1347f, 0.6), (2211f, 0.4), (3010f, 0.25) })
             _mx.Osc(Wave.Sine, t, f, t + d + 0.05, new Param(v).Set(v, t).Exp(0.0001f, t + d));
-        Gasp();
     });
 
     public void Net(float speed) => Do(() => _mx.Burst(_mx.Now, 0.4, FilterType.Bandpass, 1300, 0.8f, MathF.Min(0.5f, speed / 30), 1.2f));
-
-    public void CrowdGasp() => Do(Gasp);
-
-    void Gasp() => _mx.Burst(_mx.Now, 1.4, FilterType.Bandpass, 700, 0.6f, 0.35f, 0.9f, Bus.Crowd);
-
-    /// <summary>
-    /// The roar, held at full for `hold` seconds, then fading. The recording plays once from
-    /// the top; to hold it longer, three looping copies (staggered, each a touch faster or
-    /// slower, wandering in level like the bed) swell in under it, so no seam is heard.
-    /// </summary>
-    public void Goal(float hold = 0, bool throughCrowd = true, int side = 0) => Do(() =>
-    {
-        double t = _mx.Now;
-        // Theirs: only the away end goes up, small and far off across the ground.
-        var bus = !throughCrowd ? Bus.Master : side == 1 ? Bus.End1 : Bus.Crowd;
-        if (side == 1) hold = Math.Min(hold, 4);
-        if (_roar != null)
-        {
-            const double skip = 0.1; // the recording opens with a beat of dead air
-            double dur = _roar.Duration, take = dur - skip;
-            var g = new Param(side == 1 ? 0.9f : 1.1f);
-            var fe = new Param(1);
-            _mx.Add(new Voice { Kind = Voice.Src.Sample, Rec = _roar, Pos = skip * _roar.Rate, Gain = fe, Gain2 = g, Out = bus, Start = t });
-            if (hold <= take) return;
-            // The opening take gives way to the layers over its last 2 s.
-            fe.Set(1, t + take - 2).Lin(0.0001f, t + take);
-            double end = t + hold + 5;
-            g.Target(0.0001f, t + hold, 1.2f);
-            const double lo = 0.6; // past the attack
-            for (int i = 0; i < 3; i++)
-            {
-                var env = new Param(0.0001f).Set(0.0001f, t).Lin(0.0001f, t + 1.5).Lin(0.6f, t + take - 0.5);
-                for (double at = t + take; at < t + hold; at += 1.2 + _mx.Rand() * 1.5) env.Target(0.4f + _mx.Rand() * 0.35f, at, 0.6f);
-                _mx.Add(new Voice
-                {
-                    Kind = Voice.Src.Sample, Rec = _roar, Loop = true, LoopStart = lo, LoopEnd = dur,
-                    Rate = 0.97f + 0.03f * i, Pos = (lo + i / 3.0 * (dur - lo)) * _roar.Rate,
-                    Gain = env, Gain2 = g, Out = bus, Start = t, Stop = end,
-                });
-            }
-            return;
-        }
-        var gg = new Param(0.0001f).Set(0.0001f, t).Exp(0.9f, t + 0.35).Target(0.0001f, t + 2.2, 1.1f);
-        _mx.NoiseVoice(t, t + 7, 1, gg, bus, new Biquad(FilterType.Bandpass, 800, 0.4f));
-    });
 
     // ------------------------------------------------------------------ menus & packs
 
@@ -454,6 +347,13 @@ public sealed partial class GameAudio : Node
             if (tier >= 2) _mx.Burst(t, 0.9 + tier * 0.3, FilterType.Highpass, 6000, 0.5f, 0.12f + tier * 0.04f, 1.2f);
             if (tier >= 3) _mx.Tone(t, 98, 2, Wave.Sine, 0.4f, 49);
         });
-        if (tier >= 3) Goal(0, false);
+        // The best cards: a stadium erupting.
+        if (tier >= 3) Do(() =>
+        {
+            var b = _score.Take(Shot.Erupt);
+            if (b == null) return;
+            var rec = new Recording { L = b, R = b, Rate = (int)CrowdBank.Rate };
+            _mx.Add(new Voice { Kind = Voice.Src.Sample, Rec = rec, Gain = new Param(1.2f), Out = Bus.Master, Start = _mx.Now });
+        });
     }
 }

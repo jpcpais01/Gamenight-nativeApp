@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.32", "A new crowd, built from scratch: thousands of voices that talk, buzz, roar and sing, rising as your team closes in and sinking when it fizzles. Songs swell out of the ends in time and fade back, with oohs, groans, eruptions, applause, whistles, laughter and the PA."),
         ("0.31", "In the stadium builder, tap the stadium itself to hide the menus and see it alone, centred; tap again to bring them back. Dragging, sliding and pinching still work while they are hidden."),
         ("0.30", "Smooth motion in the menus: cards rising in the pack opening, the pack dropping and bobbing, walkout slams, the summary deal, pop-ups and toasts now glide at full frame rate instead of moving in steps."),
         ("0.29", "Pitch invaders: every game minute there is a tiny chance a fan jumps the boards. Play stops, the camera follows him, the stewards in high-vis give chase while the crowd laughs and cheers, and once they walk him off the referee drops the ball. Hold FOUL to call one."),
