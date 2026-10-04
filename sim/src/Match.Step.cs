@@ -440,10 +440,10 @@ public sealed partial class Match
     /// <summary>
     /// The active player without the ball, one idea: he knows where it can be won and goes
     /// there himself. A loose ball or a pass in flight he meets, arriving as it does; an
-    /// opponent on the ball he shadows goal-side a couple of metres off, pouncing on a heavy
-    /// touch. Holding PRESS / SPRINT commits: flat out onto a loose ball, or tight onto the
-    /// carrier, poking it away the moment it shows. The stick is always yours: pointed roughly
-    /// at his run it bends it, pointed away it takes over.
+    /// opponent on the ball he closes down and presses tight, goal-side, squeezing in and
+    /// pouncing on a heavy touch. All of that is automatic. PRESS / SPRINT adds the last step
+    /// and the legs: flat out, and a foot in to take the ball the moment it shows. The stick
+    /// is always yours: pointed roughly at his run it bends it, pointed away it takes over.
     /// </summary>
     void GoForBall(Player c, InputState input, double m)
     {
@@ -459,12 +459,12 @@ public sealed partial class Match
         double d = BallDist(c);
         if (own != null)
         {
-            // Goal-side of the ball, moving with it: 2.2 m off when shadowing; pressing, under a
-            // metre and squeezing in the longer he stays tight.
-            pressTight = press && d < 2.2 ? pressTight + DT : 0;
-            double keep = press ? M.Lerp(0.9, 0.4, M.Smoothstep(0.15, 0.6, pressTight)) : 2.2;
+            // Goal-side of the ball, moving with it, under a metre off and squeezing in the
+            // longer he stays tight.
+            pressTight = d < 2.2 ? pressTight + DT : 0;
+            double keep = M.Lerp(0.9, 0.4, M.Smoothstep(0.15, 0.6, pressTight));
             bool onBall = AI.PressPoint(c, own, tmpV, keep);
-            double pull = onBall ? 5 : press ? 3 : 2;
+            double pull = onBall ? 5 : 3;
             double vx = Ball.Vel.X * 0.9 + (tmpV.X - c.Pos.X) * pull;
             double vz = Ball.Vel.Z * 0.9 + (tmpV.Z - c.Pos.Z) * pull;
             double v = JsMath.Hypot(vx, vz);
@@ -479,14 +479,14 @@ public sealed partial class Match
                 tz = (Ball.Pos.Z - c.Pos.Z) / Math.Max(0.01, d);
                 v = 0;
             }
-            speed = Math.Min(v, press || onBall ? c.TopSpeed : PlayerK.JogSpeed + 1);
+            speed = Math.Min(v, press || onBall ? c.TopSpeed : PlayerK.JogSpeed + 2.2);
             face = true;
             burst = onBall;
             // Square-on while he can keep up that way; a carrier running at him faster than he
             // can backpedal, he turns and runs with.
             square = !onBall && v < 4.5;
-            // Going in: the ball shows and a foot can get to it. Kept out long enough, he goes
-            // through anyway, shield or not.
+            // Going in (only on PRESS): the ball shows and a foot can get to it. Kept out long
+            // enough, he goes through anyway, shield or not.
             if (press && !c.IsBusy && !lungeOn && Time > pokeReady && Ball.Pos.Y < 0.6 && d < 1.35 &&
                 (BallOpen(c, own, d) || (pressTight > 1.0 && d < 0.95)))
             {
