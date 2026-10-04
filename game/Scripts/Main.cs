@@ -33,6 +33,7 @@ public partial class Main : Node
     /// <summary>The match's sound and the terraces' director (the stadium can read Sound.Terraces).</summary>
     public readonly MatchSound Sound = new();
     MatchCamera _camera;
+    Profiler _prof;
     PlayersView _players;
     Officials _officials;
     Goals _goals;
@@ -71,6 +72,11 @@ public partial class Main : Node
         AddChild(_controls);
         _letterbox = new Letterbox();
         AddChild(_letterbox);
+        _prof = new Profiler { Visible = false };
+        AddChild(_prof);
+        _prof.Watch(_view.Viewport, GetViewport());
+        _prof.SimStepMs = () => _runner?.StepMs ?? 0;
+        _prof.AudioBlockMs = () => GameAudio.Instance?.BlockMs ?? 0;
         _letterbox.Skip += () =>
         {
             if (Cutscene.Active)
@@ -196,6 +202,7 @@ public partial class Main : Node
         _camera.BaseDist = MatchCamera.Presets[Math.Clamp(MatchSettings.Camera, 0, 2)];
         _view.TargetHeight = MatchSettings.Pixels > 0 ? MatchSettings.Pixels : 270;
         _hud.ShowFps = MatchSettings.ShowFps;
+        _prof.On = MatchSettings.ShowFps && MatchSettings.Profile && Request?.Demo != true;
         if (GameAudio.Instance != null) GameAudio.Instance.Muted = !MatchSettings.Sound;
         // Fast graphics: the sun casts no shadows (the biggest cost on a weak GPU).
         foreach (var n in _view.WorldRoot.FindChildren("*", nameof(DirectionalLight3D), true, false))
@@ -245,6 +252,7 @@ public partial class Main : Node
     public override void _Process(double delta)
     {
         float dt = (float)delta;
+        _prof.Begin();
         _controls.Tick(dt);
         _runner.Submit(_controls.Input);
         _runner.Read(_prev, _cur, out float alpha);
@@ -267,6 +275,7 @@ public partial class Main : Node
             Cutscene.Update(run, _camera);
             if (!Cutscene.Active) EndDirected();
         }
+        _prof.Lap(Profiler.Sys.Camera);
         if (Cutscene.Active)
             _players.Update(Cutscene.Frame, Cutscene.Frame, 0, _time, 1);
         else if (_replay.Active)
@@ -288,14 +297,19 @@ public partial class Main : Node
         // The net takes the ball (live, or again on the replay's tape).
         if (!Directed && _cur.Net > 0) _goals.Impact(_cur.BallX, _cur.BallY, _cur.BallZ, _cur.Net, _time);
         _goals.Update(_time);
+        _prof.Lap(Profiler.Sys.Players);
         _ground.Update(_cur, _time, dt);
+        _prof.Lap(Profiler.Sys.Stadium);
         Sound.Frame(_match, _cur, Request?.Demo != true, Request?.Drill == null, Request?.Drill != null, _pause.IsOpen ? 0 : dt);
+        _prof.Lap(Profiler.Sys.Sound);
         _view.Present(_camera.SubPixelX, _camera.SubPixelY);
 
         bool attack = _cur.HumanAttacking;
         _controls.SetMode(ButtonMode(_cur, attack, out int picked), picked);
         _hud.Tick(_prev, _cur, alpha, _controls.Input, attack, delta);
         _drillHud?.Tick();
+        _prof.Lap(Profiler.Sys.Hud);
+        _prof.End(delta);
         // Full time: a few seconds of the scene, then back to the menus.
         if (Request != null && _cur.Phase == Phase.Fulltime && _cur.PhaseT > (Request.Demo ? 3 : 4.5)) Report(true);
 

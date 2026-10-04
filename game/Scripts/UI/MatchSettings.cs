@@ -12,6 +12,8 @@ public static class MatchSettings
     /// <summary>Art height in pixels (0: the default, about 270).</summary>
     public static int Pixels;
     public static bool ShowFps;
+    /// <summary>The counter with the full breakdown of where each frame's time goes.</summary>
+    public static bool Profile;
     /// <summary>Fast graphics: no sun shadows.</summary>
     public static bool Fast;
     public static bool Sound = true;
@@ -23,6 +25,7 @@ public static class MatchSettings
         Camera = (int)cfg.GetValue("match", "camera", 1);
         Pixels = (int)cfg.GetValue("match", "pixels", 0);
         ShowFps = (bool)cfg.GetValue("match", "fps", false);
+        Profile = ShowFps && (bool)cfg.GetValue("match", "profile", false);
         Fast = (bool)cfg.GetValue("match", "fast", false);
         Sound = (bool)cfg.GetValue("match", "sound", true);
     }
@@ -33,6 +36,7 @@ public static class MatchSettings
         cfg.SetValue("match", "camera", Camera);
         cfg.SetValue("match", "pixels", Pixels);
         cfg.SetValue("match", "fps", ShowFps);
+        cfg.SetValue("match", "profile", Profile);
         cfg.SetValue("match", "fast", Fast);
         cfg.SetValue("match", "sound", Sound);
         cfg.Save(Path);

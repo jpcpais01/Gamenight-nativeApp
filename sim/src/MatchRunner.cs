@@ -150,8 +150,12 @@ public sealed class MatchRunner : IDisposable
         }
     }
 
+    /// <summary>What a step costs on the engine thread (ms, smoothed): for the frame-time breakdown.</summary>
+    public double StepMs;
+
     void StepOnce()
     {
+        long start = Stopwatch.GetTimestamp();
         Action<Match>? act;
         lock (gate)
         {
@@ -191,6 +195,7 @@ public sealed class MatchRunner : IDisposable
             (last, work) = (work, last);
             steps++;
             stepAt = Stopwatch.GetTimestamp();
+            StepMs += ((stepAt - start) * 1000.0 / Stopwatch.Frequency - StepMs) * 0.05;
         }
     }
 

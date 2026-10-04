@@ -82,6 +82,7 @@ public sealed partial class GameAudio : Node
                 Thread.Sleep(2);
                 continue;
             }
+            long start = System.Diagnostics.Stopwatch.GetTimestamp();
             try
             {
                 Tick();
@@ -93,8 +94,15 @@ public sealed partial class GameAudio : Node
                 Array.Clear(_block);
             }
             _pb.PushBuffer(_block);
+            double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - start) * 1000.0 / System.Diagnostics.Stopwatch.Frequency;
+            BlockMs += (ms - BlockMs) * 0.05;
         }
     }
+
+    /// <summary>What one block of sound costs on the audio thread (ms, smoothed), and how long that
+    /// block plays: for the frame-time breakdown.</summary>
+    public double BlockMs;
+    public static double BlockPlayMs => Mixer.Block * 1000.0 / 44100;
 
     void Do(Action a) => _q.Enqueue(a);
 
