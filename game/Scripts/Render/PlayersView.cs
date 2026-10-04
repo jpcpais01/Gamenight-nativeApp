@@ -1,158 +1,1664 @@
 using System;
 using Godot;
 using GameNight.Sim;
+using Part = GameNight.Render.BodyMeshes.Part;
 
 namespace GameNight.Render;
 
 /// <summary>
-/// All 22 players in one instanced draw, plus the ball and the marker under your player.
-/// Per frame the CPU writes one transform and four floats per player; the vertex shader
-/// does the running animation.
+/// The footballers, ported from the PWA's players.ts: shaped, kitted figures (collars, trim,
+/// numbers, faces, hair) built from a few smooth parts and posed procedurally from the match
+/// every frame, so the motion always matches the physics:
+/// - a run cycle with planted feet (two-bone IK: the feet don't skate), hips that drop and
+///   turn, shoulders that counter-rotate, a springy spine and a head that tracks the ball;
+/// - arms with each player's own carriage, effort and fatigue, and a slow random drift in the
+///   upper body so no two moves are quite the same;
+/// - strikes timed to the contact, stretches, block and slide tackles, headers, throws,
+///   keeper stances, dives and catches, falls, and the goal celebrations;
+/// - secondary motion: arms, elbows, head and shoulders carry inertia and overshoot.
+/// Every part type is one MultiMesh, so all 22 players are 14 draws.
 /// </summary>
 public sealed class PlayersView
 {
-    const float ModelHeight = 1.8f;
+    const int N = MatchSnapshot.N;
+    const float THIGH = 0.43f, SHIN = 0.42f, HIP_Y = 0.94f, HEAD_TOP = 0.24f;
+    const float BASE_HEIGHT = HIP_Y + 0.04f + 0.6f + HEAD_TOP;
+    const float PI = MathF.PI, TAU = MathF.Tau;
 
-    // Colour slots baked into the mesh (read by player.gdshader).
-    const int Shirt = 0, Trim = 1, Shorts = 2, Socks = 3, Skin = 4, Hair = 5, Boots = 6;
-    // Body parts: 0 torso/head, 1 left leg, 2 right leg, 3 left arm, 4 right arm.
+    // Secondary-motion channels: spring frequency (rad/s) and damping ratio.
+    const int ArmL = 0, ArmR = 1, OutL = 2, OutR = 3, ElbowL = 4, ElbowR = 5, HeadPitch = 6, HeadRoll = 7, Twist = 8, SecCount = 9;
+    static readonly float[] SecW = { 10, 10, 9, 9, 13, 13, 14, 14, 11 };
+    static readonly float[] SecZ = { 0.45f, 0.45f, 0.4f, 0.4f, 0.42f, 0.42f, 0.5f, 0.5f, 0.5f };
+    /// <summary>Channels that soak up a jump in the pose (the arms) rather than following it at once.</summary>
+    const int SecSoak = 6;
 
+    static readonly int[] PerPlayer = { 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2 };
+    /// <summary>Shader part kinds (body.gdshaderinc) per mesh part.</summary>
+    static readonly int[] ShaderPart = { 1, 0, 0, 2, 0, 0, 0, 3, 4, 0, 5, 6, 7, 8 };
+    /// <summary>Too small to show in the sun's shadow, or inside another part's.</summary>
+    static readonly bool[] NoShadow = { false, false, true, false, true, true, true, false, true, true, true, false, false, true };
+    static readonly Part[] HairOfStyle = { Part.HairShort, Part.HairShort, Part.HairCurly, Part.HairBun };
 
-    readonly MultiMesh _mm;
-    readonly ShaderMaterial _mat;
-    readonly MeshInstance3D _ball;
-    readonly MeshInstance3D _ring;
-    const int SkinSlots = 6;
+    /// <summary>Boots: a random pick per player each match (boot, sole).</summary>
+    static readonly (int, int)[] Boots =
+    {
+        (0x1b1b1d, 0xe8e6df), (0xf0efe9, 0x1b1b1d), (0xe9f23a, 0x1b1b1d), (0xff6a2b, 0xf0efe9),
+        (0xff4f9a, 0x1b1b1d), (0x2fd3e8, 0xf0efe9), (0xd8262f, 0x1b1b1d), (0x2457d6, 0xf0efe9),
+        (0x29b36a, 0x1b1b1d), (0xd9b04a, 0x1b1b1d), (0xb9bdc4, 0x2a2a2a), (0x6a3fd1, 0xe9f23a),
+    };
+
+    const int Stride = 20; // floats per instance: 3x4 transform, colour, custom
+    readonly MultiMesh[] _mm = new MultiMesh[BodyMeshes.PartCount];
+    readonly float[][] _buf = new float[BodyMeshes.PartCount][];
+    readonly ShaderMaterial[] _mat = new ShaderMaterial[BodyMeshes.PartCount];
+    readonly MeshInstance3D _ball, _ring, _marker;
+
+    // Per player, fixed for the match.
+    readonly BodyShape[] _body = new BodyShape[N];
+    readonly float[] _hipBase = new float[N], _bodyScale = new float[N];
+    readonly int[] _hair = new int[N];
+
+    // Per player, frame to frame.
+    readonly float[] _sF = new float[N], _spF = new float[N], _sS = new float[N], _spS = new float[N], _headYaw = new float[N];
+    readonly float[] _sec = new float[N * SecCount], _secV = new float[N * SecCount], _secPose = new float[N * SecCount];
+    readonly bool[] _secReady = new bool[N];
+    readonly float[] _bodyY = new float[N], _bodyVy = new float[N], _bodyAy = new float[N], _lastFacing = new float[N];
+    readonly float[] _plantX = new float[N * 2], _plantZ = new float[N * 2], _footW = new float[N * 2];
+    readonly byte[] _inStance = new byte[N * 2];
+    readonly float[] _ikOn = new float[N], _turnS = new float[N];
+    readonly byte[] _steerSt = new byte[N], _steerLeg = new byte[N];
+    readonly float[] _steerE = new float[N], _gkReady = new float[N];
+    readonly float[] _arm = new float[10];
+    readonly float[] _poseNow = new float[SecCount], _want = new float[SecCount];
+    double _lastTime = -1;
+
+    // Leg IK results.
+    float _ikH, _ikK, _ikOut;
+    Transform3D _pinv;
 
     public PlayersView(Node3D root)
     {
-        var mat = _mat = Geo.Material("res://Shaders/player.gdshader");
-        // Kits from the PWA's two teams (Rossoneri Athletic, Atlantic Rovers).
-        mat.SetShaderParameter("shirt", new[] { Hex(0xc8393b), Hex(0xf1ebdc), Hex(0xe9c24a), Hex(0x2ba59a) });
-        mat.SetShaderParameter("trim", new[] { Hex(0x8f1f24), Hex(0x23345e), Hex(0x2a2a2a), Hex(0x163a36) });
-        mat.SetShaderParameter("shorts", new[] { Hex(0xf3ede0), Hex(0x23345e), Hex(0x2a2a2a), Hex(0x163a36) });
-        mat.SetShaderParameter("socks", new[] { Hex(0xc8393b), Hex(0xf1ebdc), Hex(0xe9c24a), Hex(0x2ba59a) });
-        // Skin tones: the engine's own table (TeamData.SkinTones).
-        var skins = new Vector3[SkinSlots];
-        for (int i = 0; i < SkinSlots; i++) skins[i] = Hex(TeamData.SkinTones[Math.Min(i, TeamData.SkinTones.Length - 1)]);
-        mat.SetShaderParameter("skins", skins);
-
-        _mm = new MultiMesh
+        var meshes = BodyMeshes.Build();
+        var shader = GD.Load<Shader>("res://Shaders/body.gdshader");
+        var shaderDouble = GD.Load<Shader>("res://Shaders/body_double.gdshader");
+        for (int k = 0; k < BodyMeshes.PartCount; k++)
         {
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            UseCustomData = true,
-            Mesh = BuildBody(),
-        };
-        _mm.InstanceCount = MatchSnapshot.N;
-        var mmi = new MultiMeshInstance3D
-        {
-            Multimesh = _mm,
-            MaterialOverride = mat,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.On,
-            // The squad spans the pitch; never cull it.
-            ExtraCullMargin = 200,
-        };
-        root.AddChild(mmi);
+            var mat = new ShaderMaterial { Shader = k == (int)Part.ShortsLeg ? shaderDouble : shader };
+            mat.SetShaderParameter("part", ShaderPart[k]);
+            _mat[k] = mat;
+            int count = N * PerPlayer[k];
+            var mm = new MultiMesh
+            {
+                TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+                UseColors = true,
+                UseCustomData = true,
+                Mesh = meshes[k],
+            };
+            mm.InstanceCount = count;
+            _mm[k] = mm;
+            _buf[k] = new float[count * Stride];
+            root.AddChild(new MultiMeshInstance3D
+            {
+                Multimesh = mm,
+                MaterialOverride = mat,
+                CastShadow = NoShadow[k] ? GeometryInstance3D.ShadowCastingSetting.Off : GeometryInstance3D.ShadowCastingSetting.On,
+                // The squad spans the pitch; never cull it.
+                ExtraCullMargin = 200,
+            });
+        }
 
         var ballMesh = new SphereMesh { Radius = 0.11f, Height = 0.22f, RadialSegments = 8, Rings = 4 };
         _ball = Geo.Instance(root, ballMesh, new StandardMaterial3D { AlbedoColor = new Color(0.97f, 0.97f, 0.95f), Roughness = 0.5f }, shadows: true);
-
-        var ringMesh = new QuadMesh { Size = new Vector2(1.5f, 1.5f), Orientation = PlaneMesh.OrientationEnum.Y };
-        _ring = Geo.Instance(root, ringMesh, Geo.Material("res://Shaders/ring.gdshader"));
+        // The marker under your player, and the little arrow over his head.
+        _ring = Geo.Instance(root, new QuadMesh { Size = new Vector2(1.28f, 1.28f), Orientation = PlaneMesh.OrientationEnum.Y }, Geo.Material("res://Shaders/ring.gdshader"));
+        var gold = new StandardMaterial3D { AlbedoColor = new Color(1f, 0.83f, 0.28f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
+        _marker = Geo.Instance(root, new CylinderMesh { TopRadius = 0.15f, BottomRadius = 0, Height = 0.28f, RadialSegments = 3, Rings = 1 }, gold);
     }
 
-    /// <summary>An sRGB hex colour as a linear vec3 (the shader lights in linear).</summary>
-    static Vector3 Hex(int rgb)
-    {
-        var c = new Color(((rgb >> 16) & 255) / 255f, ((rgb >> 8) & 255) / 255f, (rgb & 255) / 255f).SrgbToLinear();
-        return new Vector3(c.R, c.G, c.B);
-    }
+    static Color Lin(int rgb) => new Color(((rgb >> 16) & 255) / 255f, ((rgb >> 8) & 255) / 255f, (rgb & 255) / 255f).SrgbToLinear();
+    static Vector4 Lin4(int rgb, float w) { var c = Lin(rgb); return new Vector4(c.R, c.G, c.B, w); }
 
-    public void Update(MatchSnapshot a, MatchSnapshot b, float alpha)
+    /// <summary>A new match: each player's body, kit, skin, hair and boots.</summary>
+    public void SetMatch(Match m)
     {
-        for (int i = 0; i < MatchSnapshot.N; i++)
+        Array.Clear(_secReady);
+        Array.Clear(_footW);
+        Array.Clear(_inStance);
+        Array.Clear(_ikOn);
+        _lastTime = -1;
+        var ka = new Vector4[BodyMeshes.PartCount][];
+        var kb = new Vector4[BodyMeshes.PartCount][];
+        for (int k = 0; k < BodyMeshes.PartCount; k++)
         {
-            if (!b.Active[i])
+            ka[k] = new Vector4[N];
+            kb[k] = new Vector4[N];
+        }
+        var rng = new Random();
+        foreach (var p in m.All)
+        {
+            int id = p.Id;
+            if (id < 0 || id >= N) continue;
+            var b = Body.Shape(p.Attrs.Height, p.Attrs.Weight, p.Attrs.Strength, id * 7 + p.Index + (p.Name.Length > 0 ? p.Name.Length * 13 : 0));
+            _body[id] = b;
+            float hip = (THIGH + SHIN) * (float)b.Leg + (HIP_Y - THIGH - SHIN);
+            _hipBase[id] = hip;
+            _bodyScale[id] = BASE_HEIGHT / (hip + 0.04f + 0.6f * (float)b.TorsoL + ((float)b.NeckLen - 1) * 0.08f + HEAD_TOP);
+            _hair[id] = Math.Clamp(p.Look.HairStyle, 0, 3);
+
+            var team = m.Teams[p.Team];
+            var kit = team.Info.Kit;
+            bool gk = p.Role == Role.GK;
+            int shirt = gk ? kit.GkShirt : kit.Shirt;
+            int trim = gk ? kit.GkShorts : kit.Shirt2;
+            int shorts = gk ? kit.GkShorts : kit.Shorts;
+            int skin = p.Look.Skin, hair = p.Look.Hair;
+            void Set(Part part, int rgb)
             {
-                // Not on the field (training drills): an empty transform hides it.
-                _mm.SetInstanceTransform(i, new Transform3D(new Basis().Scaled(Vector3.Zero), Vector3.Zero));
+                int k = (int)part, per = PerPlayer[k];
+                var c = Lin(rgb);
+                for (int s = 0; s < per; s++)
+                {
+                    int o = (id * per + s) * Stride + 12;
+                    _buf[k][o] = c.R;
+                    _buf[k][o + 1] = c.G;
+                    _buf[k][o + 2] = c.B;
+                    _buf[k][o + 3] = 1;
+                }
+            }
+            Set(Part.Torso, shirt);
+            int num = p.Number > 0 ? p.Number : gk ? 1 : p.Index + 1;
+            ka[(int)Part.Torso][id] = Lin4(trim, num);
+            // Numbers in the trim colour unless that's too close to the shirt.
+            kb[(int)Part.Torso][id] = Lin4(gk ? 0x1d1d1d : kit.Shirt2 == kit.Shirt ? 0xffffff : kit.Shirt2, gk ? 0 : kit.Pattern);
+            Set(Part.UpperArm, shirt);
+            bool captain = team.Captain == p.Index && team.Players.Count > p.Index && team.Players[p.Index] == p;
+            ka[(int)Part.UpperArm][id] = Lin4(trim, captain ? 1 : 0);
+            kb[(int)Part.UpperArm][id] = Lin4(gk ? shirt : skin, 0);
+            Set(Part.Forearm, gk ? shirt : skin);
+            ka[(int)Part.Forearm][id] = Lin4(gk ? 0xf2f0ea : skin, 0);
+            Set(Part.Hand, gk ? 0xf2f0ea : skin);
+            Set(Part.Pelvis, shorts);
+            Set(Part.ShortsLeg, shorts);
+            ka[(int)Part.ShortsLeg][id] = Lin4(gk ? shirt : kit.Shirt2 == kit.Shorts ? kit.Shirt : kit.Shirt2, 0);
+            Set(Part.Shin, gk ? kit.GkShorts : kit.Socks);
+            ka[(int)Part.Shin][id] = Lin4(gk ? kit.GkShirt : kit.Shirt2, 0);
+            Set(Part.Neck, skin);
+            Set(Part.Head, skin);
+            Set(Part.Thigh, skin);
+            Set(Part.HairShort, hair);
+            Set(Part.HairCurly, hair);
+            Set(Part.HairBun, hair);
+            var (boot, sole) = Boots[rng.Next(Boots.Length)];
+            Set(Part.Boot, boot);
+            ka[(int)Part.Boot][id] = Lin4(sole, 0);
+        }
+        for (int k = 0; k < BodyMeshes.PartCount; k++)
+        {
+            _mat[k].SetShaderParameter("ka", ka[k]);
+            _mat[k].SetShaderParameter("kb", kb[k]);
+        }
+    }
+
+    // ------------------------------------------------------------------ helpers
+
+    static float Clamp(float v, float lo, float hi) => v < lo ? lo : v > hi ? hi : v;
+    static float Lerp(float a, float b, float t) => a + (b - a) * t;
+    static float Smooth(float e0, float e1, float x)
+    {
+        float t = Clamp((x - e0) / (e1 - e0), 0, 1);
+        return t * t * (3 - 2 * t);
+    }
+    static float Hash01(float id, float k)
+    {
+        float v = MathF.Sin(id * 12.9898f + k * 78.233f) * 43758.5453f;
+        return v - MathF.Floor(v);
+    }
+    static float Rnd(float id, float k) => Hash01(id, k) * 2 - 1;
+    /// <summary>A slow, smooth wander in [-1, 1] for player id (channel k, about f rad/s).</summary>
+    static float Drift(float t, int id, int k, float f) =>
+        MathF.Sin(t * f + Hash01(id, k) * 6.283f) * 0.65f + MathF.Sin(t * f * 2.3f + Hash01(id, k + 1) * 6.283f) * 0.35f;
+
+    /// <summary>local = T(x,y,z) * Ry * Rx * Rz; parent * local.</summary>
+    static Transform3D Chain(in Transform3D parent, float x, float y, float z, float rx, float ry, float rz) =>
+        parent * new Transform3D(Basis.FromEuler(new Vector3(rx, ry, rz), EulerOrder.Yxz), new Vector3(x, y, z));
+    static Transform3D ChainT(in Transform3D parent, float x, float y, float z) =>
+        new(parent.Basis, parent * new Vector3(x, y, z));
+    /// <summary>A hinge: parent * T(x,y,z) * Rx.</summary>
+    static Transform3D ChainX(in Transform3D parent, float x, float y, float z, float rx) =>
+        parent * new Transform3D(new Basis(Vector3.Right, rx), new Vector3(x, y, z));
+
+    /// <summary>Instance `index` of a part = m * scale(sx, sy, sz), with its custom data.</summary>
+    void Put(Part part, int index, in Transform3D m, float sx = 1, float sy = 1, float sz = 1, float c0 = 0, float c1 = 0, float c2 = 0)
+    {
+        var a = _buf[(int)part];
+        int o = index * Stride;
+        Vector3 x = m.Basis.Column0 * sx, y = m.Basis.Column1 * sy, z = m.Basis.Column2 * sz;
+        a[o] = x.X; a[o + 1] = y.X; a[o + 2] = z.X; a[o + 3] = m.Origin.X;
+        a[o + 4] = x.Y; a[o + 5] = y.Y; a[o + 6] = z.Y; a[o + 7] = m.Origin.Y;
+        a[o + 8] = x.Z; a[o + 9] = y.Z; a[o + 10] = z.Z; a[o + 11] = m.Origin.Z;
+        a[o + 16] = c0; a[o + 17] = c1; a[o + 18] = c2;
+        a[o + 19] = PerPlayer[(int)part] == 2 ? index / 2 : index;
+    }
+
+    void Hide(Part part, int index)
+    {
+        var a = _buf[(int)part];
+        Array.Clear(a, index * Stride, 12);
+    }
+
+    void LegChain(in Transform3D P, float hipX, float hip, float yaw, float outA, float knee, float leg, out Transform3D j1, out Transform3D j2)
+    {
+        j1 = Chain(P, hipX, -0.03f, 0, -hip, yaw, outA);
+        float soft = knee * 0.22f;
+        j2 = ChainX(j1, 0, 0, 0, soft);
+        j2 = ChainX(j2, 0, -THIGH * leg, 0, knee - soft);
+    }
+
+    /// <summary>
+    /// Two-bone leg IK: hip swing, knee and hip roll that put the ankle on world point `t`, for
+    /// the leg at hipX on the pelvis (_pinv is its inverse). False when out of reach, unless
+    /// `stretch`: then the leg straightens out toward a point beyond it.
+    /// </summary>
+    bool LegIK(Vector3 t, float hipX, float yaw, float sideSign, float l1, float l2, bool stretch = false)
+    {
+        var tv = _pinv * t;
+        float dx0 = tv.X - hipX, dz0 = tv.Z;
+        float cy = MathF.Cos(yaw), sy = MathF.Sin(yaw);
+        float dx = dx0 * cy - dz0 * sy;
+        float dy = tv.Y + 0.03f;
+        float dz = dx0 * sy + dz0 * cy;
+        float D = MathF.Sqrt(dx * dx + dy * dy + dz * dz);
+        if (stretch && D > (l1 + l2) * 0.97f)
+        {
+            float f = (l1 + l2) * 0.97f / D;
+            dx *= f; dy *= f; dz *= f; D *= f;
+        }
+        if (D > (l1 + l2) * 1.12f || D < 0.25f) return false;
+        float kr = MathF.Acos(Clamp((D * D - l1 * l1 - l2 * l2) / (2 * l1 * l2), -1, 1));
+        float k = MathF.Min(2.4f, kr / 0.78f);
+        float sk = 0.22f * k;
+        float ay = -l1 - l2 * MathF.Cos(k - sk);
+        float az = -l2 * MathF.Sin(k - sk);
+        float vy = ay * MathF.Cos(sk) - az * MathF.Sin(sk);
+        float vz = ay * MathF.Sin(sk) + az * MathF.Cos(sk);
+        float th = MathF.Asin(Clamp(dx / MathF.Max(0.05f, -vy), -0.6f, 0.6f));
+        float h = MathF.Atan2(vz, vy * MathF.Cos(th)) - MathF.Atan2(dz, dy);
+        h -= TAU * MathF.Floor((h + PI) / TAU);
+        _ikH = h;
+        _ikK = k;
+        _ikOut = th * sideSign;
+        return true;
+    }
+
+    /// <summary>Running arms into _arm: swing L/R, elbow L/R, out L/R, rot L/R, wrist L/R.</summary>
+    void RunArms(int id, float accelFwd, float stamina, float phi, float s, float moveAmt, float time)
+    {
+        var o = _arm;
+        // His carriage (fixed per player) ...
+        float amp = 0.85f + 0.3f * Hash01(id, 1);
+        float asym = (Hash01(id, 2) - 0.5f) * 0.24f;
+        float elbowK = 0.8f + 0.4f * Hash01(id, 3);
+        float elAsym = (Hash01(id, 4) - 0.5f) * 0.3f;
+        float width = (Hash01(id, 5) - 0.5f) * 0.08f;
+        float cross = 0.6f + 0.8f * Hash01(id, 6);
+        // ... a slow drift from stride to stride ...
+        float n1 = MathF.Sin(time * 1.3f + Hash01(id, 7) * 6.28f) * 0.6f + MathF.Sin(time * 0.47f + Hash01(id, 8) * 6.28f) * 0.4f;
+        float n2 = MathF.Sin(time * 0.9f + Hash01(id, 9) * 6.28f);
+        // ... effort (driving on) and fatigue.
+        float effort = Clamp(accelFwd * 0.04f, -0.15f, 0.25f) * moveAmt;
+        float tired = (1 - Smooth(0.15f, 0.45f, stamina)) * s;
+        float run = s * moveAmt;
+        float reachF = 1 + 0.45f * s, reachB = 1 - 0.3f * s;
+        float bias = 0.15f * run;
+        float bounce = MathF.Cos(2 * phi - 0.9f);
+        for (int a = 0; a < 2; a++)
+        {
+            float side = a == 0 ? 1 : -1;
+            float th = phi - 0.18f + (a == 0 ? PI : 0);
+            // + = forward. Skewed: the drive forward is quicker than the float back.
+            float u = MathF.Sin(th + 0.25f * MathF.Cos(th));
+            float sw = (0.12f + 0.68f * s) * moveAmt * amp * (1 + side * asym) * (1 + 0.1f * n1 + effort) * (1 - 0.15f * tired);
+            o[a] = bias + sw * u * (u > 0 ? reachF : reachB);
+            float uE = MathF.Sin(th - 0.35f);
+            float e0 = (0.22f + 1.1f * run) * elbowK + side * elAsym * run + 0.08f * n2 * run + 0.2f * effort - 0.25f * tired;
+            o[2 + a] = MathF.Max(0.05f, e0 + 0.5f * run * (MathF.Max(0, uE) - 0.6f * MathF.Max(0, -uE)) + 0.07f * run * bounce);
+            o[4 + a] = MathF.Max(0.04f, 0.1f + width + 0.05f * run * (1 - MathF.Max(0, u)) - 0.04f * run * cross * MathF.Max(0, u) + 0.06f * tired);
+            o[6 + a] = -0.3f * run * cross * MathF.Max(0, u);
+            // The hand lags the forearm's swing.
+            o[8 + a] = 0.1f + (0.12f + 0.18f * s) * moveAmt * MathF.Cos(th);
+        }
+    }
+
+    // ------------------------------------------------------------------ per frame
+
+    public void Update(MatchSnapshot a, MatchSnapshot b, float alpha, double timeD, float switchT)
+    {
+        float time = (float)timeD;
+        float dt = _lastTime < 0 ? 0 : Clamp((float)(timeD - _lastTime), 0, 0.05f);
+        _lastTime = timeD;
+        int held = b.HeldBy, owner = b.Owner;
+        bool throwInSp = b.SetPiece == SetPieceKind.Throw;
+        float ballX = b.BallX, ballY = b.BallY, ballZ = b.BallZ, ballVX = b.BallVX, ballVZ = b.BallVZ;
+        float mt = (float)b.Time;
+
+        for (int id = 0; id < N; id++)
+        {
+            if (!b.Active[id] || _body[id] == null)
+            {
+                for (int k = 0; k < BodyMeshes.PartCount; k++)
+                    for (int s2 = 0; s2 < PerPlayer[k]; s2++) Hide((Part)k, id * PerPlayer[k] + s2);
                 continue;
             }
-            float x = Mathf.Lerp(a.X[i], b.X[i], alpha);
-            float y = Mathf.Lerp(a.Y[i], b.Y[i], alpha);
-            float z = Mathf.Lerp(a.Z[i], b.Z[i], alpha);
-            float face = Mathf.LerpAngle(a.Facing[i], b.Facing[i], alpha);
-            // The engine's run cycle: 2 pi per stride (it only ever grows; wrap it for the GPU).
-            float phase = Mathf.Lerp(a.StridePhase[i], b.StridePhase[i], alpha) % MathF.Tau;
-            float run = Math.Clamp(b.Speed[i] / 4f, 0, 1);
-            float s = b.Height[i]; // Look.Height: a factor on the 1.8 m model
-            var basis = new Basis(Vector3.Up, -face).Scaled(new Vector3(s, s, s));
-            _mm.SetInstanceTransform(i, new Transform3D(basis, new Vector3(x, y, z)));
-            int kit = b.Team[i] + (b.Role[i] == Role.GK ? 2 : 0);
-            _mm.SetInstanceCustomData(i, new Color(phase, run, kit, SkinIndex(b.Skin[i])));
+            PosePlayer(a, b, alpha, id, time, dt, mt, held, owner, throwInSp, ballX, ballY, ballZ, ballVX, ballVZ);
         }
+        for (int k = 0; k < BodyMeshes.PartCount; k++) _mm[k].Buffer = _buf[k];
 
-        _ball.Position = new Vector3(
-            Mathf.Lerp(a.BallX, b.BallX, alpha),
-            Mathf.Lerp(a.BallY, b.BallY, alpha),
-            Mathf.Lerp(a.BallZ, b.BallZ, alpha));
+        _ball.Position = new Vector3(Mathf.Lerp(a.BallX, b.BallX, alpha), Mathf.Lerp(a.BallY, b.BallY, alpha), Mathf.Lerp(a.BallZ, b.BallZ, alpha));
 
+        // Your player: the ring (it pulses on a switch) and the arrow over his head.
         int c = b.Controlled;
-        _ring.Visible = c >= 0 && b.Phase != Phase.Goal;
-        if (c >= 0)
-            _ring.Position = new Vector3(Mathf.Lerp(a.X[c], b.X[c], alpha), 0.03f, Mathf.Lerp(a.Z[c], b.Z[c], alpha));
-    }
-
-    /// <summary>The two teams' kits (home, away), outfield then keepers, as the match was set up.</summary>
-    public void SetKits(Kit home, Kit away)
-    {
-        _mat.SetShaderParameter("shirt", new[] { Hex(home.Shirt), Hex(away.Shirt), Hex(home.GkShirt), Hex(away.GkShirt) });
-        _mat.SetShaderParameter("trim", new[] { Hex(home.Shirt2), Hex(away.Shirt2), Hex(home.GkShorts), Hex(away.GkShorts) });
-        _mat.SetShaderParameter("shorts", new[] { Hex(home.Shorts), Hex(away.Shorts), Hex(home.GkShorts), Hex(away.GkShorts) });
-        _mat.SetShaderParameter("socks", new[] { Hex(home.Socks), Hex(away.Socks), Hex(home.GkShirt), Hex(away.GkShirt) });
-    }
-
-    /// <summary>The snapshot's skin byte is an index, or (for now) the tone's low colour byte.</summary>
-    static int SkinIndex(byte skin)
-    {
-        if (skin < SkinSlots) return skin;
-        var tones = TeamData.SkinTones;
-        for (int i = 0; i < tones.Length && i < SkinSlots; i++)
-            if ((tones[i] & 0xff) == skin) return i;
-        return 0;
-    }
-
-    /// <summary>A low-poly footballer, 1.8 m tall, facing +X. Built once.</summary>
-    static ArrayMesh BuildBody()
-    {
-        var st = new SurfaceTool();
-        st.Begin(Mesh.PrimitiveType.Triangles);
-
-        void Part(int slot, int part, float pivot, Vector3 mn, Vector3 mx)
+        bool show = c >= 0 && b.Phase != Phase.Fulltime && b.DeadBallTaker < 0 && b.Phase != Phase.Goal;
+        _ring.Visible = _marker.Visible = show;
+        if (show)
         {
-            st.SetColor(new Color(slot / 255f, 0, 0));
-            st.SetUV2(new Vector2(part, pivot));
-            Geo.Box(st, mn, mx);
+            float cx = Mathf.Lerp(a.X[c], b.X[c], alpha), cz = Mathf.Lerp(a.Z[c], b.Z[c], alpha);
+            float pulse = switchT < 0.3f ? 1 + (0.3f - switchT) * 2 : 1;
+            _ring.Position = new Vector3(cx, 0.02f, cz);
+            _ring.Scale = new Vector3(pulse, 1, pulse);
+            _marker.Position = new Vector3(cx, 2.3f * b.Height[c] + MathF.Sin(time * 4) * 0.05f, cz);
+            _marker.Rotation = new Vector3(0, time * 1.5f, 0);
+        }
+    }
+
+    void PosePlayer(MatchSnapshot a, MatchSnapshot b, float alpha, int id, float time, float dt, float mt,
+        int held, int owner, bool throwInSp, float ballX, float ballY, float ballZ, float ballVX, float ballVZ)
+    {
+        float x = Lerp(a.X[id], b.X[id], alpha);
+        float z = Lerp(a.Z[id], b.Z[id], alpha);
+        float df = b.Facing[id] - a.Facing[id];
+        if (df > PI) df -= TAU;
+        if (df < -PI) df += TAU;
+        float facing = a.Facing[id] + df * alpha;
+        float speed = b.Speed[id];
+        float s = Clamp(speed / 8.5f, 0, 1);
+        float phi = Lerp(a.StridePhase[id], b.StridePhase[id], alpha);
+        float h = b.Height[id];
+        var bs = _body[id];
+        float vx = b.VX[id], vz = b.VZ[id];
+        var action = b.Action[id];
+        float accelFwd = b.AccelFwd[id];
+        bool isHeld = held == id;
+        bool gk = b.Role[id] == Role.GK;
+        sbyte kickLeg = b.KickLeg[id];
+
+        // ---------------- base gait
+        float sinP = MathF.Sin(phi), cosP = MathF.Cos(phi);
+        float moveAmt = Smooth(0.15f, 1.2f, speed);
+        // Feet shuffle when turning on the spot (the sim advances the stride for it).
+        float stepAmt = MathF.Max(moveAmt, MathF.Min(1, MathF.Abs(df) * 18));
+        float aHip = (0.12f + 0.62f * s) * stepAmt;
+        float hipL = aHip * sinP, hipR = -aHip * sinP;
+        float kneeAmp = (0.25f + 1.35f * s) * stepAmt;
+        float kneeL = 0.1f + kneeAmp * MathF.Pow(MathF.Max(0, cosP), 1.4f) + 0.12f * s;
+        float kneeR = 0.1f + kneeAmp * MathF.Pow(MathF.Max(0, -cosP), 1.4f) + 0.12f * s;
+        float legOutL = 0.04f, legOutR = 0.04f, legYawL = 0, legYawR = 0;
+        // Extra ankle angle on top of the auto-levelled foot (- = toes pointed).
+        float ankleL = 0, ankleR = 0;
+        // Arms: driven from the shoulders a beat behind the legs (see RunArms).
+        RunArms(id, accelFwd, b.Stamina[id], phi, s, moveAmt, time);
+        var ra = _arm;
+        float armL = ra[0], armR = ra[1], elbowL = ra[2], elbowR = ra[3], armOutL = ra[4], armOutR = ra[5];
+        float armRotL = ra[6], armRotR = ra[7], wristL = ra[8], wristR = ra[9];
+        float hip0 = _hipBase[id];
+        // (Less drop with planted feet: the knees then bend to take it instead.)
+        float hipY = hip0 - (0.016f + 0.07f * s) * MathF.Abs(cosP) * moveAmt * (1 - 0.3f * _ikOn[id]);
+        // Hips rotate and drop with each stride; the shoulders counter-rotate.
+        float pelvisYaw = -0.1f * s * sinP * moveAmt;
+        float pelvisRoll = 0.06f * (0.4f + s) * sinP * moveAmt;
+        float twist = (0.05f + 0.2f * s) * sinP * moveAmt;
+        float flexExtra = 0, sideExtra = 0;
+        float leanF = b.LeanFwd[id] * 0.6f;
+        float leanS = -b.LeanSide[id];
+        float roll = 0, lift = 0, headPitch = 0;
+        bool headLook = true;
+        float yawExtra = 0, fwdShift = 0;
+
+        // Side-steps and backpedalling: the legs shuffle instead of striding.
+        {
+            float cf0 = MathF.Cos(facing), sf0 = MathF.Sin(facing);
+            float vf = vx * cf0 + vz * sf0;
+            float vl = -vx * sf0 + vz * cf0;
+            float slowEnough = 1 - Smooth(4.5f, 6.5f, speed);
+            float sideAmt = speed > 0.25f ? Clamp(MathF.Abs(vl) / speed, 0, 1) * moveAmt * slowEnough : 0;
+            float backAmt = vf < -0.3f ? Clamp(-vf / MathF.Max(speed, 0.01f), 0, 1) * slowEnough : 0;
+            if (backAmt > 0.5f)
+            {
+                hipL = -hipL * 0.7f;
+                hipR = -hipR * 0.7f;
+                flexExtra += 0.12f;
+            }
+            if (sideAmt > 0)
+            {
+                float k = sideAmt * sideAmt;
+                hipL *= 1 - k * 0.85f;
+                hipR *= 1 - k * 0.85f;
+                legOutL += k * (0.06f + 0.22f * MathF.Max(0, sinP));
+                legOutR += k * (0.06f + 0.22f * MathF.Max(0, -sinP));
+                kneeL += k * 0.3f;
+                kneeR += k * 0.3f;
+                hipL += k * 0.15f;
+                hipR += k * 0.15f;
+                hipY -= k * 0.07f;
+                armL *= 1 - k;
+                armR *= 1 - k;
+                armOutL += k * 0.25f;
+                armOutR += k * 0.25f;
+                pelvisYaw *= 1 - k;
+                twist *= 1 - k;
+                flexExtra += k * 0.12f;
+            }
         }
 
-        const float hip = 0.92f, shoulder = 1.40f;
-        foreach (var (part, z) in new[] { (1, -0.1f), (2, 0.1f) })
+        // Changing direction: the body turns from the ground up; head first, hips lead.
+        float turn = Clamp(_turnS[id], -10, 10);
+        float headLead = 0;
+        if (action == ActionKind.None)
         {
-            Part(Boots, part, hip, new(-0.07f, 0, z - 0.075f), new(0.13f, 0.08f, z + 0.075f));
-            Part(Socks, part, hip, new(-0.075f, 0.08f, z - 0.075f), new(0.075f, 0.45f, z + 0.075f));
-            Part(Skin, part, hip, new(-0.07f, 0.45f, z - 0.07f), new(0.07f, 0.6f, z + 0.07f));
-            Part(Shorts, part, hip, new(-0.095f, 0.6f, z - 0.095f), new(0.095f, hip + 0.04f, z + 0.095f));
+            float lean = Clamp(MathF.Abs(leanS) / 0.3f, 0, 1) * moveAmt;
+            float pivot = MathF.Min(1, MathF.Abs(turn) / 9) * (1 - 0.5f * moveAmt);
+            headLead = Clamp(-0.045f * turn, -0.4f, 0.4f);
+            pelvisYaw += Clamp(-0.03f * turn, -0.3f, 0.3f);
+            legYawL += Clamp(-0.035f * turn, -0.3f, 0.3f);
+            legYawR += Clamp(-0.035f * turn, -0.3f, 0.3f);
+            float inR = leanS > 0 ? 1 : 0;
+            kneeL += lean * 0.28f * (1 - inR) + 0.1f * lean;
+            kneeR += lean * 0.28f * inR + 0.1f * lean;
+            legOutL += lean * 0.12f * inR;
+            legOutR += lean * 0.12f * (1 - inR);
+            hipY -= 0.05f * lean + 0.04f * pivot;
+            kneeL += 0.2f * pivot;
+            kneeR += 0.2f * pivot;
+            flexExtra += 0.06f * lean + 0.08f * pivot;
         }
-        Part(Shirt, 0, 0, new(-0.12f, hip, -0.21f), new(0.12f, 1.46f, 0.21f));
-        Part(Trim, 0, 0, new(-0.125f, 1.40f, -0.12f), new(0.125f, 1.47f, 0.12f));
-        foreach (var (part, z) in new[] { (3, -0.27f), (4, 0.27f) })
+
+        // Idle breathing.
+        if (moveAmt < 1)
         {
-            Part(Shirt, part, shoulder, new(-0.06f, 1.18f, z - 0.06f), new(0.06f, 1.45f, z + 0.06f));
-            Part(Skin, part, shoulder, new(-0.05f, 0.9f, z - 0.05f), new(0.05f, 1.18f, z + 0.05f));
+            float br = MathF.Sin(time * 2.1f + id) * 0.015f * (1 - moveAmt);
+            armOutL += br;
+            armOutR += br;
+            flexExtra += br * 0.6f;
         }
-        Part(Skin, 0, 0, new(-0.05f, 1.46f, -0.05f), new(0.05f, 1.52f, 0.05f));
-        Part(Skin, 0, 0, new(-0.1f, 1.52f, -0.095f), new(0.1f, 1.74f, 0.095f));
-        Part(Hair, 0, 0, new(-0.115f, 1.68f, -0.105f), new(0.09f, 1.79f, 0.105f));
-        return st.Commit();
+
+        // Keeper ready stance: crouched, hands out at the waist; set when danger is close.
+        if (gk)
+        {
+            float want = speed < 4.5f && action == ActionKind.None && !isHeld && b.Phase == Phase.Play ? 1 : 0;
+            float gr = _gkReady[id] += (want - _gkReady[id]) * (1 - MathF.Exp(-dt * 6));
+            if (gr > 0.001f)
+            {
+                float own = -b.Dir[b.Team[id]] * 52.5f;
+                float ballD = MathF.Sqrt((ballX - own) * (ballX - own) + ballZ * ballZ);
+                bool threat = (owner >= 0 && b.Team[owner] != b.Team[id] && ballD < 30) || (ballVX * MathF.Sign(own) > 8 && ballD < 35);
+                float set = threat ? 1 : Smooth(45, 25, ballD) * 0.5f;
+                float calm = (1 - Smooth(0.3f, 2.5f, speed) * 0.5f) * gr;
+                float still = 1 - moveAmt;
+                kneeL += (0.3f + 0.25f * set) * calm;
+                kneeR += (0.3f + 0.25f * set) * calm;
+                hipL += (0.18f + 0.12f * set) * calm;
+                hipR += (0.18f + 0.12f * set) * calm;
+                hipY -= (0.07f + 0.07f * set) * calm;
+                if (speed < 1) hipY += MathF.Max(0, MathF.Sin(time * 9 + id)) * 0.018f * set * gr;
+                roll += 0.035f * MathF.Sin(time * 1.6f + id * 1.3f) * still * (1 - 0.6f * set) * gr;
+                float Hand(float k) => 0.06f * MathF.Sin(time * 2.3f + id + k) * (1 - 0.5f * set);
+                armOutL = Lerp(armOutL, 0.36f + 0.12f * set, gr);
+                armOutR = Lerp(armOutR, 0.36f + 0.12f * set, gr);
+                armL = Lerp(armL, 0.45f + 0.35f * set + Hand(0), gr);
+                armR = Lerp(armR, 0.45f + 0.35f * set + Hand(1.9f), gr);
+                elbowL = Lerp(elbowL, 0.7f + 0.2f * set, gr);
+                elbowR = Lerp(elbowR, 0.7f + 0.2f * set, gr);
+                armRotL = Lerp(armRotL, 0.25f, gr);
+                armRotR = Lerp(armRotR, 0.25f, gr);
+                flexExtra += (0.2f + 0.1f * set) * gr;
+                legOutL = Lerp(legOutL, MathF.Max(legOutL, 0.12f), gr);
+                legOutR = Lerp(legOutR, MathF.Max(legOutR, 0.12f), gr);
+            }
+        }
+
+        float sinceTouch = b.SinceTouch[id];
+        // Dribble touch: quick flick of the leading leg, body over the ball.
+        if (action == ActionKind.None && sinceTouch < 0.2f && owner == id)
+        {
+            float k = MathF.Sin(sinceTouch / 0.2f * PI);
+            if (sinP > 0) { hipL += 0.35f * k; kneeL *= 1 - 0.5f * k; }
+            else { hipR += 0.35f * k; kneeR *= 1 - 0.5f * k; }
+            flexExtra += 0.08f * k;
+        }
+
+        // Steering touch: while close control bends the ball round a turn, the free leg's
+        // swing goes out to it and brings it round.
+        bool steering = false;
+        float pullX = b.PullX[id], pullZ = b.PullZ[id];
+        if (action == ActionKind.None && owner == id && ballY < 0.35f && mt - b.PullT[id] < 0.05f)
+        {
+            float bsp = MathF.Sqrt(ballVX * ballVX + ballVZ * ballVZ);
+            float across = bsp > 0.5f ? MathF.Abs(pullX * ballVZ - pullZ * ballVX) / bsp : 0;
+            steering = across > 1.4f;
+        }
+        if (owner != id || action != ActionKind.None) _steerSt[id] = 0;
+        else if (steering && _steerSt[id] == 0)
+        {
+            float dA0 = Lerp(0.62f, 0.32f, s) * PI;
+            int best = 0;
+            float bestT = 99;
+            for (int sd = 0; sd < 2; sd++)
+            {
+                float sg = phi + (sd == 0 ? 0 : PI) - PI;
+                sg -= TAU * MathF.Floor((sg + PI) / TAU);
+                float aa = sg - dA0;
+                if (aa < 0) aa += TAU;
+                float u = aa / (TAU - 2 * dA0);
+                float wait = u < 0.5f ? 0 : u <= 1 ? 9 : aa - (TAU - 2 * dA0);
+                if (wait < bestT) { bestT = wait; best = sd; }
+            }
+            _steerLeg[id] = (byte)best;
+            _steerSt[id] = 1;
+            _steerE[id] = 0;
+        }
+
+        // Cushioning a high ball: chest out over it, or the thigh lifted to meet it.
+        float touchH = b.TouchH[id];
+        if (action == ActionKind.None && touchH > 0.5f && sinceTouch < 0.5f)
+        {
+            float st = sinceTouch;
+            float k = Smooth(0, 0.06f, st) * (1 - Smooth(0.22f, 0.5f, st));
+            if (touchH > (float)PlayerK.ControlHeight)
+            {
+                flexExtra -= 0.38f * k;
+                leanF -= 0.15f * k;
+                armOutL = Lerp(armOutL, 0.85f, k);
+                armOutR = Lerp(armOutR, 0.85f, k);
+                armL = Lerp(armL, 0.25f, k);
+                armR = Lerp(armR, 0.25f, k);
+                elbowL = Lerp(elbowL, 0.6f, k);
+                elbowR = Lerp(elbowR, 0.6f, k);
+                kneeL += 0.25f * k;
+                kneeR += 0.25f * k;
+                hipY -= 0.05f * k;
+            }
+            else if (kickLeg > 0)
+            {
+                hipR = Lerp(hipR, 1.15f, k);
+                kneeR = Lerp(kneeR, 1.35f, k);
+                armOutL = Lerp(armOutL, 0.5f, k);
+                armOutR = Lerp(armOutR, 0.35f, k);
+            }
+            else
+            {
+                hipL = Lerp(hipL, 1.15f, k);
+                kneeL = Lerp(kneeL, 1.35f, k);
+                armOutR = Lerp(armOutR, 0.5f, k);
+                armOutL = Lerp(armOutL, 0.35f, k);
+            }
+            headPitch += 0.35f * k;
+            if (k > 0.3f) headLook = false;
+        }
+
+        // ---------------- actions
+        float actionT = b.ActionT[id], actionDur = b.ActionDur[id];
+        float pr = actionDur > 0 ? Clamp(actionT / actionDur, 0, 1) : 0;
+        switch (action)
+        {
+            case ActionKind.Kick:
+            {
+                // A real strike, timed to the moment the ball leaves the foot (KickContact):
+                // the last stride plants beside the ball; back-lift with the knee folded; the
+                // thigh drives and the shin whips through; follow-through, a hop on big shots.
+                var type = b.KickType[id];
+                float power = MathF.Min(1.15f, b.KickPower[id]);
+                bool shot = type == KickType.Shot;
+                bool lofted = b.KickLofted[id] && !shot;
+                bool ground = !shot && !lofted;
+                bool finesse = shot && power < 0.55f;
+                float kh = b.KickHeight[id];
+                float vol = shot ? Smooth(0.45f, 0.95f, kh) : 0;
+                float halfV = shot ? Smooth(0.18f, 0.4f, kh) * (1 - vol) : 0;
+                float st = b.KickStretch[id];
+                float bf = b.KickBallF[id], bl = b.KickBallL[id];
+                float sideFrac = Clamp(MathF.Abs(bl) / MathF.Max(0.3f, MathF.Sqrt(bf * bf + bl * bl)), 0, 1);
+                float tc = MathF.Max(0.05f, b.KickContact[id]);
+                float tf = MathF.Max(tc + 0.05f, actionDur);
+                float t = actionT;
+                float u = Clamp(t / tc, 0, 1);
+                float v = Clamp((t - tc) / (tf - tc), 0, 1);
+                float big = shot ? 0.55f + 0.45f * MathF.Min(1, power) : lofted ? 0.75f : 0.4f;
+                static float EaseOut(float q) => 1 - (1 - q) * (1 - q);
+                static float Ease(float q) => q * q * (3 - 2 * q);
+                float inK = Smooth(0, 0.22f, u);
+                float outK = Smooth(0.7f, 1, v);
+                bool right = kickLeg > 0;
+
+                // ---- kicking leg
+                float backLift = ground ? -(0.12f + 0.4f * big) : -(0.2f + 0.65f * big) * (1 - 0.4f * vol);
+                float heel = (ground ? 0.55f + 0.35f * big : 1.55f + 0.6f * big) * (1 - 0.35f * vol);
+                float contactHip = (ground ? 0.4f : 0.32f) + 1.05f * vol + 0.08f * halfV + 0.3f * st * (1 - sideFrac);
+                float followHip = (ground ? 0.7f : lofted ? 1.55f : finesse ? 0.95f : 0.95f + 0.75f * big) + 0.4f * vol;
+                float kHip, kKnee;
+                if (u < 0.5f)
+                {
+                    kHip = Lerp(0.12f, backLift, Ease(u / 0.5f));
+                    kKnee = Lerp(0.35f, heel, EaseOut(MathF.Min(1, u / 0.32f)));
+                }
+                else if (t < tc)
+                {
+                    float q = (u - 0.5f) / 0.5f;
+                    kHip = Lerp(backLift, contactHip, Ease(q));
+                    float fold = heel * (1 + 0.08f * Smooth(0, 0.4f, q));
+                    kKnee = Lerp(fold, 0.1f, MathF.Pow(Smooth(0.38f, 1, q), 1.3f));
+                }
+                else
+                {
+                    float rise = EaseOut(Smooth(0, 0.42f, v));
+                    float fall = Smooth(0.42f, 1, v);
+                    kHip = Lerp(Lerp(contactHip, followHip, rise), 0.18f, fall);
+                    kKnee = Lerp(Lerp(0.1f, 0.22f, rise), 0.42f, fall);
+                }
+                float lockK = Smooth(0.35f, 0.6f, u) * (1 - Smooth(0.3f, 0.7f, v));
+                float kAnkle = (ground ? -0.12f : lofted ? -0.55f : -0.85f) * lockK;
+                float kOut = 0.04f + 0.14f * big * MathF.Sin(PI * MathF.Min(1, u / 0.85f)) * (u < 1 ? 1 : 0) - (shot ? 0.24f : 0.1f) * big * Smooth(0, 0.6f, v) * (1 - Smooth(0.6f, 1, v));
+                float open = ground ? (right ? -0.65f : 0.65f) * (1 - Smooth(0.4f, 1, v)) : 0;
+                float tgt = Clamp(-b.KickRel[id], -1.2f, 1.2f);
+                float swingPhase = Smooth(0.5f, 1, u);
+                float acrossK = tgt * 0.45f * swingPhase * (1 - v * 0.5f);
+                float kOutVol = (0.35f * vol + 0.45f * st * sideFrac) * swingPhase * (1 - Smooth(0.5f, 1, v));
+
+                // ---- standing leg: reaches, plants, takes the load; a big strike lifts it.
+                float pHip, pKnee;
+                if (u < 0.55f)
+                {
+                    float q = Ease(u / 0.55f);
+                    pHip = Lerp(0.2f, 0.48f, q);
+                    pKnee = Lerp(0.55f, 0.2f, q);
+                }
+                else if (t < tc)
+                {
+                    float q = (u - 0.55f) / 0.45f;
+                    pHip = Lerp(0.48f, 0.14f, Ease(q));
+                    pKnee = Lerp(0.2f, shot ? 0.48f : 0.36f, Ease(q));
+                }
+                else
+                {
+                    pHip = Lerp(0.14f, -0.38f, Ease(Smooth(0, 0.85f, v)));
+                    pKnee = Lerp(shot ? 0.48f : 0.36f, 0.3f, v);
+                }
+                pKnee += 0.5f * st * Smooth(0.4f, 1, u) * (1 - Smooth(0.4f, 1, v));
+                float hop = (shot && power > 0.55f ? MathF.Sin(PI * Smooth(0.08f, 0.62f, v)) * (0.05f + 0.05f * big) : 0)
+                    + Smooth(0.75f, 1, vol) * MathF.Sin(PI * Smooth(0.7f, 1, u) * (1 - v * 0.6f)) * 0.14f;
+                if (hop > 0) pKnee += hop * 2.5f;
+
+                float kk = inK * (1 - outK);
+                if (right)
+                {
+                    hipR = Lerp(hipR, kHip, kk);
+                    kneeR = Lerp(kneeR, kKnee, kk);
+                    hipL = Lerp(hipL, pHip, kk);
+                    kneeL = Lerp(kneeL, pKnee, kk);
+                    ankleR = kAnkle;
+                    legYawR = (open + acrossK) * inK;
+                    legOutR = Lerp(legOutR, kOut + kOutVol, inK * (1 - outK));
+                }
+                else
+                {
+                    hipL = Lerp(hipL, kHip, kk);
+                    kneeL = Lerp(kneeL, kKnee, kk);
+                    hipR = Lerp(hipR, pHip, kk);
+                    kneeR = Lerp(kneeR, pKnee, kk);
+                    ankleL = kAnkle;
+                    legYawL = (open + acrossK) * inK;
+                    legOutL = Lerp(legOutL, kOut + kOutVol, inK * (1 - outK));
+                }
+
+                // ---- arms: the opposite arm rises out wide and sweeps through; the other counters.
+                float wind = Smooth(0, 0.55f, u) * (1 - Smooth(0.1f, 0.9f, v));
+                float thru = Smooth(0.6f, 1, u) * (1 - outK);
+                float oppOut = Lerp(0.15f, (ground ? 0.75f : 1.2f) * (0.7f + 0.3f * big) + 0.45f * st, MathF.Max(wind, st * swingPhase));
+                float oppSwing = Lerp(0.35f * wind, -0.35f, thru);
+                float sameSwing = Lerp(-0.55f * wind * big, 0.55f * big, thru);
+                float keep = 1 - inK * (1 - outK);
+                if (right)
+                {
+                    armOutL = Lerp(oppOut, armOutL, keep);
+                    armL = Lerp(oppSwing, armL, keep);
+                    armOutR = Lerp(0.35f, armOutR, keep);
+                    armR = Lerp(sameSwing, armR, keep);
+                    elbowL = Lerp(0.45f, elbowL, keep);
+                }
+                else
+                {
+                    armOutR = Lerp(oppOut, armOutR, keep);
+                    armR = Lerp(oppSwing, armR, keep);
+                    armOutL = Lerp(0.35f, armOutL, keep);
+                    armL = Lerp(sameSwing, armL, keep);
+                    elbowR = Lerp(0.45f, elbowR, keep);
+                }
+                // A punt: the ball held out in both hands, let go as the leg comes through.
+                if (isHeld)
+                {
+                    float hold = inK * (1 - Smooth(0.75f, 1, u));
+                    armL = Lerp(armL, 0.95f, hold);
+                    armR = Lerp(armR, 0.95f, hold);
+                    elbowL = Lerp(elbowL, 0.55f, hold);
+                    elbowR = Lerp(elbowR, 0.55f, hold);
+                    armOutL = Lerp(armOutL, 0.14f, hold);
+                    armOutR = Lerp(armOutR, 0.14f, hold);
+                }
+
+                // ---- trunk: arch on the back-lift, over the ball for a driven strike.
+                float atContact = MathF.Exp(-MathF.Pow((u - 1 + v * 2) * 2.2f, 2));
+                float overBall = ground ? 0.12f : lofted ? -0.26f : finesse ? 0.06f : power > 1 ? -0.2f : 0.22f;
+                flexExtra += (-0.08f * big * Smooth(0.1f, 0.5f, u) * (1 - swingPhase) + overBall * swingPhase * (1 - outK) + (shot && !finesse ? 0.12f * MathF.Sin(PI * v) : 0)) * inK;
+                sideExtra += -kickLeg * (0.08f + 0.16f * big + 0.4f * vol) * MathF.Max(atContact, wind * 0.6f) * inK;
+                float reachK = st * swingPhase * (1 - outK);
+                hipY -= 0.13f * reachK;
+                sideExtra += -kickLeg * 0.22f * sideFrac * reachK;
+                leanF -= 0.1f * (1 - sideFrac) * reachK;
+                leanF -= 0.2f * vol * swingPhase * (1 - outK);
+                flexExtra += 0.14f * halfV * swingPhase * (1 - outK);
+                pelvisRoll += -kickLeg * 0.2f * vol * swingPhase * (1 - outK);
+                float turnBack = wind * (1 - swingPhase);
+                float turnThru = swingPhase * (1 - outK);
+                pelvisYaw = Lerp(pelvisYaw, kickLeg * 0.32f * big * turnBack - kickLeg * 0.22f * big * turnThru + tgt * 0.3f * turnThru, inK);
+                twist = Lerp(twist, -kickLeg * 0.32f * big * turnBack + kickLeg * 0.18f * big * turnThru + tgt * 0.4f * turnThru, inK);
+                pelvisRoll += -kickLeg * 0.06f * big * wind;
+                hipY -= ((shot ? 0.05f : 0.035f) + 0.03f * big) * Smooth(0.45f, 0.85f, u) * (1 - outK);
+                lift = hop;
+                if (lofted) leanF -= 0.06f * swingPhase * (1 - outK);
+                headLook = false;
+                headPitch = 0.38f * (1 - Smooth(0.15f, 0.6f, v)) + 0.05f;
+                break;
+            }
+            case ActionKind.Stretch:
+            {
+                // Reaching a leg out for a ball just beyond him, the same curve as the sim's reach.
+                float ext = (float)Player.StretchExt(actionT, actionDur);
+                float fwd = MathF.Max(0, b.KickBallF[id]);
+                float lat = b.KickBallL[id] * kickLeg;
+                float r = MathF.Max(0.3f, MathF.Sqrt(fwd * fwd + lat * lat));
+                float ca = fwd / r, sa = lat / r;
+                float reachA = 0.62f + 0.25f * Clamp((r - (float)PlayerK.Reach) / 0.4f, 0, 1);
+                float sHip = reachA * ca, sOut = reachA * sa;
+                bool right = kickLeg > 0;
+                if (right)
+                {
+                    hipR = Lerp(hipR, sHip, ext);
+                    kneeR = Lerp(kneeR, 0.08f, ext);
+                    legOutR = Lerp(legOutR, sOut, ext);
+                    ankleR = -0.45f * ext;
+                    hipL = Lerp(hipL, 0.32f, ext);
+                    kneeL = Lerp(kneeL, 0.75f, ext);
+                }
+                else
+                {
+                    hipL = Lerp(hipL, sHip, ext);
+                    kneeL = Lerp(kneeL, 0.08f, ext);
+                    legOutL = Lerp(legOutL, sOut, ext);
+                    ankleL = -0.45f * ext;
+                    hipR = Lerp(hipR, 0.32f, ext);
+                    kneeR = Lerp(kneeR, 0.75f, ext);
+                }
+                hipY -= 0.17f * ext;
+                flexExtra += 0.18f * ca * ext;
+                sideExtra += -kickLeg * 0.3f * MathF.Abs(sa) * ext;
+                pelvisRoll += -kickLeg * 0.12f * ext;
+                float farOut = 0.95f * ext, nearOut = 0.4f * ext;
+                if (right)
+                {
+                    armOutL = MathF.Max(armOutL, farOut);
+                    armOutR = MathF.Max(armOutR, nearOut);
+                    armL = Lerp(armL, -0.25f, ext);
+                }
+                else
+                {
+                    armOutR = MathF.Max(armOutR, farOut);
+                    armOutL = MathF.Max(armOutL, nearOut);
+                    armR = Lerp(armR, -0.25f, ext);
+                }
+                headLook = false;
+                headPitch = 0.3f * ext;
+                break;
+            }
+            case ActionKind.Tackle:
+            {
+                // Block tackle: sink on the standing leg, the tackling leg low and nearly straight.
+                float load = Smooth(0, 0.2f, pr) * (1 - Smooth(0.75f, 1, pr));
+                float reach = Smooth(0.12f, 0.42f, pr) * (1 - Smooth(0.62f, 0.9f, pr));
+                bool right = kickLeg > 0;
+                float side = right ? -1 : 1;
+                const float tHip = 1.05f, tKnee = 0.18f;
+                float tcf = MathF.Cos(facing), tsf = MathF.Sin(facing);
+                float lx = b.LegX[id], lz = b.LegZ[id];
+                float aim = Clamp(MathF.Atan2(-lx * tsf + lz * tcf, lx * tcf + lz * tsf), -0.6f, 0.6f) * reach;
+                if (right)
+                {
+                    hipR = Lerp(hipR, tHip, reach);
+                    kneeR = Lerp(kneeR, tKnee, reach);
+                    legYawR = Lerp(legYawR, -0.5f, reach) - aim;
+                    legOutR = Lerp(legOutR, 0.12f, reach);
+                    hipL = Lerp(hipL, -0.15f, load);
+                    kneeL = Lerp(kneeL, 0.75f, load);
+                    armL = Lerp(armL, 0.65f, reach);
+                    armR = Lerp(armR, -0.45f, reach);
+                }
+                else
+                {
+                    hipL = Lerp(hipL, tHip, reach);
+                    kneeL = Lerp(kneeL, tKnee, reach);
+                    legYawL = Lerp(legYawL, 0.5f, reach) + aim;
+                    legOutL = Lerp(legOutL, 0.12f, reach);
+                    hipR = Lerp(hipR, -0.15f, load);
+                    kneeR = Lerp(kneeR, 0.75f, load);
+                    armR = Lerp(armR, 0.65f, reach);
+                    armL = Lerp(armL, -0.45f, reach);
+                }
+                hipY -= 0.17f * load;
+                leanF += 0.12f * load - 0.22f * reach;
+                pelvisYaw += side * 0.22f * reach;
+                twist += side * 0.18f * reach;
+                armOutL = armOutR = 0.1f + 0.5f * load;
+                elbowL = elbowR = 0.5f;
+                break;
+            }
+            case ActionKind.Slide:
+            {
+                // Down as he commits, the lead leg along the grass on its committed line, a small
+                // bounce on landing, the support hand a beat later, up as the slide dies.
+                float speedNow = MathF.Sqrt(vx * vx + vz * vz);
+                float entry = Clamp((b.SlideV0[id] - 6) / 2.5f, 0, 1);
+                float vary = MathF.Sin(id * 12.9898f) * 0.5f;
+                float t = actionT;
+                float stop = b.SlideStop[id];
+                float down = Smooth(0, 0.13f, t);
+                float landT = MathF.Max(0, t - 0.12f);
+                float bounce = landT > 0 ? MathF.Exp(-landT * 9) * MathF.Sin(landT * 26) : 0;
+                float rise = Smooth(stop - 0.1f, actionDur - 0.1f, t) * (1 - Smooth(0.7f, 2.4f, speedNow));
+                float lying = down * (1 - rise);
+                float kneel = rise * (1 - Smooth(actionDur - 0.12f, actionDur, t));
+                float reach = Smooth(0.03f, 0.12f, t) * (1 - Smooth(stop - 0.05f, stop + 0.15f, t));
+                float cf0 = MathF.Cos(facing), sf0 = MathF.Sin(facing);
+                float lx = b.LegX[id], lz = b.LegZ[id];
+                float aim = Clamp(MathF.Atan2(-lx * sf0 + lz * cf0, lx * cf0 + lz * sf0), -0.6f, 0.6f) * reach;
+                bool right = kickLeg > 0;
+                float tuck = right ? 1 : -1;
+                hipY = Lerp(hipY, 0.27f - 0.05f * entry + 0.04f * bounce, lying) + 0.3f * kneel;
+                leanF = Lerp(leanF, -(0.78f + 0.25f * entry + 0.08f * vary), lying) + 0.06f * bounce * lying + 0.45f * kneel;
+                roll += tuck * (0.22f + 0.12f * entry + 0.05f * vary) * lying;
+                flexExtra += (0.18f + 0.06f * vary) * lying;
+                float leadHip = Lerp(0.3f, 0.6f + 0.05f * entry, reach), leadKnee = Lerp(0.55f, 0.06f, reach);
+                float foldHip = 0.48f + 0.06f * vary, foldKnee = 1.95f;
+                const float upHip = 1.15f, upKnee = 1.9f;
+                float supp = Smooth(0.08f, 0.26f, t) * (1 - rise);
+                float freeArm = -1.0f - 0.25f * entry - 0.3f * bounce;
+                if (right)
+                {
+                    hipR = Lerp(Lerp(hipR, leadHip, lying), upHip * 0.6f, kneel);
+                    kneeR = Lerp(Lerp(kneeR, leadKnee, lying), 0.9f, kneel);
+                    legYawR -= aim;
+                    hipL = Lerp(Lerp(hipL, foldHip, lying), upHip, kneel);
+                    kneeL = Lerp(Lerp(kneeL, foldKnee, lying), upKnee, kneel);
+                    legOutL = Lerp(legOutL, 0.28f, lying);
+                    armL = Lerp(armL, 0.75f, supp);
+                    armOutL = Lerp(armOutL, 0.45f, supp);
+                    elbowL = Lerp(elbowL, 0.15f, supp);
+                    armR = Lerp(armR, freeArm, lying);
+                    armOutR = Lerp(armOutR, 0.8f + 0.1f * vary, lying);
+                    elbowR = Lerp(elbowR, 0.5f, lying);
+                }
+                else
+                {
+                    hipL = Lerp(Lerp(hipL, leadHip, lying), upHip * 0.6f, kneel);
+                    kneeL = Lerp(Lerp(kneeL, leadKnee, lying), 0.9f, kneel);
+                    legYawL += aim;
+                    hipR = Lerp(Lerp(hipR, foldHip, lying), upHip, kneel);
+                    kneeR = Lerp(Lerp(kneeR, foldKnee, lying), upKnee, kneel);
+                    legOutR = Lerp(legOutR, 0.28f, lying);
+                    armR = Lerp(armR, 0.75f, supp);
+                    armOutR = Lerp(armOutR, 0.45f, supp);
+                    elbowR = Lerp(elbowR, 0.15f, supp);
+                    armL = Lerp(armL, freeArm, lying);
+                    armOutL = Lerp(armOutL, 0.8f + 0.1f * vary, lying);
+                    elbowL = Lerp(elbowL, 0.5f, lying);
+                }
+                break;
+            }
+            case ActionKind.Dive:
+            {
+                // The same pose the physics uses for the hands (KeeperPose), so saves happen where you see them.
+                float leftZ = -MathF.Cos(facing);
+                float side = MathF.Sign(b.ActionDirZ[id] * leftZ);
+                if (side == 0) side = 1;
+                float reachOut = Smooth(0.015f, 0.19f, pr);
+                float land = Smooth(0.42f, 0.56f, pr);
+                float getUp = Smooth(0.74f, 0.97f, pr);
+                float tRoll = b.DiveRoll[id], tLift = b.DiveLift[id];
+                roll = -side * Lerp(Lerp(tRoll * reachOut, MathF.Max(tRoll, 1.5f), land), 0, getUp);
+                lift = tLift * reachOut * (1 - land);
+                leanF = 0;
+                leanS = 0;
+                float dip = 1 - Smooth(0, 0.07f, pr);
+                float fly = Smooth(0.02f, 0.17f, pr) * (1 - Smooth(0.42f, 0.56f, pr));
+                float lie = Smooth(0.42f, 0.56f, pr) * (1 - Smooth(0.74f, 0.86f, pr));
+                float rise = Smooth(0.72f, 0.86f, pr) * (1 - Smooth(0.9f, 1, pr));
+                float reach = Smooth(0.015f, 0.19f, pr) * (1 - Smooth(0.74f, 0.9f, pr));
+                hipY = hip0 - dip * 0.14f - rise * 0.38f;
+                bool nearL = side > 0;
+                float curl = lie;
+                float pushHip = 0.1f * fly + 0.5f * curl, pushKnee = Lerp(0.9f * dip + 0.15f, 0.08f, fly) + 0.8f * curl;
+                float trailHip = 0.75f * fly + 0.85f * curl, trailKnee = 1.3f * fly + 1.3f * curl;
+                float kneelHip = 0.9f * rise, kneelKnee = 1.6f * rise;
+                if (nearL)
+                {
+                    hipL = pushHip + kneelHip; kneeL = pushKnee + kneelKnee;
+                    hipR = trailHip + kneelHip * 0.4f; kneeR = trailKnee + kneelKnee * 0.6f;
+                }
+                else
+                {
+                    hipR = pushHip + kneelHip; kneeR = pushKnee + kneelKnee;
+                    hipL = trailHip + kneelHip * 0.4f; kneeL = trailKnee + kneelKnee * 0.6f;
+                }
+                float gather = Smooth(0.45f, 0.62f, pr) * (1 - Smooth(0.72f, 0.84f, pr));
+                float up = Lerp(0.6f, 3.0f, reach);
+                float downA = isHeld ? 1.25f : 2.2f;
+                float nearArm = Lerp(Lerp(Lerp(nearL ? armL : armR, up - 0.15f, MathF.Max(reach, 0.2f)), downA, gather), 0.3f, rise);
+                float farArm = Lerp(Lerp(Lerp(nearL ? armR : armL, up + 0.08f, MathF.Max(reach, 0.2f)), downA, gather), 0.8f, rise);
+                float nearOut = Lerp(0.05f, 0.6f, rise), farOut = Lerp(0.1f, 0.25f, rise);
+                float elb = Lerp(Lerp(Lerp(0.6f, 0.18f, reach), isHeld ? 1.5f : 0.5f, gather), 0.25f, rise);
+                if (nearL) { armL = nearArm; armR = farArm; armOutL = nearOut; armOutR = farOut; }
+                else { armR = nearArm; armL = farArm; armOutR = nearOut; armOutL = farOut; }
+                elbowL = elbowR = elb;
+                sideExtra += -side * 0.18f * fly;
+                flexExtra += 0.35f * lie + 0.45f * rise;
+                headLook = false;
+                headPitch = -0.15f * fly + 0.2f * lie;
+                break;
+            }
+            case ActionKind.Catch:
+            {
+                // Hands meet the ball at its height, then gather it into the chest.
+                float yH = Clamp(b.CatchY[id], 0.1f, 2.4f);
+                float meet = 1 - Smooth(0.25f, 0.6f, pr);
+                float reachSwing = yH > 1.6f ? 2.5f : yH > 0.9f ? 1.5f : 0.75f;
+                armL = armR = Lerp(1.0f, reachSwing, meet);
+                elbowL = elbowR = Lerp(1.35f, 0.4f, meet);
+                armOutL = armOutR = Lerp(0, 0.16f, meet);
+                float hk = Smooth(1.6f, 2.0f, yH) * MathF.Sin(MathF.Min(1, pr * 1.6f) * PI);
+                hipL += 0.9f * hk;
+                kneeL += 1.4f * hk;
+                float kneel = Smooth(0.5f, 0.3f, yH) * Smooth(0, 0.2f, pr) * (1 - Smooth(0.75f, 1, pr));
+                float low = 1 - Smooth(0.3f, 0.8f, yH);
+                kneeL += 0.7f * low + 0.25f;
+                kneeR += 0.7f * low + 0.25f;
+                hipL += 0.35f * low;
+                hipR += 0.35f * low;
+                hipY -= 0.25f * low + 0.04f;
+                flexExtra += 0.45f * low + 0.18f * (1 - meet);
+                if (yH > 1.8f) lift = 0.18f * MathF.Sin(MathF.Min(1, pr * 1.6f) * PI);
+                hipR = Lerp(hipR, 0.12f, kneel);
+                kneeR = Lerp(kneeR, 1.6f, kneel);
+                legYawR = Lerp(legYawR, -0.55f, kneel);
+                hipL = Lerp(hipL, 0.95f, kneel);
+                kneeL = Lerp(kneeL, 1.35f, kneel);
+                hipY = Lerp(hipY, 0.5f, kneel);
+                headLook = false;
+                headPitch = 0.2f;
+                break;
+            }
+            case ActionKind.Header:
+            {
+                float k = MathF.Sin(pr * PI);
+                lift = 0.38f * k;
+                // Arch back, then snap the upper body through the ball.
+                flexExtra += pr < 0.45f ? -0.3f * (pr / 0.45f) : Lerp(-0.3f, 0.35f, Smooth(0.45f, 0.7f, pr)) * (1 - Smooth(0.75f, 1, pr));
+                headPitch = 0.35f * MathF.Sin(MathF.Min(1, pr * 2) * PI);
+                armOutL = armOutR = 0.7f * k + 0.1f;
+                armL = armR = 0.3f * k;
+                kneeL = kneeR = 0.45f * k + 0.1f;
+                headLook = false;
+                break;
+            }
+            case ActionKind.Throw:
+            {
+                if (b.ThrowIn[id])
+                {
+                    // From above the head, back behind it, then over and through.
+                    float back = Smooth(0, 0.4f, pr), over = Smooth(0.4f, 0.75f, pr);
+                    armL = armR = Lerp(Lerp(2.6f, 3.45f, back), 2.0f, over);
+                    elbowL = elbowR = Lerp(Lerp(0.5f, 1.5f, back), 0.15f, over);
+                    flexExtra += Lerp(-0.25f, 0.25f, Smooth(0.3f, 0.7f, pr));
+                }
+                else
+                {
+                    // Keeper's one-arm throw: wind back, whip over the top, step into it.
+                    float wind = 1 - Smooth(0.15f, 0.5f, pr);
+                    float whip = Smooth(0.35f, 0.65f, pr);
+                    armR = Lerp(Lerp(0, -1.3f, Smooth(0, 0.3f, pr)), -5.0f, whip);
+                    elbowR = Lerp(0.9f, 0.15f, whip);
+                    armOutR = 0.25f;
+                    armL = 1.2f * wind - 0.3f;
+                    armOutL = 0.2f;
+                    twist = Lerp(-0.45f, 0.45f, whip);
+                    pelvisYaw = Lerp(-0.2f, 0.25f, whip);
+                    hipL = 0.45f * Smooth(0.2f, 0.5f, pr);
+                    kneeL = 0.35f;
+                    flexExtra += Lerp(-0.15f, 0.25f, whip);
+                }
+                break;
+            }
+            case ActionKind.Fall:
+            {
+                // Knocked down the way the hit sends him, arms out, a moment down, up via a knee.
+                float down = Smooth(0, 0.2f, pr);
+                float rise = Smooth(0.62f, 0.9f, pr);
+                float lying = down * (1 - rise);
+                float kneel = rise * (1 - Smooth(0.9f, 1, pr));
+                float cf0 = MathF.Cos(facing), sf0 = MathF.Sin(facing);
+                float adx = b.ActionDirX[id], adz = b.ActionDirZ[id];
+                float fwd = adx * cf0 + adz * sf0;
+                float lft = -adx * sf0 + adz * cf0;
+                leanF = Lerp(leanF, fwd * 1.3f, lying) + 0.45f * kneel;
+                roll += lft * 1.1f * lying;
+                hipY = Lerp(hipY, 0.28f, lying) + 0.3f * kneel;
+                flexExtra += 0.25f * lying;
+                float reachArm = fwd >= 0 ? 0.6f + 0.8f * fwd : 0.6f + 1.5f * fwd;
+                armL = Lerp(armL, reachArm, lying);
+                armR = Lerp(armR, reachArm, lying);
+                armOutL = Lerp(armOutL, 0.55f + MathF.Max(0, lft) * 0.5f, lying);
+                armOutR = Lerp(armOutR, 0.55f + MathF.Max(0, -lft) * 0.5f, lying);
+                elbowL = elbowR = Lerp(elbowL, 0.3f, lying);
+                hipL = Lerp(Lerp(hipL, 0.55f - fwd * 0.4f, lying), 1.15f, kneel);
+                kneeL = Lerp(Lerp(kneeL, 0.9f, lying), 1.9f, kneel);
+                hipR = Lerp(Lerp(hipR, 0.35f - fwd * 0.4f, lying), 0.7f, kneel);
+                kneeR = Lerp(Lerp(kneeR, 0.5f, lying), 0.9f, kneel);
+                legOutL = Lerp(legOutL, 0.2f, lying);
+                legOutR = Lerp(legOutR, 0.2f, lying);
+                headLook = false;
+                headPitch = -0.2f * lying * fwd;
+                break;
+            }
+            case ActionKind.Stumble:
+            {
+                float k = MathF.Sin(pr * PI);
+                leanF += 0.2f * k;
+                flexExtra += 0.35f * k;
+                sideExtra += MathF.Sin(id * 3.1f) * 0.25f * k;
+                armOutL = armOutR = 0.9f * k;
+                armL = armR = -0.5f * k;
+                break;
+            }
+        }
+
+        // Holding the ball.
+        if (isHeld && action == ActionKind.None)
+        {
+            if (throwInSp)
+            {
+                armL = armR = 2.6f;
+                elbowL = elbowR = 0.5f;
+                armOutL = armOutR = 0.2f;
+                flexExtra -= 0.12f;
+            }
+            else
+            {
+                armL = armR = 0.45f;
+                elbowL = elbowR = 1.25f;
+                armOutL = armOutR = 0.12f;
+            }
+        }
+
+        // Goal celebration: the one picked with the buttons, or the classic.
+        bool scorer = b.Phase == Phase.Goal && b.Scorer == id;
+        float phaseT = b.PhaseT;
+        bool cel = scorer && b.Celebration != null && phaseT >= b.CelebrationAt && phaseT < GoalSeq.Cut;
+        if (cel)
+        {
+            float u = phaseT - b.CelebrationAt;
+            float turnDir = b.CelebrationTurn;
+            headLook = false;
+            switch (b.Celebration.Value)
+            {
+                case CelebrationKind.Slide:
+                {
+                    // Down onto both knees, skidding at the camera; a roar; up, soaking it in.
+                    float knees = Smooth(0.7f, 0.88f, u) * (1 - Smooth(3.7f, 4.2f, u));
+                    float skid = Smooth(0.82f, 1.15f, u) * (1 - Smooth(2.4f, 2.8f, u));
+                    float roar = Smooth(2.4f, 2.75f, u) * (1 - Smooth(3.6f, 4.0f, u));
+                    float pump = MathF.Max(0, MathF.Sin((u - 2.5f) * 10)) * roar;
+                    float fin = Smooth(3.9f, 4.4f, u);
+                    hipY = Lerp(hipY, 0.5f, knees);
+                    hipL = Lerp(hipL, 0.14f, knees);
+                    hipR = Lerp(hipR, 0.06f, knees);
+                    kneeL = Lerp(kneeL, 1.62f, knees);
+                    kneeR = Lerp(kneeR, 1.56f, knees);
+                    legOutL = Lerp(legOutL, 0.15f, knees);
+                    legOutR = Lerp(legOutR, 0.15f, knees);
+                    leanF = Lerp(leanF, -0.1f, knees);
+                    leanS *= 1 - knees;
+                    flexExtra += -0.5f * skid + 0.3f * roar + 0.06f * pump - 0.18f * fin;
+                    headPitch += -0.5f * skid - 0.25f * roar - 0.2f * fin;
+                    float ArmUp(float q) => Lerp(Lerp(Lerp(q, -0.55f, skid), 0.3f + 0.4f * pump, roar), 0.15f, fin);
+                    armL = ArmUp(armL);
+                    armR = ArmUp(armR);
+                    armOutL = armOutR = Lerp(Lerp(Lerp(armOutL, 1.3f, skid), 0.38f, roar), 1.35f, fin);
+                    elbowL = elbowR = Lerp(Lerp(Lerp(elbowL, 0.55f, skid), 2.05f - 0.55f * pump, roar), 0.15f, fin);
+                    break;
+                }
+                case CelebrationKind.Plane:
+                {
+                    // The aeroplane: arms out like wings, banked into the turn.
+                    float k = Smooth(0, 0.35f, u);
+                    float bank = turnDir * 0.36f * k * (1 - Smooth(2.8f, 3.3f, u));
+                    float fin = Smooth(3.6f, 4.1f, u);
+                    float wob = MathF.Sin(time * 6.5f) * 0.07f * k * (1 - fin);
+                    roll += bank;
+                    armOutL = Lerp(Lerp(armOutL, 1.5f + wob, k), 0.5f, fin);
+                    armOutR = Lerp(Lerp(armOutR, 1.5f - wob, k), 0.5f, fin);
+                    armL = Lerp(Lerp(armL, 0.05f, k), -2.75f, fin);
+                    armR = Lerp(Lerp(armR, 0.05f, k), -2.75f, fin);
+                    elbowL = elbowR = Lerp(Lerp(elbowL, 0.05f, k), 0.15f, fin);
+                    flexExtra -= 0.12f * k + 0.12f * fin;
+                    headPitch -= 0.12f * k + 0.25f * fin;
+                    break;
+                }
+                case CelebrationKind.Siu:
+                {
+                    // A crouch, a leap with a half turn, the landing: feet wide, arms flung down.
+                    float load = Smooth(0.28f, 0.45f, u) * (1 - Smooth(0.45f, 0.52f, u));
+                    float q = Clamp((u - 0.45f) / 0.6f, 0, 1);
+                    float air = q > 0 && q < 1 ? MathF.Sin(PI * q) : 0;
+                    float land = Smooth(1.0f, 1.06f, u) * (1 - Smooth(1.06f, 1.35f, u));
+                    float pose = Smooth(1.02f, 1.22f, u);
+                    if (u >= 0.45f) yawExtra = PI * turnDir * (1 - Smooth(0.47f, 0.98f, u));
+                    lift += 0.6f * air;
+                    kneeL += 0.8f * load + 0.7f * air + 0.5f * land;
+                    kneeR += 0.8f * load + 0.7f * air + 0.5f * land;
+                    hipL += 0.45f * load + 0.4f * air;
+                    hipR += 0.45f * load + 0.25f * air;
+                    hipY -= 0.18f * load + 0.12f * land + 0.11f * pose;
+                    armL = Lerp(Lerp(armL, 0.9f, load), -2.4f, air);
+                    armR = Lerp(Lerp(armR, 0.9f, load), -2.4f, air);
+                    armOutL = armOutR = Lerp(armOutL, 0.35f, air);
+                    legOutL = Lerp(legOutL, 0.3f, pose);
+                    legOutR = Lerp(legOutR, 0.3f, pose);
+                    hipL = Lerp(hipL, 0.3f, pose);
+                    hipR = Lerp(hipR, 0.3f, pose);
+                    kneeL = Lerp(kneeL, 0.5f, pose) + 0.4f * land;
+                    kneeR = Lerp(kneeR, 0.5f, pose) + 0.4f * land;
+                    armL = Lerp(armL, 0.5f, pose);
+                    armR = Lerp(armR, 0.5f, pose);
+                    armOutL = Lerp(armOutL, 0.8f, pose);
+                    armOutR = Lerp(armOutR, 0.8f, pose);
+                    elbowL = elbowR = Lerp(elbowL, 0.08f, pose);
+                    flexExtra += 0.3f * load - 0.38f * pose;
+                    headPitch -= 0.42f * pose;
+                    break;
+                }
+                case CelebrationKind.Flip:
+                {
+                    // A standing backflip: load, arms swung up, tucked over, landed, arms to the sky.
+                    float load = Smooth(0.55f, 0.85f, u) * (1 - Smooth(0.85f, 0.92f, u));
+                    float k = Clamp((u - 0.85f) / 0.75f, 0, 1);
+                    bool flying = k > 0 && k < 1;
+                    float tuck = Smooth(0.1f, 0.32f, k) * (1 - Smooth(0.68f, 0.9f, k));
+                    float land = Smooth(1.56f, 1.62f, u) * (1 - Smooth(1.62f, 1.95f, u));
+                    float sky = Smooth(1.8f, 2.25f, u);
+                    if (flying)
+                    {
+                        float th = -TAU * k * k * (3 - 2 * k);
+                        const float c = 0.95f;
+                        lift = c + 0.8f * MathF.Sin(PI * k) - c * MathF.Cos(th);
+                        fwdShift = -c * MathF.Sin(th) * h;
+                        leanF = th;
+                        leanS = 0;
+                        roll = 0;
+                    }
+                    hipL = Lerp(hipL + 0.65f * load + 0.5f * land, 1.85f, tuck);
+                    hipR = Lerp(hipR + 0.65f * load + 0.5f * land, 1.85f, tuck);
+                    kneeL = Lerp(kneeL + 1.0f * load + 0.9f * land, 2.15f, tuck);
+                    kneeR = Lerp(kneeR + 1.0f * load + 0.9f * land, 2.15f, tuck);
+                    hipY -= 0.28f * load + 0.25f * land;
+                    float swing = flying ? 1 - tuck : 0;
+                    float Arm(float q) => Lerp(Lerp(Lerp(Lerp(q, 1.0f, load), -2.8f, swing), -1.0f, tuck), -1.2f, land);
+                    armL = Lerp(Arm(armL), -2.75f + 0.12f * MathF.Sin(time * 11), sky);
+                    armR = Lerp(Arm(armR), -2.75f + 0.12f * MathF.Sin(time * 11 + 1.3f), sky);
+                    armOutL = armOutR = Lerp(Lerp(armOutL, 0.12f, tuck), 0.45f, sky);
+                    elbowL = elbowR = Lerp(Lerp(elbowL, 1.3f, tuck), 0.12f, sky);
+                    flexExtra += 0.35f * load + 0.4f * tuck + 0.2f * land - 0.2f * sky;
+                    headPitch += 0.25f * tuck - 0.35f * sky;
+                    break;
+                }
+            }
+        }
+        else if (scorer && phaseT > 0.4f && phaseT < GoalSeq.Cut)
+        {
+            float u = phaseT - (float)GoalSeq.Front;
+            if (u < 0.3f)
+            {
+                // The run: arms flung up.
+                armL = armR = -2.7f;
+                armOutL = armOutR = 0.5f;
+                elbowL = elbowR = 0.2f;
+                flexExtra -= 0.25f;
+            }
+            else
+            {
+                // A roar with pumped fists, sunk into a wide stance, then his signature pose.
+                float set = 1 - Smooth(0.5f, 2.5f, speed);
+                float roar = Smooth(0.3f, 0.7f, u) * (1 - Smooth(1.7f, 2.2f, u));
+                float sig = Smooth(1.9f, 2.5f, u);
+                float pump = MathF.Max(0, MathF.Sin((u - 0.3f) * 11)) * (1 - Smooth(1.3f, 1.7f, u));
+                float st = set * (roar + sig * 0.6f);
+                legOutL = Lerp(legOutL, 0.17f, st);
+                legOutR = Lerp(legOutR, 0.17f, st);
+                hipL += 0.22f * set * roar;
+                hipR += 0.22f * set * roar;
+                kneeL += 0.4f * set * roar;
+                kneeR += 0.4f * set * roar;
+                hipY -= (0.07f + 0.02f * pump) * set * roar;
+                flexExtra += (0.28f + 0.1f * pump) * roar;
+                headPitch -= 0.25f * roar + 0.12f * sig;
+                headLook = false;
+                float rA = 0.35f + 0.35f * pump;
+                armL = Lerp(-2.7f, rA, roar);
+                armR = Lerp(-2.7f, rA, roar);
+                armOutL = armOutR = Lerp(0.5f, 0.35f, roar);
+                elbowL = elbowR = Lerp(0.2f, 2.1f - 0.5f * pump, roar);
+                int vv = id % 3;
+                if (vv == 0)
+                {
+                    // Arms folded across the chest, shoulders back.
+                    armL = Lerp(armL, 0.5f, sig);
+                    armR = Lerp(armR, 0.45f, sig);
+                    armOutL = Lerp(armOutL, 0.06f, sig);
+                    armOutR = Lerp(armOutR, 0.04f, sig);
+                    elbowL = Lerp(elbowL, 1.95f, sig);
+                    elbowR = Lerp(elbowR, 1.8f, sig);
+                    armRotL = -1.45f * sig;
+                    armRotR = -1.4f * sig;
+                    flexExtra -= 0.12f * sig;
+                    headPitch += 0.04f * MathF.Sin(time * 2.2f) * sig;
+                }
+                else if (vv == 1)
+                {
+                    // Arms spread wide, chest out.
+                    armL = Lerp(armL, 0.15f, sig);
+                    armR = Lerp(armR, 0.15f, sig);
+                    armOutL = Lerp(armOutL, 1.35f, sig);
+                    armOutR = Lerp(armOutR, 1.35f, sig);
+                    elbowL = Lerp(elbowL, 0.15f, sig);
+                    elbowR = Lerp(elbowR, 0.15f, sig);
+                    flexExtra -= 0.2f * sig;
+                }
+                else
+                {
+                    // "Calm down": palms pressed slowly toward the ground.
+                    float press = 0.5f + 0.5f * MathF.Sin(time * 3.2f);
+                    armL = Lerp(armL, 0.55f + 0.15f * press, sig);
+                    armR = Lerp(armR, 0.55f + 0.15f * press, sig);
+                    armOutL = Lerp(armOutL, 0.4f, sig);
+                    armOutR = Lerp(armOutR, 0.4f, sig);
+                    elbowL = Lerp(elbowL, 0.45f - 0.15f * press, sig);
+                    elbowR = Lerp(elbowR, 0.45f - 0.15f * press, sig);
+                    hipY -= 0.025f * press * sig * set;
+                    kneeL += 0.12f * press * sig * set;
+                    kneeR += 0.12f * press * sig * set;
+                }
+            }
+        }
+        else if (b.Phase == Phase.Goal && b.Scorer >= 0 && b.Team[b.Scorer] == b.Team[id] && phaseT > 1.2f)
+        {
+            armOutL = armOutR = 0.3f + 0.2f * MathF.Sin(time * 9 + id);
+        }
+
+        // ---------------- secondary motion: limbs and head carry inertia
+        bool sc0 = !_secReady[id];
+        float yNow = hipY + lift;
+        if (sc0 || dt <= 0)
+        {
+            if (sc0)
+            {
+                _bodyY[id] = yNow;
+                _bodyVy[id] = 0;
+                _bodyAy[id] = 0;
+                _lastFacing[id] = facing;
+            }
+        }
+        else
+        {
+            float vy = (yNow - _bodyY[id]) / dt;
+            float ay = Clamp((vy - _bodyVy[id]) / dt, -40, 40);
+            _bodyAy[id] += (ay - _bodyAy[id]) * (1 - MathF.Exp(-dt * 25));
+            _bodyVy[id] = vy;
+            _bodyY[id] = yNow;
+        }
+        // Variation: nothing done exactly the same way twice (keyed on the player, the action's
+        // start and the match clock), and a slow drift through the upper body all the time.
+        {
+            float handsOn = isHeld || action == ActionKind.Catch || action == ActionKind.Throw || throwInSp ? 0.35f : 1;
+            float dA = Drift(mt, id, 11, 0.7f) * handsOn;
+            float dB = Drift(mt, id, 13, 0.55f) * handsOn;
+            float dT = Drift(mt, id, 15, 0.62f);
+            float dS = Drift(mt, id, 17, 0.48f);
+            armL += 0.06f * dA;
+            armR += 0.06f * dB;
+            armOutL += 0.03f * (0.5f + 0.5f * dB);
+            armOutR += 0.03f * (0.5f + 0.5f * dA);
+            elbowL *= 1 + 0.08f * dB;
+            elbowR *= 1 + 0.08f * dA;
+            twist += 0.035f * dT;
+            sideExtra += 0.03f * dS;
+            flexExtra += 0.025f * dT * dS;
+            headPitch += 0.03f * dS;
+            if (action != ActionKind.None && actionDur > 0)
+            {
+                float seed = id + 0.1373f * MathF.Round((mt - actionT) * 20) + 0.0371f * ActionNameLength(action);
+                float e = Smooth(0, 0.15f, pr) * (1 - Smooth(0.82f, 1, pr));
+                float ea = e * handsOn;
+                armL = armL * (1 + 0.22f * ea * Rnd(seed, 1)) + 0.14f * ea * Rnd(seed, 2);
+                armR = armR * (1 + 0.22f * ea * Rnd(seed, 3)) + 0.14f * ea * Rnd(seed, 4);
+                armOutL += 0.08f * ea * Rnd(seed, 5);
+                armOutR += 0.08f * ea * Rnd(seed, 6);
+                elbowL *= 1 + 0.18f * ea * Rnd(seed, 7);
+                elbowR *= 1 + 0.18f * ea * Rnd(seed, 8);
+                armRotL += 0.12f * ea * Rnd(seed, 9);
+                armRotR += 0.12f * ea * Rnd(seed, 10);
+                twist = twist * (1 + 0.2f * e * Rnd(seed, 11)) + 0.1f * e * Rnd(seed, 12);
+                flexExtra += 0.07f * e * Rnd(seed, 13);
+                sideExtra += 0.06f * e * Rnd(seed, 14);
+                headPitch += 0.06f * e * Rnd(seed, 15);
+            }
+        }
+        float turnRate = 0;
+        if (dt > 0)
+        {
+            float dF = facing - _lastFacing[id];
+            if (dF > PI) dF -= TAU;
+            if (dF < -PI) dF += TAU;
+            turnRate = Clamp(dF / dt, -14, 14);
+            _lastFacing[id] = facing;
+        }
+        _turnS[id] = sc0 ? 0 : _turnS[id] + (turnRate - _turnS[id]) * (1 - MathF.Exp(-dt * 12));
+        {
+            // Free to swing, or held to a pose the physics depends on (hands on the ball).
+            float free = action is ActionKind.Dive or ActionKind.Catch or ActionKind.Throw ? 0.25f : isHeld ? 0.5f : 1;
+            float aF = Clamp(accelFwd, -12, 12) * free;
+            float aY = _bodyAy[id] * free;
+            float lat = leanS;
+            int bse = id * SecCount;
+            var pose = _poseNow;
+            pose[0] = armL; pose[1] = armR; pose[2] = armOutL; pose[3] = armOutR; pose[4] = elbowL; pose[5] = elbowR;
+            var want = _want;
+            float spin = _turnS[id] * free;
+            float flare = MathF.Min(0.25f, MathF.Abs(spin) * 0.02f);
+            want[ArmL] = -0.03f * aF - 0.025f * spin;
+            want[ArmR] = -0.03f * aF + 0.025f * spin;
+            want[OutL] = MathF.Max(0, -lat) * 0.5f - 0.15f * lat + flare;
+            want[OutR] = MathF.Max(0, lat) * 0.5f + 0.15f * lat + flare;
+            want[ElbowL] = want[ElbowR] = -0.02f * aF - 0.006f * aY;
+            want[HeadPitch] = -0.012f * aF + 0.004f * aY;
+            want[HeadRoll] = -0.2f * lat;
+            want[Twist] = Clamp(0.03f * turnRate, -0.3f, 0.3f) * free;
+            for (int c = 0; c < SecCount; c++)
+            {
+                int i = bse + c;
+                if (sc0)
+                {
+                    _sec[i] = want[c];
+                    _secV[i] = 0;
+                }
+                else
+                {
+                    // A pose that jumps is reached by swinging there: the jump goes into the spring.
+                    if (c < SecSoak)
+                    {
+                        float jump = pose[c] - _secPose[i];
+                        if (MathF.Abs(jump) > 0.2f + 14 * dt) _sec[i] = Clamp(_sec[i] - jump, -3, 3);
+                    }
+                    float w0 = SecW[c];
+                    _secV[i] += (w0 * w0 * (want[c] - _sec[i]) - 2 * SecZ[c] * w0 * _secV[i]) * dt;
+                    _sec[i] += _secV[i] * dt;
+                }
+                _secPose[i] = pose[c];
+            }
+            _secReady[id] = true;
+            armL += _sec[bse + ArmL];
+            armR += _sec[bse + ArmR];
+            armOutL += _sec[bse + OutL];
+            armOutR += _sec[bse + OutR];
+            elbowL = MathF.Max(0, elbowL + _sec[bse + ElbowL]);
+            elbowR = MathF.Max(0, elbowR + _sec[bse + ElbowR]);
+            headPitch += _sec[bse + HeadPitch];
+            twist += _sec[bse + Twist];
+        }
+        float headLag = _sec[id * SecCount + HeadRoll];
+
+        // Feet plant during the stance of a stride (not while an action poses the legs).
+        bool legsFree = action == ActionKind.None && lift < 0.01f && !cel && !scorer;
+        _ikOn[id] += ((legsFree ? 1 : 0) - _ikOn[id]) * (1 - MathF.Exp(-dt * 10));
+        bool wristFree = legsFree;
+
+        // ---------------- body physics: a springy spine driven by the movement
+        float flexTarget = Clamp(b.LeanFwd[id] * 0.9f - accelFwd * 0.014f + s * 0.12f + flexExtra, -0.6f, 0.7f);
+        float sideTarget = Clamp(-leanS * 0.15f + sideExtra, -0.45f, 0.45f);
+        const float w = 13, zeta = 0.34f;
+        _spF[id] += (w * w * (flexTarget - _sF[id]) - 2 * zeta * w * _spF[id]) * dt;
+        _sF[id] += _spF[id] * dt;
+        _spS[id] += (w * w * (sideTarget - _sS[id]) - 2 * zeta * w * _spS[id]) * dt;
+        _sS[id] += _spS[id] * dt;
+        float spineFlex = _sF[id], spineSide = _sS[id];
+
+        if (headLook)
+        {
+            float rel = MathF.Atan2(ballZ - z, ballX - x) - facing;
+            float r = MathF.Atan2(MathF.Sin(rel), MathF.Cos(rel));
+            float limit = 1.1f - 0.6f * s;
+            float wantY = MathF.Abs(r) < 2.4f ? Clamp(-r, -limit, limit) : 0;
+            _headYaw[id] += (wantY - _headYaw[id]) * (1 - MathF.Exp(-dt * 6));
+        }
+        else _headYaw[id] *= MathF.Exp(-dt * 8);
+
+        // ---------------- skeleton
+        float sc = h * _bodyScale[id];
+        var R = new Transform3D(new Basis(Vector3.Up, PI / 2 - facing - yawExtra).Scaled(new Vector3(sc, sc, sc)),
+            new Vector3(x + MathF.Cos(facing) * fwdShift, 0, z + MathF.Sin(facing) * fwdShift));
+        // (Basis.Scaled scales in the parent's frame; for a uniform scale that's the same.)
+        // Whole-body tilt about the ground point: lean into turns and accelerations.
+        R = Chain(R, 0, lift, 0, leanF, 0, leanS + roll);
+
+        float torsoW = (float)bs.TorsoW, torsoD = (float)bs.TorsoD, torsoL = (float)bs.TorsoL;
+        var P = Chain(R, 0, hipY, 0, 0, pelvisYaw, pelvisRoll);
+        Put(Part.Pelvis, id, P, torsoW, 1, torsoD);
+        // The torso sits at the waist unrotated; the shader bends it through the spine.
+        var T = ChainT(P, 0, 0.04f, 0);
+        // Each footfall gives through the trunk; the shoulders sway over the stance leg.
+        float give = MathF.Cos(2 * phi) * moveAmt * (action == ActionKind.None ? 1 : 0);
+        float flex = spineFlex + 0.04f + (0.015f + 0.045f * s) * give;
+        float tw = twist - pelvisYaw;
+        float spineRoll = spineSide - 0.8f * pelvisRoll;
+        Put(Part.Torso, id, T, torsoW, torsoL, torsoD, flex, tw, spineRoll);
+        var C = Chain(T, 0, 0, 0, flex, tw, spineRoll);
+        // Neck and head: level gaze, turned toward the ball, lagging the body a touch.
+        float headLevel = -(leanF + flex) * 0.75f;
+        float headRollA = -(leanS + roll * 0.2f + spineRoll) * 0.6f + headLag;
+        float hP = headPitch + headLevel;
+        float hY = _headYaw[id] + headLead;
+        float neckLen = (float)bs.NeckLen, neckW = (float)bs.Neck;
+        var Nk = Chain(C, 0, 0.58f * torsoL, 0, hP * 0.4f, hY * 0.3f, headRollA * 0.4f);
+        Put(Part.Neck, id, Nk, neckW, neckLen, neckW);
+        float top = 0.075f * neckLen;
+        var Hd = Chain(Nk, 0, top, 0, hP * 0.6f, hY * 0.7f, headRollA * 0.6f);
+        Hd = ChainT(Hd, 0, 0.02f * torsoL + (neckLen - 1) * 0.08f - top, 0);
+        Put(Part.Head, id, Hd);
+        int style = _hair[id];
+        for (int hp = (int)Part.HairShort; hp <= (int)Part.HairBun; hp++) Hide((Part)hp, id);
+        if (style == 1) Put(Part.HairShort, id, Hd, 0.985f, 0.95f, 0.985f);
+        else Put(HairOfStyle[style], id, Hd);
+
+        // Arms (left = +x local; swing + = forward). The shoulder moves with the arm.
+        float armLen = (float)bs.ArmLen, armW = (float)bs.Arm, shoulder = (float)bs.Shoulder;
+        for (int sd = 0; sd < 2; sd++)
+        {
+            float sideSign = sd == 0 ? 1 : -1;
+            float swing = sd == 0 ? armL : armR;
+            float outA = sd == 0 ? armOutL : armOutR;
+            float elbow = sd == 0 ? elbowL : elbowR;
+            float raise = MathF.Acos(Clamp(MathF.Cos(swing) * MathF.Cos(outA), -1, 1));
+            float elev = Smooth(1.1f, 2.9f, raise);
+            float protract = 0.028f * MathF.Sin(Clamp(swing, -1.5f, 1.5f)) * (1 - 0.5f * elev);
+            var j1 = Chain(C, sideSign * (0.198f * shoulder - 0.014f * elev), 0.5f * torsoL + 0.045f * elev, protract, -swing, 0, sideSign * outA);
+            Put(Part.UpperArm, id * 2 + sd, j1, armW, armLen, armW);
+            var j2 = Chain(j1, 0, -0.29f * armLen, 0, -elbow, sideSign * (sd == 0 ? armRotL : armRotR), 0);
+            Put(Part.Forearm, id * 2 + sd, j2, 0.5f + 0.5f * armW, armLen, 0.5f + 0.5f * armW);
+            // Hand at the wrist, relaxed, the palm toward the body; keeper gloves are bigger.
+            var j3 = Chain(j2, 0, -0.245f * armLen, 0, wristFree ? (sd == 0 ? wristL : wristR) : 0.1f, 0, sideSign * -0.08f);
+            float g = gk ? 1.25f : 1;
+            Put(Part.Hand, id * 2 + sd, j3, g, g, g);
+        }
+
+        // Legs: the thigh curves into a soft knee (shader bend), the shin takes the rest. Through
+        // the stance the ball of the foot stays where it landed and the leg is solved to reach it.
+        float ik = _ikOn[id];
+        float cf = MathF.Cos(facing), sf = MathF.Sin(facing);
+        float duty = Lerp(0.62f, 0.32f, s);
+        float dutyA = duty * PI;
+        float standing = 1 - Smooth(0.03f, 0.3f, stepAmt);
+        float stepLen = 0.7f + 0.12f * speed;
+        float legLen = (float)bs.Leg;
+        float l1 = THIGH * legLen, l2 = SHIN * legLen;
+        bool upright = hipY > 0.55f && action != ActionKind.Slide && action != ActionKind.Dive && action != ActionKind.Fall;
+        _pinv = P.AffineInverse();
+        float thighW = (float)bs.Thigh, calfW = (float)bs.Calf;
+        for (int sd = 0; sd < 2; sd++)
+        {
+            float sideSign = sd == 0 ? 1 : -1;
+            int fi = id * 2 + sd;
+            float hip = sd == 0 ? hipL : hipR;
+            float knee = sd == 0 ? kneeL : kneeR;
+            float outA = sd == 0 ? legOutL : legOutR;
+            float hipX = sideSign * 0.092f * (1 + (torsoW - 1) * 0.6f);
+
+            // Where this leg is in its stride: sg = 0 mid-stance, |q| < 1 through the stance.
+            float sg = phi + (sd == 0 ? 0 : PI) - PI;
+            sg -= TAU * MathF.Floor((sg + PI) / TAU);
+            float q = standing > 0.5f ? 0 : sg / dutyA;
+            bool stance = MathF.Abs(q) < 1;
+            float go = 1 - standing;
+
+            // The steering touch rides this leg's swing.
+            float twS = 0;
+            if (_steerSt[id] > 0 && _steerLeg[id] == sd)
+            {
+                float aa = sg - dutyA;
+                if (aa < 0) aa += TAU;
+                float u = stance ? 1 : aa / (TAU - 2 * dutyA);
+                if (_steerSt[id] == 1 && u < 0.5f) _steerSt[id] = 2;
+                else if (_steerSt[id] == 2 && stance) _steerSt[id] = 0;
+                bool on = _steerSt[id] == 2 && go > 0.3f;
+                _steerE[id] += ((on ? 1 : 0) - _steerE[id]) * (1 - MathF.Exp(-dt * (on ? 25 : 12)));
+                float reach = MathF.Sqrt((ballX - x) * (ballX - x) + (ballZ - z) * (ballZ - z));
+                twS = 0.8f * _steerE[id] * (1 - Smooth(0.6f, 0.95f, u)) * (1 - Smooth(0.95f, 1.35f, reach));
+            }
+            float yaw = (sd == 0 ? legYawL : legYawR) + sideSign * 0.35f * twS;
+            float heelUp = stance ? (0.35f + 0.25f * s) * Smooth(0.15f, 1, q) * go : 0;
+            float toesUp = 0.24f * (1 - 0.5f * s) * (stance ? 1 - Smooth(-1, -0.55f, q) : sg < 0 ? Smooth(-dutyA - 0.9f, -dutyA, sg) : 0) * go;
+            float trail = !stance && sg > 0 ? 0.35f * (0.4f + s) * (1 - Smooth(dutyA, dutyA + 1.0f, sg)) * go : 0;
+
+            if (ik > 0.001f && stance)
+            {
+                if (_inStance[fi] == 0)
+                {
+                    // Touch-down: put the foot where the stance will be centred under him.
+                    float ahead = -q * 0.85f * duty * stepLen * (1 - standing) + 0.11f * sc;
+                    float latP = (hipX + sideSign * MathF.Sin(outA) * (l1 + l2)) * sc;
+                    _plantX[fi] = x + cf * ahead + sf * latP;
+                    _plantZ[fi] = z + sf * ahead - cf * latP;
+                    _inStance[fi] = 1;
+                }
+                _footW[fi] = _inStance[fi] == 1 ? (1 - Smooth(0.6f, 1, MathF.Abs(q))) * ik : _footW[fi] * MathF.Exp(-dt * 30);
+            }
+            else
+            {
+                _inStance[fi] = 0;
+                _footW[fi] = 0;
+            }
+            float wf = _footW[fi];
+
+            if (twS > 0.01f)
+            {
+                // The swing foot goes out to the ball's far side, just off the grass.
+                float pm = MathF.Sqrt(pullX * pullX + pullZ * pullZ);
+                if (pm < 1e-6f) pm = 1;
+                var tgt = new Vector3(ballX - pullX / pm * 0.12f, 0.09f * sc, ballZ - pullZ / pm * 0.12f);
+                if (LegIK(tgt, hipX, yaw, sideSign, l1, l2, true))
+                {
+                    hip = Lerp(hip, _ikH, twS);
+                    knee = Lerp(knee, _ikK, twS);
+                    outA = Lerp(outA, _ikOut, twS);
+                }
+            }
+
+            if (wf > 0.001f)
+            {
+                // Ankle target: behind the planted ball of the foot, raised as the heel lifts.
+                float rbY = (-0.068f * MathF.Cos(heelUp) - 0.11f * MathF.Sin(heelUp)) * sc;
+                float rbZ = (-0.068f * MathF.Sin(heelUp) + 0.11f * MathF.Cos(heelUp)) * sc;
+                var tgt = new Vector3(_plantX[fi] - cf * rbZ, 0.003f - rbY, _plantZ[fi] - sf * rbZ);
+                if (LegIK(tgt, hipX, yaw, sideSign, l1, l2))
+                {
+                    hip = Lerp(hip, _ikH, wf);
+                    knee = Lerp(knee, _ikK, wf);
+                    outA = Lerp(outA, _ikOut, wf);
+                }
+                else if (stance) _inStance[fi] = 2; // out of reach (pushed off it): pick the foot up
+            }
+            Transform3D lj1 = default, lj2 = default;
+            bool posed = false;
+            if (upright && wf < 0.999f)
+            {
+                // Never through the grass: an action's foot that would go below it stands on it.
+                LegChain(P, hipX, hip, yaw, sideSign * outA, knee, legLen, out lj1, out lj2);
+                posed = true;
+                var foot = lj2 * new Vector3(0, -SHIN * legLen, 0);
+                float floor = 0.07f * sc;
+                if (foot.Y < floor)
+                {
+                    foot.Y = floor;
+                    if (LegIK(foot, hipX, yaw, sideSign, l1, l2))
+                    {
+                        hip = _ikH;
+                        knee = _ikK;
+                        outA = _ikOut;
+                        posed = false;
+                    }
+                }
+            }
+            if (!posed) LegChain(P, hipX, hip, yaw, sideSign * outA, knee, legLen, out lj1, out lj2);
+            Put(Part.ShortsLeg, fi, lj1, thighW, 1, thighW);
+            Put(Part.Thigh, fi, lj1, thighW, legLen, thighW, knee * 0.22f);
+            Put(Part.Shin, fi, lj2, calfW, legLen, calfW);
+            // Ankle (+ = toes down): free, roughly level with the ground; planted, flat on it.
+            float extra = sd == 0 ? ankleL : ankleR;
+            float freeA = Clamp(hip - knee, -1.2f, 0.6f) - 0.35f * Smooth(0.6f, 1.0f, knee) + (trail - toesUp) * ik - extra;
+            float flatA = hip - knee - leanF + heelUp - toesUp;
+            float ankle = Lerp(Lerp(freeA, flatA, wf), hip - knee - leanF, twS);
+            var j3 = ChainX(lj2, 0, -SHIN * legLen, 0, ankle);
+            Put(Part.Boot, fi, j3, 1, 1, 1, heelUp * wf + 0.25f * trail * ik);
+        }
     }
+
+    /// <summary>The PWA keys its variation on the action's name length ('kick'.length ...).</summary>
+    static int ActionNameLength(ActionKind k) => k switch
+    {
+        ActionKind.Kick => 4, ActionKind.Tackle => 6, ActionKind.Slide => 5, ActionKind.Dive => 4, ActionKind.Stumble => 7,
+        ActionKind.Fall => 4, ActionKind.Header => 6, ActionKind.Throw => 5, ActionKind.Catch => 5, ActionKind.Celebrate => 9,
+        ActionKind.Stretch => 7, _ => 4,
+    };
 }
