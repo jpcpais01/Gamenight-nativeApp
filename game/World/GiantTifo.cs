@@ -12,7 +12,7 @@ namespace GameNight.Grounds;
 /// </summary>
 public sealed class GiantTifo
 {
-    const float W = 32, H = 38;
+    readonly float W = 32, H = 38;
     const int ArtW = 432, ArtH = 512;
     readonly Transform3D _top;
     readonly Vector3 _face;
@@ -20,9 +20,12 @@ public sealed class GiantTifo
     MeshInstance3D _roll;
     ShaderMaterial _mat;
 
-    /// <summary>Hung from `mid` of the main stand, `o` m out from its front, its top at `top`.</summary>
-    public GiantTifo(PathPt mid, float o, float top)
+    /// <summary>Hung from `mid` of the main stand, `o` m out from its front, its top at `top`,
+    /// `size` times the full 32 x 38 m (a lower stand hangs a smaller one).</summary>
+    public GiantTifo(PathPt mid, float o, float top, float size = 1)
     {
+        W *= size;
+        H *= size;
         _face = new Vector3(-mid.NX, 0, -mid.NZ);
         _top = new Transform3D(new Basis(Vector3.Up.Cross(_face), Vector3.Up, _face), mid.At(o, top));
     }
@@ -61,7 +64,7 @@ public sealed class GiantTifo
 
     /// <summary>The cloth: W x H hanging down from its top edge (local y 0 to -H), facing +z.
     /// uv as the picture (v down).</summary>
-    static ArrayMesh Cloth()
+    ArrayMesh Cloth()
     {
         const int nx = 32, ny = 24;
         var v = new Vector3[(nx + 1) * (ny + 1)];

@@ -59,7 +59,7 @@ public partial class Main : Node
         _view = new PixelView();
         AddChild(_view);
         World.Build(_view.WorldRoot);
-        _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup).AddTo(_view.WorldRoot);
+        _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup, Request?.HostCrest).AddTo(_view.WorldRoot);
         Acoustics();
         _players = new PlayersView(_view.WorldRoot);
         _officials = new Officials(_view.WorldRoot);
@@ -151,6 +151,8 @@ public partial class Main : Node
         if (Directed) EndDirected();
         _replay.Reset();
         _officials.Reset();
+        _goalLog.Clear();
+        _logged = 0;
         _match = Request != null ? new Match(Request.Seed, Request.Setup) : new Match(seed: DateTime.Now.Ticks % 2147483647);
         if (Request?.Demo == true) _match.AutoPlay = true;
         // Names and kits are read before the match's own thread starts.
@@ -250,7 +252,7 @@ public partial class Main : Node
         if (_reported || Request?.Done == null) return;
         _reported = true;
         _runner.Paused = true;
-        Request.Done(new MatchOutcome { Finished = finished, Home = _cur.Score[0], Away = _cur.Score[1], DrillBest = _drill?.Best ?? 0 });
+        Request.Done(new MatchOutcome { Finished = finished, Home = _cur.Score[0], Away = _cur.Score[1], DrillBest = _drill?.Best ?? 0, Goals = _goalLog });
     }
 
     /// <summary>Android back during a match: the pause menu, open or closed.</summary>
@@ -266,7 +268,7 @@ public partial class Main : Node
         var old = _ground;
         old.Root.GetParent()?.RemoveChild(old.Root);
         old.Root.QueueFree();
-        _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup).AddTo(_view.WorldRoot);
+        _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup, Request?.HostCrest).AddTo(_view.WorldRoot);
         Acoustics();
     }
 
@@ -306,6 +308,7 @@ public partial class Main : Node
             _camera.SetAspect(_view.Aspect);
         }
         if (_cur.Goal >= 0) _camera.Bump(0.4f);
+        LogGoal();
         if (_cur.Post > 0) _camera.Bump(0.6f);
         float run = _pause.IsOpen ? 0 : dt;
         if (_replay.Active)
@@ -367,6 +370,22 @@ public partial class Main : Node
             GetTree().Quit();
             _shotPath = null;
         }
+    }
+
+    readonly System.Collections.Generic.List<GoalEvent> _goalLog = new();
+    int _logged;
+
+    /// <summary>Who scored and when, for the league's scorers and the paper. The goal event and
+    /// the scorer can land a frame apart, so it's read off the score and the goal phase.</summary>
+    void LogGoal()
+    {
+        int total = _cur.Score[0] + _cur.Score[1];
+        if (total <= _logged || _cur.Phase != Phase.Goal || _cur.Scorer < 0) return;
+        _logged = total;
+        var p = _match.Players.Find(x => x.Id == _cur.Scorer);
+        if (p == null) return;
+        // An own goal goes down to the side that gained it (its striker, as the engine credits it).
+        _goalLog.Add(new GoalEvent { Team = p.Team, Index = p.Index, Minute = Math.Max(1, _cur.Minute) });
     }
 
     double _thunderFor = -10;

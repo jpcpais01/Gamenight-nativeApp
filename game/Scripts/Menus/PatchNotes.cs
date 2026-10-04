@@ -5,6 +5,8 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.28", "LEAGUE mode: draw a 16-club league of made-up rivals (crests, kits, squads), play your 30 matchdays home and away, watch scores come in from around the grounds with the table moving live, read the paper every morning, chase the golden boot, prize money and the trophy."),
+        ("0.27", "Your giant tifo now drops in your own stadium too: build the main stand from Arena, The Wall or Orbital and it unrolls from the roof at the walk-out and kick-off, sized to the stand. The builder marks the sets that carry it."),
         ("0.26", "Pressing is automatic now: without touching anything your player closes the carrier down and gets tight goal-side, squeezing him. Holding PRESS adds the sprint and the last step, a foot in to take the ball."),
         ("0.25", "Paint your stadium: in the builder each stand set has 16 colours (its own, your club's, and 14 more) for its main colour, saved with your plan. Drag the stadium to turn round it and tilt; two fingers slide across it and pinch to zoom."),
         ("0.24", "The crowd sounds real: the ends sing their songs in voice, the capo calls and the end answers, groans, applause for saves, whistles at time-wasting, the PA calls your scorer and the end roars his name back. Each ground sounds its own; the end nearest the camera is loudest."),

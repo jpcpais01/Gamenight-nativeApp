@@ -54,6 +54,7 @@ public sealed partial class App : Node
             if (arg == "--screen=store") _menus.Go(_menus.Store);
             if (arg == "--screen=club") _menus.Go(_menus.ClubStudio);
             if (arg == "--screen=stadium") _menus.Go(_menus.Stadium);
+            global::GameNight.League.LeagueScreen.Debug(_menus, arg);
             if (arg.StartsWith("--tab=")) _menus.ClubStudio.Tab = int.Parse(arg[6..]);
             if (arg.StartsWith("--crest="))
             {
@@ -201,6 +202,21 @@ public sealed partial class App : Node
         string ground = Grounds.All.Any(g => g.Id == _club.S.Ground) ? _club.S.Ground : Grounds.All[0].Id;
         var setup = _club.MatchSetup(seed);
         Play(new MatchRequest { Setup = setup, Seed = seed, Ground = ground, Done = o => CallDeferred(nameof(MatchOver), o.Finished, o.Home, o.Away) });
+    }
+
+    /// <summary>A match set up elsewhere (the league): played, then the menus come back and
+    /// `after` gets the outcome.</summary>
+    public void PlayFixture(MatchRequest req, Action<MatchOutcome> after)
+    {
+        req.Done = o => Callable.From(() =>
+        {
+            _playing = false;
+            _menus.NextSeed = (int)(ClubState.Now & 0xffff) + 1;
+            _menus.Visible = true;
+            after(o);
+            StartDemo();
+        }).CallDeferred();
+        Play(req);
     }
 
     void Play(MatchRequest req)

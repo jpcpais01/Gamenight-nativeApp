@@ -391,6 +391,7 @@ public sealed class Orbital : StandSet
     public override string About => "From the future: a floating halo roof, needle towers";
     public override uint Swatch => 0x8fe8ff;
     public override uint[] Mains => new uint[] { White, Under };
+    public override Vector2? TifoAt(Section x) => new(5.6f, x.Top - 1.6f);
     public override float Natural(Kind k) => k == Kind.Side ? 44 : k == Kind.End ? 40 : 38;
     public override Vector2 Range => new(30, 48);
     public override (uint col, Look look) Front(BuiltGround g) => (White, Look.Plain);
