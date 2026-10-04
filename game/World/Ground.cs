@@ -36,6 +36,9 @@ public abstract class Ground
     protected readonly MeshData Static = new();
     /// <summary>Solid but never drawn: casts the stand shadows only (the near stand behind the camera).</summary>
     protected readonly MeshData ShadowOnly = new();
+    /// <summary>The near stand, behind the match camera: drawn (it shows when the camera turns
+    /// for a goal kick or a free kick) but cut away wherever it would hide the pitch.</summary>
+    protected readonly MeshData Near = new();
     protected readonly Crowd Crowd = new();
     protected readonly Flags Flags = new();
     /// <summary>Floodlight banks (positions), for the pitch's light pools and the glows.</summary>
@@ -236,7 +239,9 @@ public abstract class Ground
         var bake = new LightBake(BakeArea.Position.X, BakeArea.Position.Y, BakeArea.End.X, BakeArea.End.Y);
         bake.AddCaster(Static);
         bake.AddCaster(ShadowOnly);
+        bake.AddCaster(Near);
         bake.BakeVertices(Static);
+        if (Near.Count > 0) bake.BakeVertices(Near);
         bake.PublishLightMap(Lamps);
 
         var mi = new MeshInstance3D
@@ -246,6 +251,12 @@ public abstract class Ground
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
         };
         Root.AddChild(mi);
+        if (Near.Count > 0)
+        {
+            var nearMat = new ShaderMaterial { Shader = mi.MaterialOverride is ShaderMaterial sm ? sm.Shader : null };
+            nearMat.SetShaderParameter("near_cut", true);
+            Root.AddChild(new MeshInstance3D { Mesh = Near.Commit(), MaterialOverride = nearMat, CastShadow = GeometryInstance3D.ShadowCastingSetting.Off });
+        }
         var crowd = Crowd.Build(Root, bake);
         if (Crowd.Fans > 0)
         {

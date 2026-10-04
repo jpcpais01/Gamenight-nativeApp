@@ -183,6 +183,12 @@ public sealed partial class App : Node
         if (_showcase && !_playing) _match?.Focus(GameNight.Grounds.Build.Kit.ViewAngle(slot));
     }
 
+    /// <summary>The stadium builder: the camera dragged round the ground.</summary>
+    public void StadiumOrbit(float yaw, float tilt, float zoom, Vector2 slide)
+    {
+        if (_showcase && !_playing) _match?.Orbit(yaw, tilt, zoom, slide);
+    }
+
     /// <summary>Straight into a match at this ground.</summary>
     public void PlayAt(string ground)
     {

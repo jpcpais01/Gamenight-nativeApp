@@ -7,9 +7,9 @@ namespace GameNight.Menus;
 
 /// <summary>
 /// The stadium builder: a plan of the ground with its eight places (the main stand, both ends,
-/// the near side, the four corners), and the five stand sets to build each from. The stadium
+/// the near side, the four corners), and the stand sets to build each from (each in a colour of the club's choosing). The stadium
 /// itself stands behind the screen, built as you pick, the camera circling round to the stand
-/// you're choosing. Picks are saved with the club; "Your stadium" is then a ground to play at.
+/// you're choosing (or dragged round by hand). Picks are saved with the club; "Your stadium" is then a ground to play at.
 /// </summary>
 public sealed partial class StadiumScreen : PxCanvas
 {
@@ -24,6 +24,74 @@ public sealed partial class StadiumScreen : PxCanvas
     }
 
     StadiumPlan Plan => _ui.Club.S.Stadium;
+
+    // Fingers on the stadium: one drag turns round it, two slide across it and pinch to zoom.
+    readonly Dictionary<int, Vector2> _touch = new();
+    bool _orbiting, _two;
+
+    public override void _GuiInput(InputEvent e)
+    {
+        switch (e)
+        {
+            case InputEventScreenTouch t:
+                if (t.Pressed)
+                {
+                    _touch[t.Index] = t.Position;
+                    if (_touch.Count == 1) _orbiting = !OnTapArea(t.Position);
+                    if (_touch.Count >= 2) _two = true;
+                }
+                else _touch.Remove(t.Index);
+                if (_touch.Count == 0) _orbiting = _two = false;
+                break;
+            case InputEventScreenDrag d when _touch.ContainsKey(d.Index):
+                if (_two && _touch.Count >= 2)
+                {
+                    var (c0, s0) = Fingers();
+                    _touch[d.Index] = d.Position;
+                    var (c1, s1) = Fingers();
+                    var m = 300 / Size.X;
+                    _ui.App.StadiumOrbit(0, 0, s1 > 1 && s0 > 1 ? s0 / s1 : 1, new Vector2(-(c1.X - c0.X), c1.Y - c0.Y) * m);
+                }
+                else
+                {
+                    _touch[d.Index] = d.Position;
+                    if (_orbiting && !_two) _ui.App.StadiumOrbit(-d.Relative.X / Size.X * 4, d.Relative.Y / Size.Y * 1.6f, 1, Vector2.Zero);
+                }
+                break;
+            // A mouse: the wheel zooms, the right button slides.
+            case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.WheelUp or MouseButton.WheelDown } w:
+                _ui.App.StadiumOrbit(0, 0, w.ButtonIndex == MouseButton.WheelUp ? 0.9f : 1.1f, Vector2.Zero);
+                break;
+            case InputEventMouseMotion mm when (mm.ButtonMask & MouseButtonMask.Right) != 0:
+                _ui.App.StadiumOrbit(0, 0, 1, new Vector2(-mm.Relative.X, mm.Relative.Y) * (300 / Size.X));
+                break;
+        }
+        base._GuiInput(e);
+    }
+
+    (Vector2 centre, float spread) Fingers()
+    {
+        Vector2 c = Vector2.Zero;
+        foreach (var p in _touch.Values) c += p;
+        c /= _touch.Count;
+        float s = 0;
+        foreach (var p in _touch.Values) s += (p - c).Length();
+        return (c, s / _touch.Count);
+    }
+
+    /// <summary>The colour a set shows in: the club's pick, else its own.</summary>
+    uint Shown(int set)
+    {
+        uint p = Plan.PaintOf(set);
+        return p == 0 ? Kit.Sets[set].Swatch : p == Kit.ClubPaint ? (uint)_ui.Club.S.Kit.Main : p;
+    }
+
+    void Recolour(int set, uint col)
+    {
+        if (Plan.PaintOf(set) == col) return;
+        _ui.Club.SetStadiumPaint(set, col);
+        _changedAt = T;
+    }
 
     public override void _Process(double delta)
     {
@@ -88,7 +156,19 @@ public sealed partial class StadiumScreen : PxCanvas
         float ty = panel.Position.Y + 12 + Mathf.Min(176, panel.Size.Y * 0.56f) + 30;
         Px.Text(this, Px.Small, new Vector2(panel.Position.X + 16, ty - 12), Kit.SlotNames[(int)Selected].ToUpperInvariant(), 8, Px.InkDim);
         Px.Text(this, Px.Big, new Vector2(panel.Position.X + 16, ty + 14), set.Name, 28, Px.Hex((int)set.Swatch), new Color(0, 0, 0, 0.5f), 2);
-        float ly = ty + 32;
+        float ly = Colours(new Rect2(panel.Position.X + 16, ty + 26, panel.Size.X - 32, 0), Plan.Get(Selected)) + 14;
+        // Which sets can hang the club's giant tifo (as the main stand).
+        string tifo = set.CarriesTifo ? "HANGS YOUR GIANT TIFO AS THE MAIN STAND"
+            : Selected == Slot.Main ? "NO GIANT TIFO HERE: " + string.Join(", ", TifoSets()).ToUpperInvariant() + " HANG IT" : null;
+        if (tifo != null)
+        {
+            foreach (var l in Px.Wrap(Px.Small, tifo, 8, panel.Size.X - 32))
+            {
+                Px.Text(this, Px.Small, new Vector2(panel.Position.X + 16, ly), l, 8, set.CarriesTifo ? Px.Gold : Px.InkDim);
+                ly += 13;
+            }
+            ly += 4;
+        }
         foreach (var l in Px.Wrap(Px.Small, set.About, 8, panel.Size.X - 32))
         {
             if (ly > panel.End.Y - 6) break;
@@ -107,6 +187,11 @@ public sealed partial class StadiumScreen : PxCanvas
         if (_building || _changedAt >= 0)
             Px.TextR(this, Px.Big, W - 20, 82, (T % 0.6) < 0.3 ? "BUILDING..." : "BUILDING", 22, Px.Gold, new Color(0, 0, 0, 0.6f), 2);
 
+        const string hint = "DRAG TO TURN  ·  TWO FINGERS TO MOVE AND ZOOM";
+        float hw = Px.Width(Px.Small, hint, 8) + 16;
+        DrawRect(new Rect2(W - 16 - hw, H - 16 - 2 * 50 - 22, hw, 16), new Color(14 / 255f, 10 / 255f, 40 / 255f, 0.7f));
+        Px.TextR(this, Px.Small, W - 24, H - 16 - 2 * 50 - 10, hint, 8, Px.Ink);
+
         // The sets along the bottom, in two rows.
         int per = (Kit.Sets.Length + 1) / 2;
         float x0 = 340, x1 = W - 16, gap = 6, ch = 44;
@@ -123,8 +208,51 @@ public sealed partial class StadiumScreen : PxCanvas
             float sw = Mathf.Clamp(cw - 82, 18, 46);
             Swatch(new Rect2(rr.Position + new Vector2(7, 7), new Vector2(sw, ch - 14)), i);
             Px.Text(this, Px.Big, new Vector2(rr.Position.X + sw + 12, rr.GetCenter().Y + 7), Px.Fit(Px.Big, s.Name, 19, cw - sw - 17), 19, on ? Px.Dark : Px.Ink);
+            if (s.CarriesTifo) TifoBadge(new Vector2(rr.End.X - 12, rr.Position.Y + 5), on);
             Tap("set" + i, r, () => Choose(idx));
         }
+    }
+
+    static IEnumerable<string> TifoSets()
+    {
+        foreach (var s in Kit.Sets) if (s.CarriesTifo) yield return s.Name;
+    }
+
+    /// <summary>A little hanging banner: this set carries the giant tifo.</summary>
+    void TifoBadge(Vector2 p, bool on)
+    {
+        var c = on ? Px.Dark : Px.Gold;
+        DrawRect(new Rect2(p, new Vector2(8, 2)), c);
+        DrawColoredPolygon(new[] { p + new Vector2(1, 2), p + new Vector2(7, 2), p + new Vector2(7, 11), p + new Vector2(4, 9), p + new Vector2(1, 11) }, c);
+    }
+
+    /// <summary>The set's main colour: its own, the club's, or one of the paints; returns the
+    /// row's bottom.</summary>
+    float Colours(Rect2 r, int set)
+    {
+        Px.Text(this, Px.Small, new Vector2(r.Position.X, r.Position.Y + 8), $"COLOUR OF EVERY {Kit.Sets[set].Name.ToUpperInvariant()} STAND", 8, Px.InkDim);
+        int per = (Kit.Paints.Length + 1) / 2;
+        float gap = 4, w = (r.Size.X - gap * (per - 1)) / per, h = 20, y0 = r.Position.Y + 14;
+        uint now = Plan.PaintOf(set);
+        for (int i = 0; i < Kit.Paints.Length; i++)
+        {
+            uint p = Kit.Paints[i];
+            var b = new Rect2(r.Position.X + i % per * (w + gap), y0 + i / per * (h + gap), w, h);
+            bool held = Held("paint" + i);
+            var bb = held ? new Rect2(b.Position + new Vector2(1, 1), b.Size) : b;
+            uint shown = p == 0 ? Kit.Sets[set].Mains[0] : p == Kit.ClubPaint ? (uint)_ui.Club.S.Kit.Main : p;
+            DrawRect(bb, Px.Hex((int)shown));
+            if (p == 0 || p == Kit.ClubPaint)
+            {
+                var lum = Px.Hex((int)shown).Luminance;
+                Px.TextC(this, Px.Small, bb.GetCenter().X, bb.GetCenter().Y + 4, p == 0 ? "OWN" : "CLUB", 8, lum > 0.5f ? Px.Dark : Px.Ink);
+            }
+            if (p == now) Px.Ring(this, bb.Grow(2), (T % 0.8) < 0.4 ? Px.Ink : Px.Gold, 2);
+            else Px.Ring(this, bb, new Color(0, 0, 0, 0.5f), 1);
+            uint pick = p;
+            Tap("paint" + i, b.Grow(gap / 2), () => Recolour(set, pick));
+        }
+        return y0 + 2 * (h + gap);
     }
 
     /// <summary>A little elevation of a set: its silhouette in its colour.</summary>
@@ -209,9 +337,8 @@ public sealed partial class StadiumScreen : PxCanvas
         float bx = Kit.BX, bz = Kit.BZ, cx = Kit.CX, cz = Kit.CZ;
         void Piece(Slot s, Vector2[] poly, Rect2 hit)
         {
-            var set = Kit.Sets[Plan.Get(s)];
             bool sel = s == Selected;
-            var col = Px.Hex((int)set.Swatch);
+            var col = Px.Hex((int)Shown(Plan.Get(s)));
             if (!sel) col = col.Darkened(0.25f);
             DrawColoredPolygon(poly, col);
             if (sel)

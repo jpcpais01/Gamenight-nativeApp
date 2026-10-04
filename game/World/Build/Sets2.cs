@@ -27,6 +27,7 @@ public sealed class Harbour : StandSet
     public override string Name => "Harbour";
     public override string About => "Dockside: stacked shipping containers, cranes for floodlights";
     public override uint Swatch => 0x2f7fb8;
+    public override uint[] Mains => new uint[] { Navy, 0x1d2a3a, Rust };
     public override float Natural(Kind k) => k == Kind.End ? 19.3f : 16.7f;
     public override Vector2 Range => new(14, 22);
     public override (uint col, Look look) Front(BuiltGround g) => (Navy, Look.Wall);
@@ -124,6 +125,7 @@ public sealed class Pagoda : StandSet
     public override string Name => "Pagoda";
     public override string About => "Temple: swept tiled roofs, red pillars, glowing lanterns";
     public override uint Swatch => 0xd0453a;
+    public override uint[] Mains => new uint[] { Lacquer, Timber };
     public override float Natural(Kind k) => k == Kind.Side ? 22 : k == Kind.End ? 20 : 19;
     public override Vector2 Range => new(18, 28);
     public override (uint col, Look look) Front(BuiltGround g) => (Timber, Look.Wall);
@@ -225,6 +227,7 @@ public sealed class Deco : StandSet
     public override string Name => "Deco";
     public override string About => "1930s grandeur: cream steps, gold fins, a clock tower";
     public override uint Swatch => 0xe8d6a8;
+    public override uint[] Mains => new uint[] { Cream };
     public override float Natural(Kind k) => k == Kind.Side ? 30 : k == Kind.End ? 27 : 25;
     public override Vector2 Range => new(22, 34);
     public override (uint col, Look look) Front(BuiltGround g) => (Green, Look.Wall);
@@ -329,6 +332,7 @@ public sealed class Crater : StandSet
     public override string Name => "Crater";
     public override string About => "A volcano's bowl: black rock, lava seams, fire-topped spires";
     public override uint Swatch => 0xe0602a;
+    public override uint[] Mains => new uint[] { Rock, Rock2, Steps };
     public override float Natural(Kind k) => k == Kind.End ? 40 : k == Kind.Side ? 34 : 37;
     public override Vector2 Range => new(28, 44);
     public override (uint col, Look look) Front(BuiltGround g) => (Rock, Look.Plain);
@@ -386,6 +390,8 @@ public sealed class Orbital : StandSet
     public override string Name => "Orbital";
     public override string About => "From the future: a floating halo roof, needle towers";
     public override uint Swatch => 0x8fe8ff;
+    public override uint[] Mains => new uint[] { White, Under };
+    public override Vector2? TifoAt(Section x) => new(5.6f, x.Top - 1.6f);
     public override float Natural(Kind k) => k == Kind.Side ? 44 : k == Kind.End ? 40 : 38;
     public override Vector2 Range => new(30, 48);
     public override (uint col, Look look) Front(BuiltGround g) => (White, Look.Plain);

@@ -460,6 +460,13 @@ public sealed class ClubState
         Save();
     }
 
+    /// <summary>A stand set's main colour, everywhere it's built (0 its own).</summary>
+    public void SetStadiumPaint(int set, uint col)
+    {
+        S.Stadium.SetPaint(set, col);
+        Save();
+    }
+
     public void SetGround(string g)
     {
         S.Ground = g;

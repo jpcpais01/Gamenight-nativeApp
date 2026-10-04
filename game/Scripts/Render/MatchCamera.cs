@@ -48,6 +48,36 @@ public sealed class MatchCamera
     /// yaw (0 from the near side) at the stand being chosen. Null for a match.</summary>
     public float? Showcase;
     float _orbit = float.NaN, _dt;
+    // The builder's camera as dragged: height (an angle), distance, and a shift over the ground.
+    float _elev = El0, _dist = 1, _sway = 1, _swayGoal = 1;
+    Vector3 _pan, _panGoal;
+    const float El0 = 0.6f;
+
+    /// <summary>The builder: turn round the ground and tilt (radians), zoom (a factor), and slide
+    /// across it (metres to the camera's right and away from it).</summary>
+    public void Orbit(float yaw, float tilt, float zoom, Vector2 slide)
+    {
+        if (Showcase is not float want) return;
+        Showcase = want + yaw;
+        if (!float.IsNaN(_orbit)) _orbit += yaw;
+        _elev = Math.Clamp(_elev + tilt, 0.12f, 1.4f);
+        _dist = Math.Clamp(_dist * zoom, 0.35f, 1.6f);
+        float a = float.IsNaN(_orbit) ? want : _orbit;
+        var right = new Vector3(MathF.Cos(a), 0, -MathF.Sin(a));
+        var away = new Vector3(-MathF.Sin(a), 0, -MathF.Cos(a));
+        _panGoal += (right * slide.X + away * slide.Y) * _dist;
+        if (_panGoal.Length() > 110) _panGoal = _panGoal.Normalized() * 110;
+        _pan = _panGoal;
+        _swayGoal = 0;
+    }
+
+    /// <summary>The builder: swing round to look at a stand, back over the ground's middle.</summary>
+    public void Face(float yaw)
+    {
+        Showcase = yaw;
+        _panGoal = Vector3.Zero;
+        _swayGoal = 1;
+    }
 
     float _tx, _tz, _vx, _vz, _aimX, _aimZ, _leadX, _leadZ;
     float _zoom = 1, _shake;
@@ -333,12 +363,16 @@ public sealed class MatchCamera
         {
             // High over the ground, easing round the shortest way, swaying a little.
             if (float.IsNaN(_orbit)) _orbit = want;
-            _orbit += Mathf.Wrap(want - _orbit, -Mathf.Pi, Mathf.Pi) * (1 - MathF.Exp(-_dt * 1.6f));
-            float a = _orbit + MathF.Sin((float)_time * 0.13f) * 0.22f;
-            pos = new Vector3(MathF.Sin(a) * 158, 104, MathF.Cos(a) * 142);
+            float ease = 1 - MathF.Exp(-_dt * 1.6f);
+            _orbit += Mathf.Wrap(want - _orbit, -Mathf.Pi, Mathf.Pi) * ease;
+            _pan = _pan.Lerp(_panGoal, ease);
+            _sway += (_swayGoal - _sway) * ease;
+            float a = _orbit + MathF.Sin((float)_time * 0.13f) * 0.22f * _sway;
+            float fh = MathF.Cos(_elev) / MathF.Cos(El0) * _dist, fv = MathF.Sin(_elev) / MathF.Sin(El0) * _dist;
+            pos = new Vector3(MathF.Sin(a) * 158 * fh, Math.Max(4, 104 * fv), MathF.Cos(a) * 142 * fh) + _pan;
             // Aimed a little to the left of the stand, so it sits to the right of the builder's panel.
             var right = new Vector3(MathF.Cos(a), 0, -MathF.Sin(a));
-            look = new Vector3(-MathF.Sin(_orbit) * 40, 8, -MathF.Cos(_orbit) * 30) - right * 26;
+            look = new Vector3(-MathF.Sin(_orbit) * 40, 8, -MathF.Cos(_orbit) * 30) - right * 26 * _dist + _pan;
             fov = 40;
             subX = subY = 0;
         }

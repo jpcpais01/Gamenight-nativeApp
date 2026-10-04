@@ -278,8 +278,11 @@ public partial class Main : Node
     /// <summary>The stadium builder: swing the camera round to look at a stand (yaw, 0 = from the near side).</summary>
     public void Focus(float yaw)
     {
-        if (_camera != null) _camera.Showcase = yaw;
+        _camera?.Face(yaw);
     }
+
+    /// <summary>The stadium builder: the camera dragged round (see <see cref="MatchCamera.Orbit"/>).</summary>
+    public void Orbit(float yaw, float tilt, float zoom, Vector2 slide) => _camera?.Orbit(yaw, tilt, zoom, slide);
 
     /// <summary>The demo match behind the menus: hidden (and not drawn or stepped) under a full screen.</summary>
     public void Backdrop(bool shown)

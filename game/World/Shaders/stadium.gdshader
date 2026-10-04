@@ -13,6 +13,9 @@ const float LOOK_ROOF = 1.0, LOOK_GLASS = 2.0, LOOK_CURTAIN = 3.0, LOOK_FASCIA =
 	LOOK_CLOTH = 11.0, LOOK_STIPPLE = 12.0, LOOK_UNLIT = 13.0, LOOK_ARCADE = 14.0, LOOK_COFFER = 15.0, LOOK_WALL = 16.0, LOOK_BRICK = 17.0,
 	LOOK_DECAL = 18.0, LOOK_HOUSE = 19.0;
 
+// The near stand's own draw (Ground.Near): cut where it would hide the pitch.
+uniform bool near_cut = false;
+
 varying vec3 wpos;
 varying vec3 wnrm;
 varying flat float look;
@@ -42,6 +45,7 @@ void vertex() {
 }
 
 void fragment() {
+	if (near_cut && world_near_hides(wpos, CAMERA_POSITION_WORLD)) discard;
 	vec3 n = normalize(FRONT_FACING ? wnrm : -wnrm);
 	vec3 alb = COLOR.rgb;
 	vec3 emis = vec3(0.0);

@@ -189,6 +189,8 @@ void vertex() {
 	float cx = UV.x * w;
 	float cy = UV.y * 2.25 * tall;
 	q = vec2(UV.x + 0.5, UV.y);
+	// In the near stand: out of the picture wherever he'd be between the camera and the pitch.
+	if (COLOR.r > 0.9 && world_near_hides(root + vec3(0.0, 2.0, 0.0), CAMERA_POSITION_WORLD)) { cx = 0.0; cy = 0.0; root = vec3(0.0, -50.0, 0.0); }
 	VERTEX = root + right * (cx + sin(t * 1.3 + ph) * 0.02) + vec3(0.0, cy - (1.0 - stand) * (0.44 + staff * 0.38) + jump, 0.0) + face * 0.05;
 	dist = length((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
 

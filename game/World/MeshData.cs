@@ -31,12 +31,15 @@ public sealed class MeshData
     /// <summary>Darkening baked into the albedo (ambient occlusion, a roof's shade).</summary>
     public float Shade = 1f;
 
+    /// <summary>Changes colours as they're set (a stand painted in the club's choice).</summary>
+    public Func<uint, uint> Paint;
+
     public int Count => V.Count;
 
     /// <summary>Sets the albedo from an sRGB hex colour.</summary>
     public MeshData Hex(uint rgb, Look look = Look.Plain, float param = 0)
     {
-        Col = Srgb(rgb);
+        Col = Srgb(Paint?.Invoke(rgb) ?? rgb);
         Look = look;
         Param = param;
         return this;

@@ -218,17 +218,22 @@ public sealed class OldGround : Ground
         }
         Lamps = lamps.ToArray();
 
-        // ---- the near side: a low paddock in play; the covered stand behind it casts its shadow only
+        // ---- the near side: a low paddock in play, the covered stand behind it
         S(m, near, new(0, 0), new(0, 1.4f), wall, Look.Wall);
         S(m, near, new(0, 1.4f), new(0.4f, 1.4f), Concrete);
         S(m, near, new(0.4f, 1.4f), new(8, Tier(8)), seat, Look.Tier, 1, 2);
         S(m, near, new(8, Tier(8)), new(9, Tier(8)), Concrete);
         m.Hex(Concrete);
         Bowl.Caps(m, new[] { near[0], near[^1] }, new Vector2[] { new(0, 0), new(0, 1.4f), new(0.4f, 1.4f), new(8, Tier(8)), new(9, Tier(8)), new(9, 0) });
-        S(ShadowOnly, near, new(0.4f, 1.4f), new(11, Tier(11)), Concrete);
-        S(ShadowOnly, near, new(12.5f, 0), new(12.5f, 10.8f), Concrete);
-        S(ShadowOnly, near, new(12.5f, 10.8f), new(1.2f, 9.9f), Concrete);
-        Bowl.Caps(ShadowOnly, new[] { near[0], near[^1] }, new Vector2[] { new(0, 0), new(0, 1.4f), new(1.2f, Tier(1.2f)), new(1.2f, 9.9f), new(12.5f, 10.8f), new(12.5f, 0) });
+        // The covered stand behind the paddock: drawn in its own batch that the shader cuts away
+        // wherever it would hide the pitch (it shows when the camera turns).
+        S(Near, near, new(8, Tier(8)), new(11, Tier(11)), seat, Look.Tier, 1, 1);
+        S(Near, near, new(11, Tier(11)), new(12.5f, Tier(11)), Concrete);
+        S(Near, near, new(12.5f, Tier(11)), new(12.5f, 10.8f), wall, Look.Wall);
+        S(Near, near, new(12.5f, 10.8f), new(1.2f, 9.9f), 0x3a3f47, Look.Roof);
+        S(Near, near, new(1.2f, 9.9f), new(1.2f, 9.3f), 0xffffff, Look.Fascia);
+        Near.Hex(Concrete);
+        Bowl.Caps(Near, new[] { near[0], near[^1] }, new Vector2[] { new(8, Tier(8)), new(11, Tier(11)), new(12.5f, Tier(11)), new(12.5f, 10.8f), new(1.2f, 9.9f), new(1.2f, 9.3f), new(8, 9.4f) });
 
         Town(m);
         Pitchside.AdBoards(m);
@@ -243,6 +248,7 @@ public sealed class OldGround : Ground
         Crowd.Tier(shed, new(0.4f, 1.4f), new(18, Tier(18)), new TierFans { Aisles = false, Shade = new(-1, 9), Tifo = EndTifos(29, shedSlope) });
         Crowd.Tier(away, new(0.4f, 1.4f), new(17, top), new TierFans { Aisles = false, Fill = 0.72f, Tifo = EndTifos(20, awaySlope * 0.55f + 1) });
         Crowd.Tier(near, new(0.4f, 1.4f), new(8, Tier(8)), new TierFans { Fill = 0.85f });
+        Crowd.Tier(near, new(8, Tier(8)), new(11, Tier(11)), new TierFans { Fill = 0.85f, Aisles = false, Near = true, Shade = new(0, 2) });
         WaveFlags(main, new(0.4f, 1.4f), new(15, Tier(15)));
         WaveFlags(shed, new(0.4f, 1.4f), new(18, Tier(18)));
         HoldBanner(shed[shed.Count / 2], 6.5f, new(0.4f, 1.4f), new(18, Tier(18)), 10);
