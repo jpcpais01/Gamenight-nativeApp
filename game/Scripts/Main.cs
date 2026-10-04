@@ -36,6 +36,8 @@ public partial class Main : Node
     Profiler _prof;
     PlayersView _players;
     Officials _officials;
+    PitchInvader _invader;
+    bool _invaderShown;
     Goals _goals;
     DeliveryView _delivery;
     TouchControls _controls;
@@ -63,6 +65,7 @@ public partial class Main : Node
         Acoustics();
         _players = new PlayersView(_view.WorldRoot);
         _officials = new Officials(_view.WorldRoot);
+        _invader = new PitchInvader(_view.WorldRoot) { Cue = beat => PitchInvader.Crowd(Sound.Terraces, beat) };
         _goals = new Goals(_view.WorldRoot);
         _delivery = new DeliveryView(_view.WorldRoot);
         _camera = new MatchCamera(_view.Camera);
@@ -89,6 +92,11 @@ public partial class Main : Node
         _prof.Context = SpikeContext;
         _letterbox.Skip += () =>
         {
+            if (_invader.Holding)
+            {
+                _invader.Clear(_runner);
+                return;
+            }
             if (Cutscene.Active)
             {
                 Cutscene.Next();
@@ -118,7 +126,11 @@ public partial class Main : Node
         _pause.WeatherName = () => Atmosphere.Names[(int)_ground.Atmosphere.Weather];
         _pause.CycleWeather = () => Atmosphere.Names[(int)_ground.Atmosphere.Cycle()];
         _pause.SaveReport = SaveReport;
-        if (Request?.Demo != true && Request?.Drill == null) _pause.Foul = () => _runner?.Invoke(m => m.DebugFoul());
+        if (Request?.Demo != true && Request?.Drill == null)
+        {
+            _pause.Foul = () => _runner?.Invoke(m => m.DebugFoul());
+            _pause.Invader = () => _runner?.Invoke(m => m.DebugInvader(0.3));
+        }
         ApplySettings();
         if (Request?.Demo == true)
         {
@@ -151,6 +163,7 @@ public partial class Main : Node
         if (Directed) EndDirected();
         _replay.Reset();
         _officials.Reset();
+        _invader.Clear(null);
         _match = Request != null ? new Match(Request.Seed, Request.Setup) : new Match(seed: DateTime.Now.Ticks % 2147483647);
         if (Request?.Demo == true) _match.AutoPlay = true;
         // Names and kits are read before the match's own thread starts.
@@ -166,6 +179,8 @@ public partial class Main : Node
         _runner.Read(_prev, _cur, out _);
         _runner.Paused = _pause.IsOpen;
         _runner.Start();
+        // Debug: `-- --invader` sends a fan on a few seconds into the match.
+        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--invader") >= 0) _runner.Invoke(m => m.DebugInvader(3));
         // A real match opens with the walk-out.
         if (Request?.Demo != true && Request?.Drill == null && (_shotPath == null || Array.IndexOf(OS.GetCmdlineUserArgs(), "--cutscene") >= 0))
         {
@@ -182,7 +197,7 @@ public partial class Main : Node
         if (GameAudio.Instance != null) GameAudio.Instance.Suspended = on;
         if (on) _controls.ReleaseAll();
         _controls.SetProcessInput(!on);
-        _controls.Visible = !on && !Directed;
+        _controls.Visible = !on && !Directed && !_invaderShown;
     }
 
     /// <summary>A replay or the walk-out on screen: the match waits.</summary>
@@ -325,6 +340,7 @@ public partial class Main : Node
             _players.Update(_replay.A, _replay.B, _replay.Alpha, _time, 1);
         else
         {
+            _camera.Follow = _invader.Focus;
             _camera.Update(_prev, _cur, alpha, run);
             _players.Update(_prev, _cur, alpha, _time, (float)_match.SwitchT);
             if (Request?.Demo != true && Request?.Drill == null)
@@ -337,6 +353,8 @@ public partial class Main : Node
         // The referee and his assistants (not at training, and off screen during the walk-out).
         _officials.Visible = Request?.Drill == null && !Cutscene.Active;
         if (Request?.Drill == null) _officials.Update(_match, _cur, _time, Directed ? 0 : run);
+        if (Request?.Drill == null) _invader.Update(_cur, _runner, _time, Directed ? 0 : run);
+        InvaderFrame();
         // The net takes the ball (live, or again on the replay's tape).
         if (!Directed && _cur.Net > 0) _goals.Impact(_cur.BallX, _cur.BallY, _cur.BallZ, _cur.Net, _time);
         _goals.Update(_time);
@@ -366,6 +384,27 @@ public partial class Main : Node
             GetViewport().GetTexture().GetImage().SavePng(_shotPath);
             GetTree().Quit();
             _shotPath = null;
+        }
+    }
+
+    /// <summary>A pitch invader on: the cinema bars and a caption (tap to skip), the controls
+    /// put away; back as he's walked off.</summary>
+    void InvaderFrame()
+    {
+        bool on = _invader.Holding && Request?.Demo != true;
+        if (on == _invaderShown) return;
+        _invaderShown = on;
+        if (on)
+        {
+            _controls.ReleaseAll();
+            _controls.Visible = false;
+            _letterbox.Open(false);
+            _letterbox.Caption("Pitch invader!", "The stewards give chase");
+        }
+        else if (!Directed)
+        {
+            _controls.Visible = !_pause.IsOpen;
+            _letterbox.Close();
         }
     }
 

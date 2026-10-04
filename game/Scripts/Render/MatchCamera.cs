@@ -47,6 +47,8 @@ public sealed class MatchCamera
     /// <summary>The stadium builder: the drone circles round to look across the pitch from this
     /// yaw (0 from the near side) at the stand being chosen. Null for a match.</summary>
     public float? Showcase;
+    /// <summary>Something to follow instead of the ball (a pitch invader), or null.</summary>
+    public Vector2? Follow;
     float _orbit = float.NaN, _dt;
     // The builder's camera as dragged: height (an angle), distance, and a shift over the ground.
     float _elev = El0, _dist = 1, _sway = 1, _swayGoal = 1;
@@ -129,9 +131,14 @@ public sealed class MatchCamera
         if (dt <= 0 || Showcase != null) { Place(); return; }
         float bx = Mathf.Lerp(a.BallX, b.BallX, alpha);
         float bz = Mathf.Lerp(a.BallZ, b.BallZ, alpha);
+        if (Follow is Vector2 follow)
+        {
+            bx = follow.X;
+            bz = follow.Y;
+        }
         // After a goal: follow the scorer's celebration (then the crowd shot, then back to the field).
         bool goal = b.Phase == Phase.Goal && b.Scorer >= 0 && b.PhaseT < GoalSeq.Back;
-        int ci = goal ? b.Scorer : b.Controlled;
+        int ci = goal ? b.Scorer : Follow != null ? -1 : b.Controlled;
         float cx = ci >= 0 ? Mathf.Lerp(a.X[ci], b.X[ci], alpha) : bx;
         float cz = ci >= 0 ? Mathf.Lerp(a.Z[ci], b.Z[ci], alpha) : bz;
         // Aiming a corner: frame the ring in the box along with the taker at the flag.

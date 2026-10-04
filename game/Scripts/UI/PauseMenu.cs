@@ -20,6 +20,9 @@ public sealed partial class PauseMenu : Control
     /// Main for real matches), shown while FoulShown (not during the walk-out or a replay).</summary>
     public Action Foul;
     public bool FoulShown;
+    /// <summary>Holding FOUL down for a second instead: a pitch invader (to see one on demand).</summary>
+    public Action Invader;
+    ulong _foulDown;
 
     static readonly string[] CameraNames = { "Close", "Normal", "Far" };
 
@@ -55,7 +58,12 @@ public sealed partial class PauseMenu : Control
         foreach (var st in new[] { "normal", "hover", "focus" }) _foul.AddThemeStyleboxOverride(st, Flat(red, 4, null, 0, 10));
         _foul.AddThemeStyleboxOverride("pressed", Flat(new Color(red, 0.85f), 4, null, 0, 10));
         foreach (var st in new[] { "font_color", "font_hover_color", "font_pressed_color", "font_focus_color" }) _foul.AddThemeColorOverride(st, Style.Ink);
-        _foul.Pressed += () => Foul?.Invoke();
+        _foul.ButtonDown += () => _foulDown = Time.GetTicksMsec();
+        _foul.Pressed += () =>
+        {
+            if (Invader != null && Time.GetTicksMsec() - _foulDown > 900) Invader();
+            else Foul?.Invoke();
+        };
         AddChild(_foul);
         AddChild(_pause);
 

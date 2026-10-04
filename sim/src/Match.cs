@@ -268,6 +268,7 @@ public sealed partial class Match
         var fourth = new Rng(M.ToInt32(seed) ^ 0x5eed4e);
         Added[0] = 1 + Math.Floor(fourth.Next() * 5);
         Added[1] = 1 + Math.Floor(fourth.Next() * 5);
+        RollInvader(seed);
         for (int t = 0; t < 2; t++)
         {
             var ts = setup?.Teams[t];

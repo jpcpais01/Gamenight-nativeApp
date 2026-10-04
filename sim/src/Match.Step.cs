@@ -13,8 +13,10 @@ public sealed partial class Match
         PhaseT += DT;
         SwitchT += DT;
         var ball = Ball;
+        InvaderStep();
 
-        bool running = Phase == Phase.Play || Phase == Phase.Out || Phase == Phase.SetPiece || Phase == Phase.Kickoff;
+        // (The clock stops while a pitch invader is on.)
+        bool running = (Phase == Phase.Play || Phase == Phase.Out || Phase == Phase.SetPiece || Phase == Phase.Kickoff) && InvaderT < 0;
         if (running && !Training) Clock += DT;
 
         // Half / full time: once the added time is up, the referee lets an attack in the final third
@@ -334,6 +336,7 @@ public sealed partial class Match
         if (Phase == Phase.Halftime || Phase == Phase.Fulltime || Phase == Phase.Out)
         {
             c.Sprinting = false;
+            if (InvaderWalk(c)) return;
             if (Phase == Phase.Out) c.WantSpeed = Math.Max(0, c.WantSpeed - DT * 6);
             return;
         }

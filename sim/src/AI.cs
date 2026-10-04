@@ -946,6 +946,7 @@ public sealed class AI
                 Celebrate(p);
                 return;
             case Phase.Out:
+                if (m.InvaderWalk(p)) return;
                 // Play's stopped: ease off and watch the ball.
                 p.WantSpeed = Math.Max(0, p.WantSpeed - DT * 5);
                 p.LookTarget.Copy(m.Ball.Pos);

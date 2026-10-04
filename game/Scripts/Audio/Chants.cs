@@ -132,6 +132,17 @@ public sealed class Chants
                 if (_mx.Rand() < keep) Crowd.Heckle(_mx, t, (end == 0 ? -0.3f : 0.3f) + (_mx.Rand() - 0.5f) * 1.2f, lv * near);
                 break;
             }
+            case Audio.React.Laugh:
+                for (int e = 0; e < 2; e++) if (r.End < 0 || r.End == e) Laugh(e, t, lv);
+                break;
+            case Audio.React.Ole:
+                for (int e = 0; e < 2; e++)
+                    if (r.End < 0 || r.End == e)
+                    {
+                        Crowd.Shout(_mx, EndBus(e), t, 0.22, Vowel.O, 0.75f * lv, Voices(e) + 2);
+                        Crowd.Shout(_mx, EndBus(e), t + 0.24, 0.55, Vowel.E, 0.9f * lv, Voices(e) + 2);
+                    }
+                break;
             case Audio.React.Whistler:
                 Crowd.Whistler(_mx, Bus.Bowl, t, (end == 0 ? -0.4f : 0.4f) + (_mx.Rand() - 0.5f) * 1f, lv);
                 break;
@@ -173,6 +184,44 @@ public sealed class Chants
     {
         Crowd.Sing(_mx, EndBus(end), t, 0.9, Crowd.Hz(5 + _key[end]), Vowel.A, 0.35f * level, Voices(end), 0, -0.22f);
         _mx.Burst(t, 1.0, FilterType.Bandpass, 600, 0.6f, 0.06f * level, 1, EndBus(end));
+    }
+
+    /// <summary>An end laughing: little groups of voices going "ha-ha-ha", each falling in pitch
+    /// and dying away, scattered round the stand over the best part of a second.</summary>
+    void Laugh(int end, double t, float level)
+    {
+        var bus = EndBus(end);
+        var (f1, f2) = Crowd.Formants[(int)Vowel.A];
+        int groups = end == 0 ? 6 : 4;
+        for (int g = 0; g < groups; g++)
+        {
+            double at = t + _mx.Rand() * 0.9;
+            int n = 4 + (int)(_mx.Rand() * 5);
+            double step = 0.12 + _mx.Rand() * 0.06;
+            float hz = Crowd.Root * (1.45f + _mx.Rand() * 0.75f);
+            float pan = (_mx.Rand() - 0.5f) * 1.4f;
+            var voiced = new Param(0.0001f).Set(0.0001f, at);
+            var breath = new Param(0.0001f).Set(0.0001f, at);
+            for (int i = 0; i < n; i++)
+            {
+                double s0 = at + i * step;
+                float pk = 0.1f * level * MathF.Pow(0.85f, i);
+                voiced.Exp(pk, s0 + 0.025).Exp(0.0001f, s0 + step * 0.7);
+                breath.Exp(pk * 0.5f, s0 + 0.015).Exp(0.0001f, s0 + step * 0.8);
+            }
+            double stop = at + n * step + 0.2;
+            _mx.Add(new Voice
+            {
+                Kind = Voice.Src.Custom, Custom = Crowd.Choir(_mx, at, hz, 3, n * step, -0.2f),
+                F1 = new Biquad(FilterType.Bandpass, f1, 4), F2 = new Biquad(FilterType.Bandpass, f2, 5), W2 = 0.55f,
+                Pre = 5.5f, Gain = voiced, Out = bus, Start = at, Stop = stop,
+            }.At(pan));
+            _mx.Add(new Voice
+            {
+                Kind = Voice.Src.Noise, Rate = 1, Pos = _mx.Rand() * 3 * _mx.Sr, F1 = new Biquad(FilterType.Bandpass, f1, 2.6f),
+                F2 = new Biquad(FilterType.Bandpass, f2, 3.2f), W2 = 0.55f, Pre = 2.4f, Gain = breath, Out = bus, Start = at, Stop = stop,
+            }.At(pan));
+        }
     }
 
     /// <summary>A short "YEAH!": the end on its feet for a moment.</summary>

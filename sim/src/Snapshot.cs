@@ -99,6 +99,9 @@ public sealed class MatchSnapshot
     public CelebrationKind? Celebration;
     public float CelebrationAt, CelebrationTurn;
     public float Excitement;
+    /// <summary>A pitch invader is on: seconds since the whistle for him (-1: none), and his seed.</summary>
+    public float InvaderT = -1;
+    public int InvaderSeed;
     /// <summary>For the crowd and sound: who shot (-1 = no shot on), who attacks, who touched last, a penalty given or being taken.</summary>
     public int ShotTeam = -1, AttackingTeam = -1, LastTouchTeam = -1;
     public bool PenaltyPending;
@@ -153,6 +156,7 @@ public sealed class MatchSnapshot
         Celebration = o.Celebration; CelebrationAt = o.CelebrationAt; CelebrationTurn = o.CelebrationTurn; Excitement = o.Excitement;
         ShotTeam = o.ShotTeam; AttackingTeam = o.AttackingTeam; LastTouchTeam = o.LastTouchTeam; PenaltyPending = o.PenaltyPending;
         KickCount = o.KickCount; KickMax = o.KickMax;
+        InvaderT = o.InvaderT; InvaderSeed = o.InvaderSeed;
         Whistle = o.Whistle; Goal = o.Goal; Foul = o.Foul; Card = o.Card; Offside = o.Offside;
         Post = o.Post; Net = o.Net; Bounce = o.Bounce; Save = o.Save; Tackle = o.Tackle;
     }
@@ -314,5 +318,7 @@ public sealed partial class Match
         s.AttackingTeam = AttackingTeam();
         s.LastTouchTeam = LastTouch?.Team ?? -1;
         s.PenaltyPending = PenaltyPending;
+        s.InvaderT = (float)InvaderT;
+        s.InvaderSeed = InvaderSeed;
     }
 }

@@ -51,6 +51,10 @@ public enum React : byte
     Heckle,
     /// <summary>One fan whistling.</summary>
     Whistler,
+    /// <summary>Laughter rippling round the ground (a pitch invader).</summary>
+    Laugh,
+    /// <summary>"Olé!": a player (or a pitch invader) skipping past a challenge.</summary>
+    Ole,
 }
 
 /// <summary>A reaction from one end (or -1: the whole ground), at director time At.</summary>
@@ -378,6 +382,9 @@ public sealed class Terraces
     }
 
     /// <summary>A reaction, `delay` seconds from now.</summary>
+    /// <summary>A reaction cued from outside the director (the pitch invader).</summary>
+    public void Cue(React kind, int end, double delay, float level, float dur = 0) => Add(kind, end, delay, level, dur);
+
     void Add(React kind, int end, double delay, float level, float dur = 0)
     {
         if (dur <= 0)
@@ -387,6 +394,8 @@ public sealed class Terraces
                 React.Aww => 1.6f,
                 React.Boo => 2,
                 React.Cheer => 1.2f,
+                React.Ole => 1.2f,
+                React.Laugh => 3,
                 React.Erupt => 8,
                 React.Rally => 5.5f,
                 React.NameCall => 8.5f,
@@ -426,7 +435,9 @@ public sealed class Terraces
                     case React.Ooh:
                     case React.Groan:
                     case React.Aww: heads[end] = MathF.Max(heads[end], w); break;
-                    case React.Cheer: fists[end] = MathF.Max(fists[end], w); break;
+                    case React.Cheer:
+                    case React.Ole: fists[end] = MathF.Max(fists[end], w); break;
+                    case React.Laugh: clap[end] = MathF.Max(clap[end], w * 0.6f); break;
                     case React.Erupt:
                         if (u > 3.4f) clap[end] = MathF.Max(clap[end], w);
                         else fists[end] = MathF.Max(fists[end], w);
