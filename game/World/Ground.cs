@@ -197,15 +197,13 @@ public abstract class Ground
         // The motto is the ultras' big drop banner (the last banner slot).
         if (Art.Motto is var (mt, mbg, mfg) && Banners.Length >= 10) Banners[9] = new BannerArt(mt, mbg, mfg, 2);
         parent.AddChild(Root);
-        Atmosphere = new Atmosphere(Root) { FloodScale = FloodScale };
+        Atmosphere = new Atmosphere(Root) { FloodScale = FloodScale, FogRange = FogRange, Haze = Haze };
         RenderingServer.GlobalShaderParameterSet("gn_home", Lin(HomeColor));
         RenderingServer.GlobalShaderParameterSet("gn_away", Lin(AwayColor));
-        RenderingServer.GlobalShaderParameterSet("gn_fog_range", FogRange);
-        RenderingServer.GlobalShaderParameterSet("gn_haze", Haze);
         RenderingServer.GlobalShaderParameterSet("gn_land", Land);
         RenderingServer.GlobalShaderParameterSet("gn_flood_col", Lin(0xfff4e0));
         RenderingServer.GlobalShaderParameterSet("gn_goal", new Vector2(-1, 100));
-        Atmosphere.Set(0);
+        Atmosphere.Refresh();
         foreach (var arg in OS.GetCmdlineUserArgs())
             if (arg.StartsWith("--cam=")) _debugCam = System.Array.ConvertAll(arg[6..].Split(','), float.Parse);
 
@@ -272,6 +270,7 @@ public abstract class Ground
         float progress = s.Phase == Phase.Fulltime ? 1f : Mathf.Clamp(s.Minute / 90f, 0, 1);
         if (_debugCam != null && _debugCam.Length > 6) progress = _debugCam[6];
         Atmosphere.Set(progress);
+        Atmosphere.Tick(dt, time);
 
         // A goal: whoever's score went up. The scoring side's fans go wild for a while.
         if (s.Score[0] != _lastScore0 || s.Score[1] != _lastScore1)

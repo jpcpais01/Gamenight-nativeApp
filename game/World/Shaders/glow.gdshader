@@ -13,7 +13,7 @@ float bayer4(vec2 p) { return bayer2(0.5 * p) * 0.25 + bayer2(p); }
 
 void vertex() {
 	c = UV;
-	float size = 3.0 + gn_flood * 6.0;
+	float size = (3.0 + gn_flood * 6.0) * (1.0 + 0.6 * gn_rain);
 	vec4 mv = MODELVIEW_MATRIX * vec4(VERTEX, 1.0);
 	// Pulled toward the camera so the roof front never cuts it.
 	mv.xyz += normalize(-mv.xyz) * 6.0;
@@ -25,6 +25,9 @@ void fragment() {
 	float r = length(c);
 	float core = 1.0 - smoothstep(0.12, 0.2, r);
 	float halo = pow(max(0.0, 1.0 - r), 2.2) * (0.25 + 0.75 * gn_flood);
+	// In the rain the light smears into a wet glare, streaked by the drops in front of it.
+	float streak = 1.0 - smoothstep(0.0, 0.5, abs(fract(c.x * 6.0 + world_hash(floor(c * 6.0))) - 0.5) * 2.0);
+	halo *= 1.0 + gn_rain * (0.8 + 0.9 * streak) * (1.0 - smoothstep(0.3, 1.0, r) * 0.4);
 	if (core < 0.5 && halo < bayer4(FRAGCOORD.xy) + 0.08) discard;
 	vec3 hot = vec3(1.0, 0.97, 0.88) * (0.8 + 2.2 * gn_flood);
 	ALBEDO = mix(vec3(1.0, 0.86, 0.62) * (0.4 + 1.1 * gn_flood), hot, core);

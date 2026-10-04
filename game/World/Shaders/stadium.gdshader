@@ -172,6 +172,9 @@ void fragment() {
 	}
 
 	vec3 light = world_light(n, COLOR.a) + gn_flood_col * gn_flood * 0.3;
+	// Rain: everything soaked darker, wet tops catching the floodlights.
+	alb *= 1.0 - 0.28 * gn_rain;
+	light += gn_flood_col * gn_flood * 0.22 * gn_rain * max(n.y, 0.0);
 	vec3 c = alb * light * lit + emis;
 	ALBEDO = world_fog(c, dist, 0.06);
 }

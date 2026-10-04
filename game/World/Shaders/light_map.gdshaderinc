@@ -7,15 +7,18 @@ global uniform sampler2D gn_light_map : filter_linear, repeat_disable;
 global uniform vec4 gn_light_rect;
 global uniform float gn_flood;
 global uniform vec3 gn_flood_col;
+#include "res://World/Shaders/weather.gdshaderinc"
 
 vec2 light_map_at(vec3 w) {
 	return texture(gn_light_map, (w.xz - gn_light_rect.xy) * gn_light_rect.zw).rg * vec2(1.0, 2.0);
 }
 
 vec3 light_map_flood(vec3 w) {
-	return gn_flood_col * (gn_flood * light_map_at(w).g * 0.85);
+	return gn_flood_col * (gn_flood * light_map_at(w).g * 0.85) + weather_flash() * 0.6;
 }
 
+// The stand shadows count as the weather has it; drifting cloud shadows on a sunny day.
 vec3 light_map_sun(vec3 l, vec3 n, vec3 col, float att, vec3 w) {
-	return col * (max(dot(n, l), 0.0) * att * light_map_at(w).r / PI);
+	float vis = mix(1.0, light_map_at(w).r, gn_shadow) * weather_cloud(w);
+	return col * (max(dot(n, l), 0.0) * att * vis / PI);
 }

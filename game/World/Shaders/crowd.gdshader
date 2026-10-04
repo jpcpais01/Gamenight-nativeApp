@@ -131,7 +131,7 @@ void vertex() {
 
 	// Light: sky and floodlights, and the sun where the stands don't shade him.
 	float shade = COLOR.b;
-	light = (gn_amb_sky * 1.05 + gn_amb_ground * 0.4 + gn_sun * 0.5 * COLOR.a + gn_flood_col * gn_flood * 0.55) * shade;
+	light = (gn_amb_sky * 1.05 + gn_amb_ground * 0.4 + gn_sun * 0.5 * mix(1.0, COLOR.a, gn_shadow) + weather_flash() + gn_flood_col * gn_flood * 0.55) * shade;
 	// Flares: a hot red glow on everyone near one, stronger as it gets dark.
 	for (int i = 0; i < flare_n; i++) {
 		vec3 d = flares[i].xyz - (root + vec3(0.0, 1.4, 0.0));

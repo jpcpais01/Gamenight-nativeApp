@@ -20,12 +20,15 @@ global uniform vec3 gn_home;
 global uniform vec3 gn_away;
 // The big screens' live picture (World/ScreenView.cs).
 global uniform sampler2D gn_screen : source_color, filter_linear, repeat_disable;
+#include "res://World/Shaders/weather.gdshaderinc"
 global uniform sampler2D gn_atlas : source_color, filter_linear_mipmap, repeat_disable;
 
 // Light from the time of day on a surface facing n, with the sun's share scaled by vis.
+// The baked stand shadows count for as much as the weather has a sun (none on a rainy night);
+// lightning lights everything for an instant.
 vec3 world_light(vec3 n, float vis) {
-	vec3 amb = mix(gn_amb_ground, gn_amb_sky, n.y * 0.5 + 0.5);
-	return amb + gn_sun * max(dot(n, -gn_sun_dir), 0.0) * vis;
+	vec3 amb = mix(gn_amb_ground, gn_amb_sky, n.y * 0.5 + 0.5) + weather_flash();
+	return amb + gn_sun * max(dot(n, -gn_sun_dir), 0.0) * mix(1.0, vis, gn_shadow);
 }
 
 // Atmospheric haze: the background sits back behind the play.

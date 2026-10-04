@@ -9,6 +9,10 @@ uniform vec3 sun_color = vec3(1.0, 0.9, 0.7);
 uniform vec3 sun_dir = vec3(0.0, 0.5, 0.8);
 uniform float stars = 0.0;
 uniform float clouds = 0.5;
+// Rainy night: a low overcast lit from underneath by the floodlights, lightning flashes.
+uniform float overcast = 0.0;
+uniform vec3 belly_glow = vec3(0.0);
+uniform float flash = 0.0;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 float noise(vec2 p) {
@@ -36,6 +40,15 @@ void sky() {
 		vec2 sg = floor(vec2(atan(d.z, d.x) * 95.0, d.y * 130.0));
 		float star = step(0.9965, hash(sg)) * smoothstep(0.1, 0.35, d.y) * (1.0 - cl);
 		c += vec3(0.92, 0.94, 1.0) * star * (0.5 + 0.5 * hash(sg + 1.7)) * stars * 1.2;
+	}
+	if (overcast > 0.0) {
+		vec2 op = d.xz / max(0.05, d.y + 0.1);
+		float n = noise(op * 0.7) * 0.55 + noise(op * 1.9 + 3.1) * 0.3 + noise(op * 4.7) * 0.15;
+		vec3 belly = mix(vec3(0.008, 0.01, 0.016), vec3(0.045, 0.05, 0.066), smoothstep(0.3, 0.8, n));
+		// The floodlights' glow on the cloud base, strongest low over the stands.
+		belly += belly_glow * (1.0 - smoothstep(0.0, 0.5, d.y)) * (0.45 + 0.8 * n);
+		c = mix(c, belly, overcast);
+		c += vec3(0.55, 0.6, 0.78) * flash * (0.25 + 0.9 * smoothstep(0.35, 0.75, n));
 	}
 	COLOR = c;
 }

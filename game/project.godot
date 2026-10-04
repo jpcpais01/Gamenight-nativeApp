@@ -60,6 +60,22 @@ textures/vram_compression/import_etc2_astc=true
 
 [shader_globals]
 
+gn_rain={
+"type": "float",
+"value": 0.0
+}
+gn_shadow={
+"type": "float",
+"value": 1.0
+}
+gn_clouds={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+gn_flash={
+"type": "float",
+"value": 0.0
+}
 gn_sun_dir={
 "type": "vec3",
 "value": Vector3(0.4, -0.5, -0.7)
