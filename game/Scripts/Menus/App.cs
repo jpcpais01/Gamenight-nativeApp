@@ -51,6 +51,12 @@ public sealed partial class App : Node
             if (arg == "--screen=store") _menus.Go(_menus.Store);
             if (arg == "--screen=club") _menus.Go(_menus.ClubStudio);
             if (arg.StartsWith("--tab=")) _menus.ClubStudio.Tab = int.Parse(arg[6..]);
+            if (arg.StartsWith("--crest="))
+            {
+                var a = arg[8..].Split('@');
+                _menus.ClubStudio.CrestPage(int.Parse(a[0]), int.Parse(a[1]));
+                if (a.Length > 2) _club.SetCrest(CrestArt.Random(_club.S.Crest, 0xc8393b, 0x14121c));
+            }
             if (arg == "--screen=notes") _menus.Open(new NotesModal(_menus));
             if (arg == "--screen=drills") PickDrill();
             if (arg == "--screen=player") _menus.OpenPlayer(_club.S.Cards[0]);

@@ -10,22 +10,48 @@ public sealed class Crest
     /// <summary>Up to 4 letters.</summary>
     public string Text = "ROS";
     public int TextStyle = 1, Border = 2;
+    /// <summary>A texture over the field (see Patterns).</summary>
+    public int Pattern;
+    /// <summary>Lettering face: 0 block, 1 pixel.</summary>
+    public int Font;
     /// <summary>0..5 champion stars above the crest.</summary>
     public int Stars;
     /// <summary>Founding year on the ribbon ("" = none).</summary>
     public string Year = "1899";
     public int Primary = 0xc8393b, Secondary = 0x14121c, Accent = 0xf3ede0;
 
-    public static readonly string[] Shapes = { "Classic", "Heater", "Round", "Roundel", "Swiss", "Diamond", "Hexagon", "French", "Pennant" };
-    public static readonly string[] Divisions = { "Plain", "Halves", "Split", "Quarters", "Stripes", "Hoops", "Bend", "Chevron", "Saltire", "Cross", "Chief", "Gyronny" };
-    public static readonly string[] Emblems = { "None", "Star", "Ball", "Crown", "Bolt", "Castle", "Anchor", "Flame", "Wings", "Eagle", "Lion", "Oak", "Wolf", "Sun", "Three stars" };
-    public static readonly string[] TextStyles = { "Centre", "Ribbon", "Top band", "Hidden" };
-    public static readonly string[] Borders = { "None", "Thin", "Bold", "Double", "Gold" };
+    public static readonly string[] Shapes =
+    {
+        "Classic", "Heater", "Round", "Roundel", "Swiss", "Diamond", "Hexagon", "French", "Pennant",
+        "Oval", "Square", "Octagon", "Arch", "Tall", "Crowned", "Gothic", "Triangle", "Drop", "Plate",
+    };
+    public static readonly string[] Divisions =
+    {
+        "Plain", "Halves", "Split", "Quarters", "Stripes", "Hoops", "Bend", "Chevron", "Saltire", "Cross", "Chief", "Gyronny",
+        "Checks", "Tricolour", "Bend left", "Pall", "Pile", "Waves", "Pinstripes", "Bordure", "Diamonds", "Sunburst", "Base", "Canton",
+    };
+    public static readonly string[] Patterns = { "None", "Dots", "Lines", "Grid", "Diagonal", "Zigzag", "Rings", "Scales", "Stars" };
+    public static readonly string[] Emblems =
+    {
+        "None", "Star", "Ball", "Crown", "Bolt", "Castle", "Anchor", "Flame", "Wings", "Eagle", "Lion", "Oak", "Wolf", "Sun", "Three stars",
+        "Heart", "Moon", "Mountain", "Trident", "Keys", "Fleur", "Trophy", "Clover", "Cross", "Ship", "Wheel", "Bull", "Horse", "Swallow", "Skull", "Gem", "Laurel", "Bee",
+    };
+    public static readonly string[] TextStyles = { "Centre", "Ribbon", "Top band", "Hidden", "Low band", "Monogram" };
+    public static readonly string[] Fonts = { "Block", "Pixel" };
+    public static readonly string[] Borders = { "None", "Thin", "Bold", "Double", "Gold", "Dashed", "Studs", "Inset", "Triple" };
+
+    /// <summary>Colours for the crest that look good together.</summary>
+    public static readonly int[] Palette =
+    {
+        0xc8393b, 0x8f1f24, 0xe0522b, 0xf28c28, 0xffd447, 0xe8c35a, 0x3ddc84, 0x1f6b4a,
+        0x0f3d2e, 0x2fb6a8, 0x7ff6ff, 0x4aa3ff, 0x2457d6, 0x23345e, 0x14123a, 0x6a3fd1,
+        0xb05cff, 0xe0559b, 0xf3ede0, 0xffffff, 0xb9bdc4, 0x6b6f78, 0x2a2a2a, 0x0e0e10,
+    };
 
     public Crest Clone() => (Crest)MemberwiseClone();
 
     /// <summary>A key that changes whenever anything drawn changes.</summary>
-    public string Key => $"{Shape}|{Division}|{Emblem}|{Text}|{TextStyle}|{Border}|{Stars}|{Year}|{Primary}|{Secondary}|{Accent}";
+    public string Key => $"{Shape}|{Division}|{Pattern}|{Emblem}|{Text}|{TextStyle}|{Font}|{Border}|{Stars}|{Year}|{Primary}|{Secondary}|{Accent}";
 }
 
 /// <summary>The drop banner over the home end: its words, and which club colour it's painted in.</summary>
