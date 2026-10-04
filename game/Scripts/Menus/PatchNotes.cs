@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.7", "The buttons change with the moment, like the browser game: gold celebration moves after you score (the one you pick lights up), Whip, Short, Float on your corners, Drive, Short, Float on goal kicks, and Dive in goal at training."),
         ("0.6", "A referee and two linesmen run the match: the ref points for fouls and free kicks, the linesmen flag offsides and throw-ins. Real goals with round posts and a cord net that bulges and ripples when the ball hits it. The pitch lines no longer flicker."),
         ("0.5", "Far more crest options: 19 shapes, 24 fields, patterns, 32 emblems, new borders, low-band and monogram lettering, a pixel face. Surprise me now picks matching colours too."),
         ("0.4", "Opening packs is a show now: a lit vault, the pack cracking and tearing open, cards charging up and flipping with foil shine, a lights-out walkout for Legendary and Icon cards, and reveal-all dealing the rest out. The store glows too."),

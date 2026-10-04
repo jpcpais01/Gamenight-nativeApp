@@ -14,16 +14,26 @@ namespace GameNight.UI;
 /// </summary>
 public sealed partial class TouchControls : Control
 {
-    public enum Mode { Attack, Defend }
+    /// <summary>What the buttons say (the PWA's modes): open play, lining up your corner or goal
+    /// kick (what each button does with the ball on the ring), in goal at training, and after
+    /// your goal, when they pick the celebration (in the match's Celebrations order).</summary>
+    public enum Mode { Attack, Defend, Corner, GoalKick, Keeper, Celebrate }
 
     static readonly string[][] Labels =
     {
         new[] { "PASS", "THROUGH", "KICK", "SPRINT" },
         new[] { "TACKLE", "SWITCH", "PRESS", "SPRINT" },
+        new[] { "WHIP", "SHORT", "FLOAT", "SPRINT" },
+        new[] { "DRIVE", "SHORT", "FLOAT", "SPRINT" },
+        new[] { "DIVE", "DIVE", "DIVE", "QUICK\nSTEP" },
+        new[] { "KNEE\nSLIDE", "AERO\nPLANE", "SIUU", "BACK\nFLIP" },
     };
 
     public readonly InputState Input = new();
     public Mode Current { get; private set; } = Mode.Attack;
+    /// <summary>The celebration picked (0-3), -1 for none yet.</summary>
+    public int Picked { get; private set; } = -1;
+    double _modeAt;
 
     const float JoyR = 56, JoyBaseR = 64, KnobR = 28;
     const float Dead = 0.12f;
@@ -67,10 +77,12 @@ public sealed partial class TouchControls : Control
         ResetJoy();
     }
 
-    public void SetMode(Mode m)
+    public void SetMode(Mode m, int picked = -1)
     {
-        if (m == Current) return;
+        if (m == Current && picked == Picked) return;
+        if (m != Current || picked != Picked) _modeAt = Time.GetTicksMsec() / 1000.0;
         Current = m;
+        Picked = picked;
         QueueRedraw();
     }
 
@@ -112,7 +124,9 @@ public sealed partial class TouchControls : Control
             Input.MoveY = m > 0 ? y / m : 0;
         }
         // The shot power ring needs a redraw only while it fills.
-        if (Current == Mode.Attack && Input.Held[2]) QueueRedraw();
+        if (Current != Mode.Defend && Input.Held[2]) QueueRedraw();
+        // The celebration buttons breathe.
+        if (Current == Mode.Celebrate) QueueRedraw();
     }
 
     public override void _Input(InputEvent e)
@@ -290,12 +304,19 @@ public sealed partial class TouchControls : Control
         DrawCircle(_joyCentre + _knob, KnobR, new Color(Ink, 0.85f * a));
 
         var labels = Labels[(int)Current];
-        bool defend = Current == Mode.Defend;
+        bool defend = Current == Mode.Defend, cel = Current == Mode.Celebrate;
+        double now = Time.GetTicksMsec() / 1000.0;
         for (int i = 0; i < 4; i++)
         {
             bool down = i < 3 ? Input.Held[i] : _sprintDown;
             var c = BtnCentre(i);
             float r = BtnRadius[i] * (down ? 0.92f : 1f);
+            int size = i == 3 ? 17 : i == 1 ? 12 : i == 2 ? 14 : 13;
+            if (cel)
+            {
+                DrawCelebrate(i, c, r, now);
+                continue;
+            }
             Color fill = Base;
             if (i == 2 && !defend) fill = Red;
             else if (defend && (i == 0 || i == 3)) fill = Blue;
@@ -304,9 +325,15 @@ public sealed partial class TouchControls : Control
             DrawArc(c, r, 0, MathF.Tau, 48, i == 2 && !defend ? new Color(1, 0.86f, 0.82f, 0.6f) : i == 3 ? new Color(Ink, 0.55f) : Rim, 2, true);
             if (i < 2 && Input.Swipe[i]) DrawArc(c, r - 4, -MathF.PI * 0.85f, -MathF.PI * 0.15f, 16, Accent, 3, true);
 
-            int size = i == 3 ? 17 : i == 1 ? 12 : i == 2 ? 14 : 13;
-            DrawLabel(c + new Vector2(0, defend && i == 3 ? -6 : 0), labels[i], size);
-            if (defend && i == 3) DrawLabel(c + new Vector2(0, 12), "▼ TACKLE · ◀ SLIDE", 9);
+            DrawLabel(c + new Vector2(0, defend && i == 3 ? -6 : 0), labels[i], size, Ink);
+            if (defend && i == 3) DrawLabel(c + new Vector2(0, 12), "▼ TACKLE · ◀ SLIDE", 9, Ink);
+        }
+
+        if (cel)
+        {
+            // CELEBRATE over the buttons, until one is picked.
+            if (Picked < 0) DrawLabel(new Vector2(Size.X - 140, Size.Y - 240), "C E L E B R A T E", 13, new Color(1, 0.88f, 0.54f));
+            return;
         }
 
         // Shot power ring around Kick while it's held.
@@ -319,9 +346,61 @@ public sealed partial class TouchControls : Control
         }
     }
 
-    void DrawLabel(Vector2 centre, string text, int size)
+    static readonly Color Gold = new(0.86f, 0.6f, 0.16f, 0.62f), GoldDeep = new(0.47f, 0.31f, 0.04f, 0.6f);
+    static readonly Color GoldRim = new(1, 0.89f, 0.55f, 0.95f), GoldInk = new(1, 0.97f, 0.86f);
+
+    /// <summary>After your goal: gold buttons breathing in turn; once one is picked it pops and
+    /// glows, and the others shrink away.</summary>
+    void DrawCelebrate(int i, Vector2 c, float r, double now)
     {
-        var w = _font.GetStringSize(text, HorizontalAlignment.Left, -1, size).X;
-        DrawString(_font, centre + new Vector2(-w / 2, size * 0.36f), text, HorizontalAlignment.Left, -1, size, Ink);
+        float since = (float)(now - _modeAt);
+        int size = i == 3 ? 15 : 12;
+        var label = Labels[(int)Mode.Celebrate][i];
+        if (Picked >= 0 && Picked != i)
+        {
+            // Faded: shrinks to 85% and 18% over 0.3 s.
+            float k = MathF.Min(1, since / 0.3f);
+            float a = 1 - 0.82f * k;
+            r *= 1 - 0.15f * k;
+            DrawCircle(c, r, new Color(GoldDeep, GoldDeep.A * a));
+            DrawArc(c, r, 0, MathF.Tau, 48, new Color(GoldRim, GoldRim.A * a), 2, true);
+            DrawLabel(c, label, size, new Color(GoldInk, a));
+            return;
+        }
+        if (Picked == i)
+        {
+            // Picked: pops from 0.7 to 1.12 with an overshoot, lit gold with a glow.
+            float t = MathF.Min(1, since / 0.5f);
+            float e = 1 - MathF.Pow(1 - t, 3) * (1 - 2.2f * t);
+            r *= 0.7f + 0.42f * e;
+            for (int g = 4; g >= 1; g--) DrawCircle(c, r + g * 6, new Color(1, 0.78f, 0.24f, 0.09f));
+            DrawCircle(c, r + 4, new Color(1, 0.9f, 0.55f, 0.35f));
+            DrawCircle(c, r, new Color(0.88f, 0.64f, 0.11f));
+            DrawCircle(c - new Vector2(0, r * 0.25f), r * 0.6f, new Color(1, 0.95f, 0.72f, 0.55f));
+            DrawLabel(c, label, size, new Color(0.23f, 0.13f, 0));
+            return;
+        }
+        // Breathing: a soft ring swelling out every 1.1 s, each button a quarter beat behind the last.
+        float ph = (float)((now + i * 0.25) / 1.1 % 1.0);
+        float b = 0.5f - 0.5f * MathF.Cos(ph * MathF.Tau);
+        DrawCircle(c, r + 6 * b, new Color(1, 0.82f, 0.31f, 0.18f * b));
+        DrawCircle(c, r + 2 + 9 * b, new Color(1, 0.78f, 0.24f, 0.1f + 0.15f * b));
+        DrawCircle(c, r, GoldDeep);
+        DrawCircle(c - new Vector2(0, r * 0.3f), r * 0.62f, Gold);
+        DrawArc(c, r, 0, MathF.Tau, 48, GoldRim, 2, true);
+        DrawLabel(c, label, size, GoldInk);
+    }
+
+    /// <summary>Centred text; a newline stacks the lines.</summary>
+    void DrawLabel(Vector2 centre, string text, int size, Color ink)
+    {
+        var lines = text.Split('\n');
+        float lh = size * 1.05f;
+        for (int l = 0; l < lines.Length; l++)
+        {
+            var w = _font.GetStringSize(lines[l], HorizontalAlignment.Left, -1, size).X;
+            float y = (l - (lines.Length - 1) / 2f) * lh;
+            DrawString(_font, centre + new Vector2(-w / 2, y + size * 0.36f), lines[l], HorizontalAlignment.Left, -1, size, ink);
+        }
     }
 }

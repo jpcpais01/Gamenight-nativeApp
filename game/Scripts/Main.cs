@@ -288,7 +288,7 @@ public partial class Main : Node
         _view.Present(_camera.SubPixelX, _camera.SubPixelY);
 
         bool attack = _cur.HumanAttacking;
-        _controls.SetMode(attack ? TouchControls.Mode.Attack : TouchControls.Mode.Defend);
+        _controls.SetMode(ButtonMode(_cur, attack, out int picked), picked);
         _hud.Tick(_prev, _cur, alpha, _controls.Input, attack, delta);
         _drillHud?.Tick();
         // Full time: a few seconds of the scene, then back to the menus.
@@ -301,5 +301,24 @@ public partial class Main : Node
             GetTree().Quit();
             _shotPath = null;
         }
+    }
+
+    /// <summary>What the buttons say (the PWA's main loop): after your goal they pick the
+    /// celebration (and show which while it plays), in goal at training they dive, and lining up
+    /// your corner or goal kick they name the delivery.</summary>
+    TouchControls.Mode ButtonMode(MatchSnapshot s, bool attack, out int picked)
+    {
+        picked = -1;
+        bool drill = Request?.Drill != null;
+        if (s.CelebrationOpen && !drill) return TouchControls.Mode.Celebrate;
+        if (s.HumanScored && s.Celebration is { } kind && s.PhaseT < s.CelebrationAt + 1.6 && !drill)
+        {
+            picked = Array.IndexOf(Match.Celebrations, kind);
+            return TouchControls.Mode.Celebrate;
+        }
+        if (s.KeeperButtons) return TouchControls.Mode.Keeper;
+        if (s.AimingCorner) return TouchControls.Mode.Corner;
+        if (s.AimingGoalKick) return TouchControls.Mode.GoalKick;
+        return attack ? TouchControls.Mode.Attack : TouchControls.Mode.Defend;
     }
 }
