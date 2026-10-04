@@ -84,7 +84,7 @@ public sealed class PlayersView
             // The engine's run cycle: 2 pi per stride (it only ever grows; wrap it for the GPU).
             float phase = Mathf.Lerp(a.StridePhase[i], b.StridePhase[i], alpha) % MathF.Tau;
             float run = Math.Clamp(b.Speed[i] / 4f, 0, 1);
-            float s = b.Height[i] / ModelHeight;
+            float s = b.Height[i]; // Look.Height: a factor on the 1.8 m model
             var basis = new Basis(Vector3.Up, -face).Scaled(new Vector3(s, s, s));
             _mm.SetInstanceTransform(i, new Transform3D(basis, new Vector3(x, y, z)));
             int kit = b.Team[i] + (b.Role[i] == Role.GK ? 2 : 0);

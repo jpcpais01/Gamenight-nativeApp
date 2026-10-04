@@ -14,6 +14,7 @@ namespace GameNight;
 /// </summary>
 public partial class Main : Node
 {
+    Match _match;
     MatchRunner _runner;
     readonly MatchSnapshot _prev = new(), _cur = new();
 
@@ -22,6 +23,7 @@ public partial class Main : Node
     PlayersView _players;
     TouchControls _controls;
     Hud _hud;
+    PauseMenu _pause;
     /// <summary>Debug: `-- --screenshot=out.png` saves the screen after a few seconds and quits.</summary>
     string _shotPath;
     double _time;
@@ -30,9 +32,8 @@ public partial class Main : Node
     {
         Engine.MaxFps = 0;
         DisplayServer.ScreenSetKeepOn(true);
-
+        MatchSettings.Load();
         Kick.PrepareGroundPasses();
-        _runner = new MatchRunner(new Match(seed: DateTime.Now.Ticks % 2147483647));
 
         _view = new PixelView();
         AddChild(_view);
@@ -40,23 +41,61 @@ public partial class Main : Node
         _players = new PlayersView(_view.WorldRoot);
         _camera = new MatchCamera(_view.Camera);
 
-        _hud = new Hud();
+        _hud = new Hud { Name = "Hud", View = _view };
         AddChild(_hud);
         _controls = new TouchControls();
         AddChild(_controls);
+        _pause = new PauseMenu { CurrentHeight = () => _view.ArtHeight };
+        AddChild(_pause);
+        _pause.Opened += () => SetPaused(true);
+        _pause.Resumed += () => SetPaused(false);
+        _pause.Restart += NewMatch;
+        _pause.SettingsChanged += ApplySettings;
+        ApplySettings();
 
         foreach (var arg in OS.GetCmdlineUserArgs())
             if (arg.StartsWith("--screenshot=")) _shotPath = arg["--screenshot=".Length..];
 
+        NewMatch();
+    }
+
+    /// <summary>A fresh match (first launch, or Restart from the pause menu).</summary>
+    void NewMatch()
+    {
+        _runner?.Stop();
+        _match = new Match(seed: DateTime.Now.Ticks % 2147483647);
+        // Names and kits are read before the match's own thread starts.
+        _hud.SetMatch(_match);
+        _runner = new MatchRunner(_match);
+        _runner.Read(_prev, _cur, out _);
+        _runner.Paused = _pause.IsOpen;
         _runner.Start();
+    }
+
+    void SetPaused(bool on)
+    {
+        if (_runner != null) _runner.Paused = on;
+        _hud.Paused = on;
+        if (on) _controls.ReleaseAll();
+        _controls.SetProcessInput(!on);
+        _controls.Visible = !on;
+    }
+
+    void ApplySettings()
+    {
+        _camera.BaseDist = MatchCamera.Presets[Math.Clamp(MatchSettings.Camera, 0, 2)];
+        _view.TargetHeight = MatchSettings.Pixels > 0 ? MatchSettings.Pixels : 270;
+        _hud.ShowFps = MatchSettings.ShowFps;
+        // Fast graphics: the sun casts no shadows (the biggest cost on a weak GPU).
+        foreach (var n in _view.WorldRoot.FindChildren("*", nameof(DirectionalLight3D), true, false))
+            ((DirectionalLight3D)n).ShadowEnabled = !MatchSettings.Fast;
     }
 
     public override void _Notification(int what)
     {
-        // Backgrounded or covered: stop the match clock; it resumes without a jump.
-        if (_runner == null) return;
-        if (what == NotificationApplicationPaused || what == NotificationApplicationFocusOut) _runner.Paused = true;
-        else if (what == NotificationApplicationResumed || what == NotificationApplicationFocusIn) _runner.Paused = false;
+        // Backgrounded or covered: the pause menu comes up and the match clock stops.
+        if (_runner == null || _shotPath != null) return;
+        if (what == NotificationApplicationPaused || what == NotificationApplicationFocusOut) _pause.Open();
     }
 
     public override void _ExitTree() => _runner?.Stop();
@@ -73,12 +112,15 @@ public partial class Main : Node
             _camera.PixelHeight = _view.Viewport.Size.Y;
             _camera.SetAspect(_view.Aspect);
         }
-        _camera.Update(_prev, _cur, alpha, dt);
+        if (_cur.Goal >= 0) _camera.Bump(0.4f);
+        if (_cur.Post > 0) _camera.Bump(0.6f);
+        _camera.Update(_prev, _cur, alpha, _pause.IsOpen ? 0 : dt);
         _players.Update(_prev, _cur, alpha);
         _view.Present(_camera.SubPixelX, _camera.SubPixelY);
 
-        _controls.SetMode(_cur.HumanAttacking ? TouchControls.Mode.Attack : TouchControls.Mode.Defend);
-        _hud.Tick(_cur, delta);
+        bool attack = _cur.HumanAttacking;
+        _controls.SetMode(attack ? TouchControls.Mode.Attack : TouchControls.Mode.Defend);
+        _hud.Tick(_prev, _cur, alpha, _controls.Input, attack, delta);
 
         _time += delta;
         if (_shotPath != null && _time > 6)

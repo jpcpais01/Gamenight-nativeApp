@@ -62,7 +62,7 @@ public sealed partial class TouchControls : Control
 
     public override void _Ready()
     {
-        _font = ThemeDB.FallbackFont;
+        _font = Style.Font(true, 1);
         Resized += ResetJoy;
         ResetJoy();
     }
@@ -75,6 +75,17 @@ public sealed partial class TouchControls : Control
     }
 
     Vector2 BtnCentre(int i) => Size - BtnOffset[i];
+
+    /// <summary>Let go of everything (the pause menu opened): like every finger lifting at once.</summary>
+    public void ReleaseAll()
+    {
+        foreach (var id in new List<int>(_pointers.Keys)) TouchUp(id);
+        for (int i = 0; i < 3; i++) Release(i);
+        _keys.Clear();
+        _keySprint = false;
+        Input.MoveX = Input.MoveY = 0;
+        Input.Sprint = false;
+    }
 
     void ResetJoy()
     {

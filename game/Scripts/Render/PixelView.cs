@@ -13,7 +13,12 @@ namespace GameNight.Render;
 public sealed partial class PixelView : Control
 {
     /// <summary>Wanted art height in pixels; the real one divides the screen evenly.</summary>
-    public int TargetHeight = 270;
+    public int TargetHeight
+    {
+        get => _target;
+        set { _target = value; _lastScreen = default; }
+    }
+    int _target = 270;
 
     public readonly SubViewport Viewport;
     public readonly Node3D WorldRoot;
@@ -69,13 +74,32 @@ public sealed partial class PixelView : Control
     }
 
     /// <summary>Screen size in real device pixels.</summary>
-    static Vector2I ScreenPixels() => DisplayServer.WindowGetSize();
+    public static Vector2I ScreenPixels() => DisplayServer.WindowGetSize();
+
+    /// <summary>The art heights that divide this screen exactly (between lo and hi), for the Pixels setting.</summary>
+    public static int[] ExactHeights(int lo, int hi)
+    {
+        int h = ScreenPixels().Y;
+        var list = new System.Collections.Generic.List<int>();
+        for (int n = 1; n <= 64; n++)
+            if (h % n == 0 && h / n >= lo && h / n <= hi) list.Add(h / n);
+        list.Reverse();
+        return list.ToArray();
+    }
+
+    /// <summary>Where a point of the world is on screen, in this control's units (null when behind the camera).</summary>
+    public Vector2? WorldToUnits(Vector3 p)
+    {
+        if (Camera.IsPositionBehind(p)) return null;
+        float toUnits = Size.Y / Math.Max(1, _lastScreen.Y);
+        return _display.Position + Camera.UnprojectPosition(p) * PixelScale * toUnits;
+    }
 
     /// <summary>Size the art target for the screen: a whole number of device pixels per art pixel.</summary>
     void Resize(Vector2I screen)
     {
         _lastScreen = screen;
-        PixelScale = Math.Max(1, (int)MathF.Round(screen.Y / (float)TargetHeight));
+        PixelScale = Math.Max(1, (int)MathF.Round(screen.Y / (float)_target));
         ArtHeight = (int)MathF.Ceiling(screen.Y / (float)PixelScale);
         int artW = (int)MathF.Ceiling(screen.X / (float)PixelScale);
         // One spare pixel all round, for the sub-pixel scroll.
