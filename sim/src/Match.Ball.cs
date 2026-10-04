@@ -120,10 +120,23 @@ public sealed partial class Match
             bool firstTime = !fromHands && Owner != p && inc > 3;
             double volley = firstTime ? M.Smoothstep(0.45, 0.9, b.Pos.Y) : 0;
             double half = firstTime ? M.Smoothstep(0.18, 0.4, b.Pos.Y) * (1 - volley) : 0;
-            // Aim: stick sideways picks a post, otherwise the far post.
-            double sideSign;
-            if (Math.Abs(plan.DirZ) > 0.35) sideSign = JsMath.Sign(plan.DirZ);
-            else sideSign = b.Pos.Z > 0.5 ? -1 : b.Pos.Z < -0.5 ? 1 : Rng.Next() < 0.5 ? -1 : 1;
+            // Aim: the post the stick points at, judged from where the ball is (from out wide both
+            // posts lie the same way, so it's the angle against the goal mouth that counts). Stick
+            // idle or pointed through the middle: the far post. The computer names a side outright.
+            double sideSign = 0;
+            if (plan.Aimed == null)
+            {
+                if (Math.Abs(plan.DirZ) > 0.35) sideSign = JsMath.Sign(plan.DirZ);
+            }
+            else if (plan.Aimed == true)
+            {
+                // `off`: how far the stick turns from the goal's centre toward +z; `mouth`: the goal's half-angle.
+                double gx = opp - b.Pos.X;
+                double mouth = Math.Max(0.05, Math.Abs(M.AngleDiff(JsMath.Atan2(Pitch.GoalHalfWidth - b.Pos.Z, gx), JsMath.Atan2(-Pitch.GoalHalfWidth - b.Pos.Z, gx))) / 2);
+                double off = M.AngleDiff(JsMath.Atan2(-b.Pos.Z, gx), JsMath.Atan2(plan.DirZ, plan.DirX)) * team.Dir;
+                if (Math.Abs(off) > mouth * 0.3 && Math.Abs(off) < Math.PI - 0.3) sideSign = JsMath.Sign(off);
+            }
+            if (sideSign == 0) sideSign = b.Pos.Z > 0.5 ? -1 : b.Pos.Z < -0.5 ? 1 : Rng.Next() < 0.5 ? -1 : 1;
             double tz = sideSign * (Pitch.GoalHalfWidth - 0.55 - (1 - Math.Min(1, pw)) * 0.4);
             bool finesse = pw < 0.55;
             double ty = 0.35 + Math.Min(pw, 1) * 1.45 + Math.Max(0, pw - 1) * 6;
