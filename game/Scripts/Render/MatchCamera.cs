@@ -44,6 +44,11 @@ public sealed class MatchCamera
     /// <summary>A ground-level shot is (partly) on: the near side of the ground can be seen.</summary>
     public bool GroundLevel => _pov > 0 || _front > 0;
 
+    /// <summary>The stadium builder: the drone circles round to look across the pitch from this
+    /// yaw (0 from the near side) at the stand being chosen. Null for a match.</summary>
+    public float? Showcase;
+    float _orbit = float.NaN, _dt;
+
     float _tx, _tz, _vx, _vz, _aimX, _aimZ, _leadX, _leadZ;
     float _zoom = 1, _shake;
     float _aspect = 16f / 9f;
@@ -90,7 +95,8 @@ public sealed class MatchCamera
     public void Update(MatchSnapshot a, MatchSnapshot b, float alpha, float dt)
     {
         _time += dt;
-        if (dt <= 0) { Place(); return; }
+        _dt = dt;
+        if (dt <= 0 || Showcase != null) { Place(); return; }
         float bx = Mathf.Lerp(a.BallX, b.BallX, alpha);
         float bz = Mathf.Lerp(a.BallZ, b.BallZ, alpha);
         // After a goal: follow the scorer's celebration (then the crowd shot, then back to the field).
@@ -322,6 +328,19 @@ public sealed class MatchCamera
             look = look.Lerp(cl, k);
             subX *= 1 - k;
             subY *= 1 - k;
+        }
+        if (Showcase is float want)
+        {
+            // High over the ground, easing round the shortest way, swaying a little.
+            if (float.IsNaN(_orbit)) _orbit = want;
+            _orbit += Mathf.Wrap(want - _orbit, -Mathf.Pi, Mathf.Pi) * (1 - MathF.Exp(-_dt * 1.6f));
+            float a = _orbit + MathF.Sin((float)_time * 0.13f) * 0.22f;
+            pos = new Vector3(MathF.Sin(a) * 158, 104, MathF.Cos(a) * 142);
+            // Aimed a little to the left of the stand, so it sits to the right of the builder's panel.
+            var right = new Vector3(MathF.Cos(a), 0, -MathF.Sin(a));
+            look = new Vector3(-MathF.Sin(_orbit) * 40, 8, -MathF.Cos(_orbit) * 30) - right * 26;
+            fov = 40;
+            subX = subY = 0;
         }
         SubPixelX = subX;
         SubPixelY = subY;

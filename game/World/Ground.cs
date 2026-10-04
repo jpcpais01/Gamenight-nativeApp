@@ -152,6 +152,8 @@ public abstract class Ground
             "old" => new OldGround(),
             "bare" => new BarePitch(),
             "training" => new TrainingGround(),
+            "custom" => new Build.BuiltGround(Club?.S.Stadium, false),
+            "custom:preview" => new Build.BuiltGround(Club?.S.Stadium, true),
             _ => new BigStadium(),
         };
         g.Dress(setup);

@@ -16,6 +16,7 @@ public sealed partial class Menus : Control
     public readonly SquadScreen Squad;
     public readonly StoreScreen Store;
     public readonly ClubScreen ClubStudio;
+    public readonly StadiumScreen Stadium;
     readonly Control _modals;
     readonly ToastLayer _toast;
     Control _current;
@@ -33,6 +34,7 @@ public sealed partial class Menus : Control
         Squad = Add(new SquadScreen(this));
         Store = Add(new StoreScreen(this));
         ClubStudio = Add(new ClubScreen(this));
+        Stadium = Add(new StadiumScreen(this));
         _modals = new Control { MouseFilter = MouseFilterEnum.Ignore };
         _modals.SetAnchorsPreset(LayoutPreset.FullRect);
         AddChild(_modals);
@@ -50,7 +52,7 @@ public sealed partial class Menus : Control
     }
 
     /// <summary>True while a full-screen panel hides the match behind the menus.</summary>
-    public bool Opaque => _current != Home || _modals.GetChildCount() > 0 && _modals.GetChild(_modals.GetChildCount() - 1) is PackOpening;
+    public bool Opaque => _current != Home && _current != Stadium || _modals.GetChildCount() > 0 && _modals.GetChild(_modals.GetChildCount() - 1) is PackOpening;
 
     public void Go(Control screen)
     {
@@ -87,6 +89,9 @@ public sealed partial class Menus : Control
     }
 
     public bool HasModal => _modals.GetChildCount() > 0;
+
+    /// <summary>The stadium builder is up (the stadium behind it is the club's own, under construction).</summary>
+    public bool Building => _current == Stadium;
 
     public void Toast(string msg) => _toast.Show(msg);
 

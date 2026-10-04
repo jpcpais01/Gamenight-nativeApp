@@ -49,6 +49,8 @@ public sealed class ClubSave
     public string Captain = "";
     /// <summary>The ground last played at: preselected next time.</summary>
     public string Ground = "big";
+    /// <summary>The club's own stadium: a stand set per slot (the stadium builder).</summary>
+    public GameNight.Grounds.Build.StadiumPlan Stadium = new();
     /// <summary>Unix ms when the free pack is next available.</summary>
     public long FreePackAt;
     /// <summary>Best streak per training drill.</summary>
@@ -129,6 +131,8 @@ public sealed class ClubState
         S.Coach ??= new Coach();
         S.Record ??= new Record();
         S.DrillBest ??= new();
+        S.Stadium ??= new();
+        if (S.Stadium.Sets == null || S.Stadium.Sets.Length != 8) S.Stadium.Sets = new GameNight.Grounds.Build.StadiumPlan().Sets;
         S.Lineup ??= new Lineup();
         var l = S.Lineup;
         Array.Resize(ref l.Slots, 11);
@@ -440,6 +444,12 @@ public sealed class ClubState
         static double Lum(int c) => 0.299 * ((c >> 16) & 255) + 0.587 * ((c >> 8) & 255) + 0.114 * (c & 255);
         int fg = Math.Abs(Lum(other) - Lum(bg)) > 70 ? other : Lum(bg) > 140 ? 0x14121c : 0xf3eee2;
         return (b.Text, bg, fg);
+    }
+
+    public void SetStadium(GameNight.Grounds.Build.Slot slot, int set)
+    {
+        S.Stadium.Set(slot, set);
+        Save();
     }
 
     public void SetGround(string g)

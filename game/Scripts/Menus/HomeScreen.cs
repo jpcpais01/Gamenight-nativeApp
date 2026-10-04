@@ -68,6 +68,10 @@ public sealed partial class HomeScreen : PxCanvas
             x += w + 10;
         }
         Coins(W - 16, 18, Club.S.Coins);
+        // The stadium builder, beside the coins.
+        float coinsW = Px.Width(Px.Big, Px.Thousands(Club.S.Coins), 26) + 44;
+        var sr = new Rect2(W - 16 - coinsW - 14 - 132, 18, 132, 34);
+        if (sr.Position.X > x + 6) GhostButton("stadium", sr, "STADIUM", 22, () => _ui.Go(_ui.Stadium), Px.Cyan);
     }
 
     void Hero(Rect2 r)

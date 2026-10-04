@@ -18,6 +18,8 @@ public sealed class MatchRequest
     public string Ground = "big";
     /// <summary>The computer plays both sides behind the home screen: no controls, no HUD.</summary>
     public bool Demo;
+    /// <summary>The stadium builder's preview: the camera circles the ground (Main.Focus turns it).</summary>
+    public bool Showcase;
     /// <summary>Called once when the match ends (full time) or is left.</summary>
     public Action<MatchOutcome> Done;
 }
@@ -42,6 +44,7 @@ public static class Grounds
 
     public static readonly System.Collections.Generic.List<Ground> All = new()
     {
+        new Ground { Id = "custom", Name = "Your stadium", About = "Built by you: change it in the stadium builder" },
         new Ground { Id = "big", Name = "The big stadium", About = "Floodlights on, a full house" },
         new Ground { Id = "comunale", Name = "Stadio Comunale", About = "An Italian bowl: the open Curva, spiral towers, umbrella pines" },
         new Ground { Id = "old", Name = "Old Ground", About = "Terraces, the Shed, pylons and the town beyond" },

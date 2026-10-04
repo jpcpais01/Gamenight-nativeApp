@@ -21,6 +21,8 @@ public sealed partial class App : Node
     Main _match;
     bool _playing;
     int _demoKit;
+    /// <summary>The demo behind the menus is the stadium builder's preview.</summary>
+    bool _showcase;
     ulong _backAt;
 
     public override void _Ready()
@@ -50,6 +52,7 @@ public sealed partial class App : Node
             if (arg == "--screen=squad") _menus.Go(_menus.Squad);
             if (arg == "--screen=store") _menus.Go(_menus.Store);
             if (arg == "--screen=club") _menus.Go(_menus.ClubStudio);
+            if (arg == "--screen=stadium") _menus.Go(_menus.Stadium);
             if (arg.StartsWith("--tab=")) _menus.ClubStudio.Tab = int.Parse(arg[6..]);
             if (arg.StartsWith("--crest="))
             {
@@ -94,7 +97,14 @@ public sealed partial class App : Node
         int seed = _menus.NextSeed;
         var setup = _club.MatchSetup(seed);
         _demoKit = KitHash(setup.Teams[0].Info.Kit);
-        Swap(new Main { Request = new MatchRequest { Setup = setup, Seed = seed, Demo = true, Done = _ => CallDeferred(nameof(RestartDemo)) } });
+        var req = new MatchRequest { Setup = setup, Seed = seed, Demo = true, Done = _ => CallDeferred(nameof(RestartDemo)) };
+        if (_showcase)
+        {
+            req.Ground = "custom:preview";
+            req.Showcase = true;
+        }
+        Swap(new Main { Request = req });
+        if (_showcase) StadiumFocus(_menus.Stadium.Selected);
         BackdropChanged();
     }
 
@@ -120,6 +130,13 @@ public sealed partial class App : Node
     {
         if (_playing || _match == null || _menus == null) return;
         bool shown = !_menus.Opaque;
+        // In and out of the stadium builder: its preview replaces the demo, and back.
+        if (_menus.Building != _showcase)
+        {
+            _showcase = _menus.Building;
+            CallDeferred(nameof(StartDemo));
+            return;
+        }
         // Kit edited in the club studio: the demo restarts dressed in it.
         if (shown && KitHash(_club.Info().Kit) != _demoKit)
         {
@@ -152,6 +169,25 @@ public sealed partial class App : Node
         _menus.Open(box);
     }
 
+    /// <summary>The stadium builder: the plan changed, build the preview again.</summary>
+    public void StadiumChanged()
+    {
+        if (_showcase && !_playing) _match?.RebuildGround();
+    }
+
+    /// <summary>The stadium builder: look at this stand.</summary>
+    public void StadiumFocus(GameNight.Grounds.Build.Slot slot)
+    {
+        if (_showcase && !_playing) _match?.Focus(GameNight.Grounds.Build.Kit.ViewAngle(slot));
+    }
+
+    /// <summary>Straight into a match at this ground.</summary>
+    public void PlayAt(string ground)
+    {
+        _club.SetGround(ground);
+        Kickoff();
+    }
+
     void Kickoff()
     {
         int seed = _menus.NextSeed;
@@ -163,6 +199,7 @@ public sealed partial class App : Node
     void Play(MatchRequest req)
     {
         _playing = true;
+        _showcase = false;
         _menus.CloseAll();
         _menus.Visible = false;
         Swap(new Main { Request = req });

@@ -65,6 +65,7 @@ public partial class Main : Node
         _goals = new Goals(_view.WorldRoot);
         _delivery = new DeliveryView(_view.WorldRoot);
         _camera = new MatchCamera(_view.Camera);
+        if (Request?.Showcase == true) _camera.Showcase = 0;
 
         _hud = new Hud { Name = "Hud", View = _view };
         AddChild(_hud);
@@ -251,6 +252,21 @@ public partial class Main : Node
     {
         if (_pause.IsOpen) _pause.Close();
         else _pause.Open();
+    }
+
+    /// <summary>The stadium builder: build the ground again (the plan changed).</summary>
+    public void RebuildGround()
+    {
+        var old = _ground;
+        old.Root.GetParent()?.RemoveChild(old.Root);
+        old.Root.QueueFree();
+        _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup).AddTo(_view.WorldRoot);
+    }
+
+    /// <summary>The stadium builder: swing the camera round to look at a stand (yaw, 0 = from the near side).</summary>
+    public void Focus(float yaw)
+    {
+        if (_camera != null) _camera.Showcase = yaw;
     }
 
     /// <summary>The demo match behind the menus: hidden (and not drawn or stepped) under a full screen.</summary>
