@@ -5,6 +5,8 @@
 shader_type spatial;
 render_mode diffuse_lambert, specular_disabled;
 
+#include "res://World/Shaders/light_map.gdshaderinc"
+
 // Kits: 0 home, 1 away, 2 home keeper, 3 away keeper. Linear colours (set from C#).
 uniform vec3 shirt[4];
 uniform vec3 trim[4];
@@ -14,6 +16,7 @@ uniform vec3 skins[6];
 uniform vec3 boots = vec3(0.08, 0.08, 0.09);
 
 varying vec3 col;
+varying vec3 lm_world;
 
 vec2 rot(vec2 v, float a) {
 	float s = sin(a);
@@ -53,9 +56,17 @@ void vertex() {
 	else if (slot == 4) col = skin;
 	else if (slot == 5) col = skin * vec3(0.22, 0.17, 0.14);
 	else col = pow(boots, vec3(2.2));
+	lm_world = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 
 void fragment() {
 	ALBEDO = col;
 	ROUGHNESS = 0.85;
+	// The ground's floodlights.
+	EMISSION = ALBEDO * light_map_flood(lm_world);
+}
+
+// The sun, kept off in the stands' shadow (the ground's baked light map).
+void light() {
+	DIFFUSE_LIGHT += light_map_sun(LIGHT, NORMAL, LIGHT_COLOR, ATTENUATION, lm_world);
 }

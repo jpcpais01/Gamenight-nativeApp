@@ -1,5 +1,6 @@
 using System;
 using Godot;
+using GameNight.Grounds;
 using GameNight.Render;
 using GameNight.Sim;
 using GameNight.UI;
@@ -18,6 +19,7 @@ public partial class Main : Node
     readonly MatchSnapshot _prev = new(), _cur = new();
 
     PixelView _view;
+    Ground _ground;
     MatchCamera _camera;
     PlayersView _players;
     TouchControls _controls;
@@ -37,6 +39,7 @@ public partial class Main : Node
         _view = new PixelView();
         AddChild(_view);
         World.Build(_view.WorldRoot);
+        _ground = Ground.Create("big").AddTo(_view.WorldRoot);
         _players = new PlayersView(_view.WorldRoot);
         _camera = new MatchCamera(_view.Camera);
 
@@ -75,6 +78,7 @@ public partial class Main : Node
         }
         _camera.Update(_prev, _cur, alpha, dt);
         _players.Update(_prev, _cur, alpha);
+        _ground.Update(_cur, _time, dt);
         _view.Present(_camera.SubPixelX, _camera.SubPixelY);
 
         _controls.SetMode(_cur.HumanAttacking ? TouchControls.Mode.Attack : TouchControls.Mode.Defend);

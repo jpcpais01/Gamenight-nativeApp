@@ -3,8 +3,8 @@ using Godot;
 namespace GameNight.Render;
 
 /// <summary>
-/// The static scene: evening sky and light, the pitch, goals and nets, advertising boards and
-/// simple terraces. Everything here is built once and never changes, a handful of draws.
+/// The pitch, goals and nets. Built once, a handful of draws. (The sky, light and everything
+/// round the pitch is the ground: game/World.)
 /// </summary>
 public static class World
 {
@@ -12,51 +12,9 @@ public static class World
 
     public static void Build(Node3D root)
     {
-        BuildEnvironment(root);
         BuildPitch(root);
         BuildGoal(root, 1);
         BuildGoal(root, -1);
-        BuildBoards(root);
-        BuildStands(root);
-    }
-
-    static void BuildEnvironment(Node3D root)
-    {
-        var sky = new ProceduralSkyMaterial
-        {
-            SkyTopColor = new Color(0.10f, 0.13f, 0.30f),
-            SkyHorizonColor = new Color(0.86f, 0.52f, 0.42f),
-            GroundBottomColor = new Color(0.05f, 0.05f, 0.07f),
-            GroundHorizonColor = new Color(0.30f, 0.22f, 0.25f),
-            SunAngleMax = 20,
-        };
-        var env = new Environment
-        {
-            BackgroundMode = Environment.BGMode.Sky,
-            Sky = new Sky { SkyMaterial = sky, RadianceSize = Sky.RadianceSizeEnum.Size32 },
-            AmbientLightSource = Environment.AmbientSource.Color,
-            AmbientLightColor = new Color(0.52f, 0.56f, 0.72f),
-            AmbientLightEnergy = 0.55f,
-            ReflectedLightSource = Environment.ReflectionSource.Disabled,
-            TonemapMode = Environment.ToneMapper.Linear,
-            TonemapExposure = 1f,
-        };
-        root.AddChild(new WorldEnvironment { Environment = env });
-
-        // A low evening sun from behind the near-left corner: lit faces, long shadows up the pitch.
-        var sun = new DirectionalLight3D
-        {
-            LightColor = new Color(1f, 0.86f, 0.68f),
-            LightEnergy = 1.15f,
-            ShadowEnabled = true,
-            DirectionalShadowMode = DirectionalLight3D.ShadowMode.Orthogonal,
-            DirectionalShadowMaxDistance = 90,
-            ShadowBias = 0.05f,
-            ShadowNormalBias = 0.6f,
-            LightSpecular = 0,
-        };
-        root.AddChild(sun);
-        sun.RotationDegrees = new Vector3(-32, -35, 0);
     }
 
     static void BuildPitch(Node3D root)
@@ -99,41 +57,5 @@ public static class World
         Geo.Quad(net, gl, bl, rl, tl, GoalDepth, GoalH);
         Geo.Quad(net, gr, br, rr, tr, GoalDepth, GoalH);
         Geo.Instance(root, net.Commit(), Geo.Material("res://Shaders/net.gdshader"));
-    }
-
-    static void BuildBoards(Node3D root)
-    {
-        const float h = 0.9f, bz = HW + 5f, bx = HL + 5f;
-        var st = new SurfaceTool();
-        st.Begin(Mesh.PrimitiveType.Triangles);
-        Geo.Quad(st, new Vector3(-bx, 0, -bz), new Vector3(bx, 0, -bz), new Vector3(bx, h, -bz), new Vector3(-bx, h, -bz), bx * 2, h);
-        Geo.Quad(st, new Vector3(bx, 0, bz), new Vector3(-bx, 0, bz), new Vector3(-bx, h, bz), new Vector3(bx, h, bz), bx * 2, h);
-        Geo.Quad(st, new Vector3(bx, 0, -bz), new Vector3(bx, 0, bz), new Vector3(bx, h, bz), new Vector3(bx, h, -bz), bz * 2, h);
-        Geo.Quad(st, new Vector3(-bx, 0, bz), new Vector3(-bx, 0, -bz), new Vector3(-bx, h, -bz), new Vector3(-bx, h, bz), bz * 2, h);
-        Geo.Instance(root, st.Commit(), Geo.Material("res://Shaders/boards.gdshader"), shadows: true);
-    }
-
-    static void BuildStands(Node3D root)
-    {
-        // Far side, then each end: a raked terrace rising away from the pitch.
-        Stand(root, new Vector3(-62, 1.5f, -43), new Vector3(62, 1.5f, -43), new Vector3(62, 22, -75), new Vector3(-62, 22, -75), 0.55f);
-        Stand(root, new Vector3(-62, 1.5f, 40), new Vector3(-62, 1.5f, -40), new Vector3(-92, 22, -40), new Vector3(-92, 22, 40), 0.95f);
-        Stand(root, new Vector3(62, 1.5f, -40), new Vector3(62, 1.5f, 40), new Vector3(92, 22, 40), new Vector3(92, 22, -40), 0.08f);
-    }
-
-    static void Stand(Node3D root, Vector3 a, Vector3 b, Vector3 c, Vector3 d, float homeShare)
-    {
-        var st = new SurfaceTool();
-        st.Begin(Mesh.PrimitiveType.Triangles);
-        float len = (b - a).Length(), slope = (d - a).Length();
-        Geo.Quad(st, a, b, c, d, len, slope);
-        // The front wall down to the ground.
-        var a0 = new Vector3(a.X, 0, a.Z);
-        var b0 = new Vector3(b.X, 0, b.Z);
-        Geo.Quad(st, a0, b0, b, a, len, 0);
-        var mat = Geo.Material("res://Shaders/crowd.gdshader");
-        mat.SetShaderParameter("home_share", homeShare);
-        mat.SetShaderParameter("slope_len", slope);
-        Geo.Instance(root, st.Commit(), mat);
     }
 }
