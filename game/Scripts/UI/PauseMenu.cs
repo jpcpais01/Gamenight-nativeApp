@@ -125,13 +125,17 @@ public sealed partial class PauseMenu : Control
 
     void NextPixels()
     {
-        // The art heights that divide the screen exactly, from fine to coarse; then round again.
-        var heights = Render.PixelView.ExactHeights(140, 560);
-        if (heights.Length == 0) return;
+        // One step chunkier each tap (a whole device pixel more per art pixel), then back to the finest.
+        var levels = Render.PixelView.Levels(120, 600);
+        if (levels.Length == 0) return;
         int cur = MatchSettings.Pixels > 0 ? MatchSettings.Pixels : CurrentHeight();
-        int next = heights[0];
-        for (int i = 0; i < heights.Length; i++)
-            if (heights[i] < cur) { next = heights[i]; break; }
+        int next = levels[0];
+        foreach (int h in levels)
+            if (h < cur)
+            {
+                next = h;
+                break;
+            }
         MatchSettings.Pixels = next;
         Changed();
     }

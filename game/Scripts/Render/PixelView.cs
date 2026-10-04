@@ -76,14 +76,17 @@ public sealed partial class PixelView : Control
     /// <summary>Screen size in real device pixels.</summary>
     public static Vector2I ScreenPixels() => DisplayServer.WindowGetSize();
 
-    /// <summary>The art heights that divide this screen exactly (between lo and hi), for the Pixels setting.</summary>
-    public static int[] ExactHeights(int lo, int hi)
+    /// <summary>The pixel sizes this screen can have, fine to coarse: the art height at each whole
+    /// number of device pixels per art pixel (between lo and hi rows).</summary>
+    public static int[] Levels(int lo, int hi)
     {
         int h = ScreenPixels().Y;
         var list = new System.Collections.Generic.List<int>();
         for (int n = 1; n <= 64; n++)
-            if (h % n == 0 && h / n >= lo && h / n <= hi) list.Add(h / n);
-        list.Reverse();
+        {
+            int art = (int)MathF.Ceiling(h / (float)n);
+            if (art >= lo && art <= hi) list.Add(art);
+        }
         return list.ToArray();
     }
 
