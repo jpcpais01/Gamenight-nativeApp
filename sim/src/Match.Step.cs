@@ -4,7 +4,6 @@ namespace GameNight.Sim;
 
 public sealed partial class Match
 {
-    enum SeekMode { None, Loose, Press }
 
     // ------------------------------------------------------------------ main step
 
@@ -312,8 +311,8 @@ public sealed partial class Match
                 }
             }
         }
-        // Defence: the middle button presses; the big Sprint button sprints *and* presses.
-        PressHeld = !attacking && (input.Held[Btn.C] || input.Sprint);
+        // One button: going hard. Whenever the ball isn't ours, that's pressing for it.
+        PressHeld = input.Sprint && Owner?.Team != HumanTeam;
         input.Events.Clear();
         // Sliding down on Sprint commits to a tackle; sliding left commits to a slide tackle.
         if (input.TackleSwipe != TackleSwipe.None)
@@ -417,124 +416,8 @@ public sealed partial class Match
             }
         }
 
-        // Pressing the carrier (or a keeper holding it). On a loose ball or one in the air,
-        // pressing is going for it: that's the seek below, at full commitment.
-        bool loose = Owner == null && HeldBy == null;
-        var carrier = Owner ?? HeldBy;
-        if (!attacking && PressHeld && carrier != null && carrier.Team != c.Team)
-        {
-            // Goal-side, moving with the ball. Held tight on him, he squeezes in onto the ball
-            // (sooner on Sprint), so the carrier has to beat him or lose it.
-            double d = BallDist(c);
-            pressTight = d < 2.2 ? pressTight + DT : 0;
-            double squeeze = M.Smoothstep(0.25, 0.9, pressTight * (input.Sprint ? 1.6 : 1));
-            double keep = (input.Sprint ? 0.8 : 1.2) * (1 - squeeze) + 0.45 * squeeze;
-            bool onBall = AI.PressPoint(c, carrier, tmpV, keep);
-            double pull = onBall ? 5 : 3;
-            double vx = Ball.Vel.X * 0.9 + (tmpV.X - c.Pos.X) * pull;
-            double vz = Ball.Vel.Z * 0.9 + (tmpV.Z - c.Pos.Z) * pull;
-            double v = JsMath.Hypot(vx, vz);
-            if (v > 0.2)
-            {
-                c.MoveX = vx / v;
-                c.MoveZ = vz / v;
-                c.WantSpeed = Math.Min(v, input.Sprint || onBall ? c.TopSpeed : PlayerK.JogSpeed + 1);
-            }
-            else c.WantSpeed = 0;
-            c.LookTarget.Copy(Ball.Pos);
-            c.LookAt = c.LookTarget;
-            // Jockey square-on while he can keep up that way; when the carrier runs at him faster
-            // than he can backpedal, he opens his hips and runs with him instead.
-            c.SquareUp = !onBall && v < 4.5;
-            c.Burst = onBall;
-            // Going in: the moment the ball shows and a foot can get to it, he pokes at it. Kept
-            // out for long enough, he goes through anyway, shield or not.
-            if (Owner == carrier && !c.IsBusy && !lungeOn && Time > pokeReady && Ball.Pos.Y < 0.6 && d < 1.35)
-            {
-                bool forced = pressTight > (input.Sprint ? 1.0 : 1.6) && d < 0.95;
-                if (BallOpen(c, carrier, d) || forced)
-                {
-                    LungeAt(c, false);
-                    pokeReady = Time + 0.8;
-                    pressTight = 0;
-                }
-            }
-        }
-        else pressTight = 0;
-
-        // Ball seeking, always on: the active player goes to meet a loose ball or a pass in
-        // flight, and closes down a carrier. The stick bends the run (up to 60%) while he has
-        // time in hand, about 30% when the meeting is tight; stick idle, pure seek.
-        if (Owner != c && (!PressHeld || loose))
-        {
-            var mode = SeekTarget(c, tmpV);
-            if (mode != SeekMode.None)
-            {
-                double dx = tmpV.X - c.Pos.X;
-                double dz = tmpV.Z - c.Pos.Z;
-                double d = JsMath.Hypot(dx, dz);
-                if (d > 0.25)
-                {
-                    double tx = dx / d;
-                    double tz = dz / d;
-                    double speed;
-                    double stickW = 0.6;
-                    if (mode == SeekMode.Loose)
-                    {
-                        // Pace from the meeting: flat out when it's tight, otherwise just enough to be
-                        // there as the ball is. A slow or dying ball close by won't come to him.
-                        var ip = AI.Intercept[c.Id];
-                        double bs = JsMath.Hypot(Ball.Vel.X, Ball.Vel.Z);
-                        double gap = BallDist(c);
-                        double floor = gap > 3 ? PlayerK.JogSpeed : gap > 1 ? PlayerK.JogSpeed + (bs < 3 ? 1 : 0) : bs < 1.5 ? 2.5 : 1.2;
-                        speed = input.Sprint ? c.TopSpeed : Math.Max(floor, AI.MeetPace(c));
-                        stickW *= 0.5 + 0.5 * M.Clamp((ip.Slack - 0.15) / 0.5, 0, 1);
-                        c.Burst = gap < 2.5;
-                        // Arrive, don't overrun — except for a ball cutting across in front of him
-                        // that he's late for: that's a step across its line, as quick as he can.
-                        double bsp = JsMath.Hypot(Ball.Vel.X, Ball.Vel.Z);
-                        double toSpot = bsp > 1 ? ((tmpV.X - Ball.Pos.X) * Ball.Vel.X + (tmpV.Z - Ball.Pos.Z) * Ball.Vel.Z) / (bsp * bsp) : -1;
-                        bool across = bsp > 1 && Math.Abs(tx * Ball.Vel.X + tz * Ball.Vel.Z) < 0.6 * bsp;
-                        bool late = across && toSpot > 0 && AI.RunTime(c, tmpV.X, tmpV.Z, 0, PlayerK.Reach * 0.75) > toSpot;
-                        if (!late)
-                        {
-                            double along = Math.Max(0, gap < 3 ? Ball.Vel.X * tx + Ball.Vel.Z * tz : ip.VX * tx + ip.VZ * tz);
-                            speed = Math.Min(speed, Math.Sqrt(along * along + 2 * PlayerK.Brake * 0.7 * d) + 0.6);
-                        }
-                    }
-                    else
-                    {
-                        // Close down hard, then ease in tight on the carrier.
-                        speed = d > 5 ? PlayerK.JogSpeed + 2.2 : Math.Min(PlayerK.JogSpeed + 1, d * 3 + 0.8);
-                    }
-                    double dirX = tx;
-                    double dirZ = tz;
-                    if (m > 0.12)
-                    {
-                        double sx = input.MoveX / m;
-                        double sz = -input.MoveY / m;
-                        double nx = tx * (1 - stickW) + sx * stickW;
-                        double nz = tz * (1 - stickW) + sz * stickW;
-                        double n = JsMath.Hypot(nx, nz);
-                        if (n > 0.05)
-                        {
-                            dirX = nx / n;
-                            dirZ = nz / n;
-                        }
-                        speed *= 1 + 0.4 * stickW * (sx * tx + sz * tz);
-                    }
-                    c.MoveX = dirX;
-                    c.MoveZ = dirZ;
-                    c.WantSpeed = Math.Min(c.TopSpeed, speed);
-                    if (mode == SeekMode.Press && d < 6)
-                    {
-                        c.LookTarget.Copy(Ball.Pos);
-                        c.LookAt = c.LookTarget;
-                        c.SquareUp = true;
-                    }
-                }
-            }
-        }
+        // Without the ball, he goes for it by himself (see GoForBall).
+        if (Owner != c) GoForBall(c, input, m);
 
         // Caught inside the distance at the other side's dead ball: an idle stick walks him out.
         var zn = GetRestartZone(c);
@@ -554,30 +437,121 @@ public sealed partial class Match
         }
     }
 
-    /// <summary>Where the active player should go to win the ball, if anywhere.</summary>
-    SeekMode SeekTarget(Player c, V3 output)
+    /// <summary>
+    /// The active player without the ball, one idea: he knows where it can be won and goes
+    /// there himself. A loose ball or a pass in flight he meets, arriving as it does; an
+    /// opponent on the ball he shadows goal-side a couple of metres off, pouncing on a heavy
+    /// touch. Holding PRESS / SPRINT commits: flat out onto a loose ball, or tight onto the
+    /// carrier, poking it away the moment it shows. The stick is always yours: pointed roughly
+    /// at his run it bends it, pointed away it takes over.
+    /// </summary>
+    void GoForBall(Player c, InputState input, double m)
     {
-        if (HeldBy != null || Phase != Phase.Play) return SeekMode.None;
-        if (ShotTeam() == c.Team) return SeekMode.None; // our shot: don't run into its path
+        bool press = input.Sprint;
         var own = Owner;
-        if (own != null && own.Team == c.Team) return SeekMode.None;
+        if (Phase != Phase.Play || HeldBy != null || own?.Team == c.Team || ShotTeam() == c.Team)
+        {
+            pressTight = 0;
+            return;
+        }
+        double tx, tz, speed;
+        bool face = false, burst = false, square = false;
+        double d = BallDist(c);
         if (own != null)
         {
-            AI.PressPoint(c, own, output, 0.85);
-            return SeekMode.Press;
+            // Goal-side of the ball, moving with it: 2.2 m off when shadowing; pressing, under a
+            // metre and squeezing in the longer he stays tight.
+            pressTight = press && d < 2.2 ? pressTight + DT : 0;
+            double keep = press ? M.Lerp(0.9, 0.4, M.Smoothstep(0.15, 0.6, pressTight)) : 2.2;
+            bool onBall = AI.PressPoint(c, own, tmpV, keep);
+            double pull = onBall ? 5 : press ? 3 : 2;
+            double vx = Ball.Vel.X * 0.9 + (tmpV.X - c.Pos.X) * pull;
+            double vz = Ball.Vel.Z * 0.9 + (tmpV.Z - c.Pos.Z) * pull;
+            double v = JsMath.Hypot(vx, vz);
+            if (v > 0.2)
+            {
+                tx = vx / v;
+                tz = vz / v;
+            }
+            else
+            {
+                tx = (Ball.Pos.X - c.Pos.X) / Math.Max(0.01, d);
+                tz = (Ball.Pos.Z - c.Pos.Z) / Math.Max(0.01, d);
+                v = 0;
+            }
+            speed = Math.Min(v, press || onBall ? c.TopSpeed : PlayerK.JogSpeed + 1);
+            face = true;
+            burst = onBall;
+            // Square-on while he can keep up that way; a carrier running at him faster than he
+            // can backpedal, he turns and runs with.
+            square = !onBall && v < 4.5;
+            // Going in: the ball shows and a foot can get to it. Kept out long enough, he goes
+            // through anyway, shield or not.
+            if (press && !c.IsBusy && !lungeOn && Time > pokeReady && Ball.Pos.Y < 0.6 && d < 1.35 &&
+                (BallOpen(c, own, d) || (pressTight > 1.0 && d < 0.95)))
+            {
+                LungeAt(c, false);
+                pokeReady = Time + 0.8;
+                pressTight = 0;
+            }
         }
-        // Loose ball or a pass in flight: ours to meet, or theirs to intercept. A pass meant for a
-        // teammate is his — unless we'd clearly get there first.
-        var pt = PassTarget;
-        if (pt != null && pt.Team == c.Team && pt != c)
+        else
         {
-            double mine = AI.Intercept[c.Id].T;
-            double his = AI.Intercept[pt.Id].T;
-            if (mine < 0 || (his >= 0 && mine > his - 0.3)) return SeekMode.None;
+            pressTight = 0;
+            // A pass to a team-mate is his, unless we'd clearly get there first.
+            var pt = PassTarget;
+            if (pt != null && pt.Team == c.Team && pt != c)
+            {
+                double mine = AI.Intercept[c.Id].T;
+                double his = AI.Intercept[pt.Id].T;
+                if (mine < 0 || (his >= 0 && mine > his - 0.3)) return;
+            }
+            AI.MeetPoint(c, tmpV);
+            double dx = tmpV.X - c.Pos.X;
+            double dz = tmpV.Z - c.Pos.Z;
+            double dd = JsMath.Hypot(dx, dz);
+            if (dd < 0.25) return;
+            tx = dx / dd;
+            tz = dz / dd;
+            // Pace: there as the ball is, never dawdling, never slower than a ball he's on; flat
+            // out when pressing. And no faster than he can still pull up from, so he arrives
+            // on it rather than past it (running on with it when it's rolling his way).
+            var ip = AI.Intercept[c.Id];
+            double bs = JsMath.Hypot(Ball.Vel.X, Ball.Vel.Z);
+            speed = press ? c.TopSpeed : Math.Max(AI.MeetPace(c), d > 1.5 ? PlayerK.JogSpeed : bs + 1);
+            double along = Math.Max(0, d < 3 ? Ball.Vel.X * tx + Ball.Vel.Z * tz : ip.VX * tx + ip.VZ * tz);
+            speed = Math.Min(speed, Math.Sqrt(along * along + 2 * PlayerK.Brake * 0.7 * dd) + 0.6);
+            burst = d < 2.5;
         }
-        // Go and get it (see AI.MeetPoint: the ball itself, led by how it's moving).
-        AI.MeetPoint(c, output);
-        return SeekMode.Loose;
+
+        // The stick: roughly along the run, it bends it; turned away, it's in charge.
+        double want = 1;
+        if (m > 0.12)
+        {
+            double sx = input.MoveX / m;
+            double sz = -input.MoveY / m;
+            want = M.Smoothstep(-0.2, 0.4, sx * tx + sz * tz);
+            double nx = tx * want + sx * (1 - 0.65 * want);
+            double nz = tz * want + sz * (1 - 0.65 * want);
+            double n = JsMath.Hypot(nx, nz);
+            if (n > 0.05)
+            {
+                tx = nx / n;
+                tz = nz / n;
+            }
+            speed = speed * want + c.WantSpeed * (1 - want);
+        }
+        c.MoveX = tx;
+        c.MoveZ = tz;
+        c.WantSpeed = Math.Min(c.TopSpeed, speed);
+        if (want < 0.5) return;
+        c.Burst = burst;
+        if (face && d < 6)
+        {
+            c.LookTarget.Copy(Ball.Pos);
+            c.LookAt = c.LookTarget;
+            c.SquareUp = square;
+        }
     }
 
     /// <summary>

@@ -6,6 +6,10 @@ walls), the AI (shape, marking, pressing, passing and through balls, crosses, ke
 celebrations) and the training drills. Plain .NET 8, no Godot types, no allocations worth
 mentioning per step, safe to run on its own thread.
 
+**Since app 0.23 the human controls differ on purpose** (one Press/Sprint button, the active
+player's ball seeking in `Match.GoForBall`, your through ball in `AI.AimedThrough`), so
+`parity/run.sh` matches the PWA only for autoplay. Before that:
+
 **Same seed, same line-ups, same inputs: the same match as the PWA, step for step.** Every
 random draw goes through the same mulberry32 stream in the same order, and the maths is
 bit-identical to V8's: `JsMath` ports V8's fdlibm `sin`, `cos`, `atan2`, `exp`, `pow` and its
