@@ -218,7 +218,7 @@ public sealed class Piece
     public StandSet Set;
     public List<PathPt> Path;
     public Section[] Sec;
-    /// <summary>Built into the shadow-only mesh (the near side behind the camera).</summary>
+    /// <summary>Built into the near mesh (the near side behind the camera, cut where it hides the pitch).</summary>
     public bool Hidden;
     /// <summary>Only part of the corner is built (the near corners stop where the camera is).</summary>
     public bool Partial;

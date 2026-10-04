@@ -23,6 +23,9 @@ public sealed class TierFans
     public Func<Vector3, float, int, Vector2?> Tifo;
     /// <summary>Overrides the path's zones (e.g. a stand that's all away fans).</summary>
     public int? Zone;
+    /// <summary>The near stand, behind the match camera: these fans step out of the picture
+    /// wherever they'd stand between the camera and the pitch.</summary>
+    public bool Near;
 }
 
 /// <summary>
@@ -69,7 +72,7 @@ public sealed class Crowd
                 if (rng.NextDouble() > Mathf.Min(fill, 0.995f)) return;
                 var pos = new Vector3(p.X, sec.Y, p.Z);
                 var tifo = o.Tifo?.Invoke(pos, sv, zone) ?? new Vector2(-1, -1);
-                Add(pos, new Vector3(-nrm.X, 0, -nrm.Y), zone, shade, tifo);
+                Add(pos, new Vector3(-nrm.X, 0, -nrm.Y), zone, shade, tifo, o.Near ? 1f : 0f);
             });
         }
     }
@@ -129,7 +132,7 @@ public sealed class Crowd
         return a;
     }
 
-    /// <summary>One person. COLOR = (role / 4 for staff, zone / 4, roof shade, sun visibility).</summary>
+    /// <summary>One person. COLOR = (role / 4 for staff or 1 for the near stand, zone / 4, roof shade, sun visibility).</summary>
     void Add(Vector3 root, Vector3 face, int zone, float shade, Vector2 tifo, float role = 0)
     {
         int i0 = _v.Count;

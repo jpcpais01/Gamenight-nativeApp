@@ -14,7 +14,7 @@ namespace GameNight.Grounds;
 /// - Cantilever roofs: steel girders on top, translucent panels at the front, the floodlights
 ///   a line of lamps along the roof front over the club's name on the fascia.
 /// - LED ribbons on the tier fronts, big screens in the corners, a low paddock on the camera
-///   side (the near stand behind the camera is never drawn, but it casts its evening shadow).
+///   side (the near stand behind the camera is drawn in its own batch, cut away where it would hide the pitch).
 /// The home ultras pack the end behind the left goal, banners hang off the railings.
 /// </summary>
 public sealed class BigStadium : Ground
@@ -145,20 +145,30 @@ public sealed class BigStadium : Ground
 
         Pitchside.Tunnel(m, -BowlZ, DarkConcrete);
 
-        // The paddock on the near side, under the camera: a low open terrace and its wall.
-        float cxN = BowlX - BowlR - 8;
-        var near = Bowl.Straight(cxN, BowlZ, -cxN, BowlZ, 0, 1);
-        S(near, new(0, 0), new(0, 1.2f), 0xffffff, Look.Ribbon);
-        S(near, new(0, 1.2f), new(0.4f, 1.2f), Concrete);
-        S(near, new(0.4f, 1.2f), new(11, 5.6f), seat, Look.Tier, 1, 3);
-        S(near, new(11, 5.6f), new(11, 7.4f), Concrete);
-        m.Hex(Concrete);
-        Bowl.Caps(m, new[] { near[0], near[^1] }, new Vector2[] { new(0, 0), new(0, 1.2f), new(0.4f, 1.2f), new(11, 5.6f), new(11, 7.4f), new(12, 7.4f), new(12, 0) });
-
-        // The near stand behind the camera: never drawn, but solid for the evening sun.
+        // The near stand, behind the camera: the same bowl carried on round, drawn in its own
+        // batch that the shader cuts away wherever it would hide the pitch (in play only its
+        // lower rows show; it all comes into view when the camera turns for a dead ball).
         var np = Bowl.NearPath(BowlX, BowlZ, BowlR);
-        foreach (var (a, b) in new[] { (new Vector2(0, 0), Lower0), (Lower0, Lower1), (Lower1, Upper1), (Upper1, RoofBack), (RoofBack, new Vector2(RoofEdge, RoofH)) })
-            Bowl.Strip(ShadowOnly, np, a, b);
+        var n = Near;
+        void N(Vector2 a, Vector2 b, uint col, Look look = Look.Plain, float par = 0, int segs = 1)
+        {
+            n.Hex(col, look, par);
+            Bowl.Strip(n, np, a, b, segs);
+        }
+        N(new(0, 0), new(0, 1.4f), 0xffffff, Look.Ribbon);
+        N(new(0, 1.4f), Lower0, Concrete);
+        N(Lower0, Lower1, seat, Look.Tier, 2, 6);
+        N(Lower1, new(22, 11.5f), Concrete);
+        N(new(22, 11.5f), new(22, 14.5f), 0xffffff, Look.Glass);
+        N(new(22, 14.5f), new(21, 14.5f), Concrete);
+        N(new(21, 14.5f), new(21, 15.8f), 0xffffff, Look.Ribbon);
+        N(new(21, 15.8f), Upper0, Concrete);
+        N(Upper0, Upper1, seat, Look.Tier, 1, 6);
+        EndRoof(n, np, panelAt);
+        n.Hex(Steel);
+        Girders(n, np, RoofBack, RoofEdge, RoofH, 2.6f);
+        n.Hex(0xffffff, Look.Lamp);
+        LampRow(n, np, RoofEdge, RoofH);
 
         Pitchside.AdBoards(m);
         Pitchside.CornerFlags(m);
@@ -176,7 +186,8 @@ public sealed class BigStadium : Ground
         HoldBanner(farSide[(int)(farSide.Count * 0.38f)], 4, Lower0, Lower1, 8);
         Crowd.Tier(path, Upper0, Upper1, new TierFans { Shade = new(-2, 10) });
         Crowd.Tier(main, Top0, Top1, new TierFans { Shade = new(-2, 6), Fill = 0.9f });
-        Crowd.Tier(near, new(0.4f, 1.2f), new(11, 5.6f), new TierFans { Fill = 0.85f });
+        Crowd.Tier(np, Lower0, Lower1, new TierFans { Shade = new(9, 17), Vom = new(7.2f, 10.2f), Near = true });
+        Crowd.Tier(np, Upper0, Upper1, new TierFans { Shade = new(-2, 10), Near = true });
 
         // Floodlight banks along the roof fronts (and the near stand's, unseen).
         float r = (BowlR + RoofEdge + 1) * Mathf.Sqrt2 / 2;

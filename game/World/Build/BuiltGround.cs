@@ -36,7 +36,9 @@ public sealed class BuiltGround : Ground
     }
 
     public MeshData M => Static;
-    public MeshData Shadow => ShadowOnly;
+    /// <summary>Where the near side goes in a match: drawn, but cut away wherever it would
+    /// stand between the camera and the pitch.</summary>
+    public MeshData Shadow => Near;
     public uint Home => HomeColor;
     public uint Seat => Kit.Darken(HomeColor, 0.62f);
     public uint WallCol => Kit.Darken(HomeColor, 0.8f);
@@ -54,7 +56,7 @@ public sealed class BuiltGround : Ground
     void Painted(StandSet set)
     {
         uint want = set == null ? 0 : _plan.PaintOf(Array.IndexOf(Kit.Sets, set));
-        Static.Paint = ShadowOnly.Paint = Kit.Repaint(set, want == Kit.ClubPaint ? HomeColor : want);
+        Static.Paint = Near.Paint = Kit.Repaint(set, want == Kit.ClubPaint ? HomeColor : want);
     }
 
     float TopOf(Slot s) => Clamp(SetOf(s), SetOf(s).Natural(Kit.KindOf(s)));
@@ -218,8 +220,6 @@ public sealed class BuiltGround : Ground
             Sweep(p.Mesh(this), p);
             p.Set.Dress(p, this);
         }
-        Painted(near.Set);
-        if (!_preview) Paddock(near);
         Painted(null);
 
         Pitchside.Tunnel(m, -Kit.BZ, Kit.DarkConcrete);
@@ -231,10 +231,11 @@ public sealed class BuiltGround : Ground
 
         // ---- the crowd
         float lowerSlope = (Kit.Lower1 - Kit.Lower0).Length();
-        foreach (var p in pieces.Where(p => !p.Hidden))
+        foreach (var p in pieces)
         {
             var fans = p.Set.LowerFans();
-            if (p.Slot is not (Slot.Main or Slot.Near))
+            fans.Near = p.Hidden;
+            if (!p.Hidden && p.Slot is not (Slot.Main or Slot.Near))
                 fans.Tifo = p.Set is Curva ? CurvaTifos(cz, lowerSlope) : EndTifos(cz, lowerSlope);
             Crowd.Tier(p.Path, Kit.Lower0, Kit.Lower1, fans);
             for (int j = 0; j < p.Sec[0].Tiers.Count; j++) UpperFans(p, j);
@@ -255,6 +256,7 @@ public sealed class BuiltGround : Ground
     void UpperFans(Piece p, int j)
     {
         var (a, b, fans) = p.Sec[0].Tiers[j];
+        fans.Near = p.Hidden;
         bool same = p.Sec.All(s => s.Tiers[j].a == a && s.Tiers[j].b == b);
         if (same)
         {
@@ -268,30 +270,5 @@ public sealed class BuiltGround : Ground
             var (a1, b1, _) = p.Sec[i + 1].Tiers[j];
             Crowd.Tier(new List<PathPt> { p.Path[i], p.Path[i + 1] }, (a0 + a1) / 2, (b0 + b1) / 2, fans);
         }
-    }
-
-    /// <summary>The near side in a match: a low paddock in its set's dress (the stand behind it
-    /// is shadow only).</summary>
-    void Paddock(Piece near)
-    {
-        var m = Static;
-        var set = near.Set;
-        var path = Line(Kit.CX - 2, Kit.BZ, -(Kit.CX - 2), Kit.BZ, 0, 1, 0);
-        var (fc, fl) = set.Front(this);
-        var (lc, lp) = set.Lower(this);
-        Vector2 t0 = new(0.4f, 1.4f), t1 = new(11, 1.4f + 10.6f * Kit.Rake);
-        m.Hex(fc, fl); Bowl.Strip(m, path, new(0, 0), new(0, 1.4f));
-        m.Hex(Kit.Concrete); Bowl.Strip(m, path, new(0, 1.4f), t0);
-        m.Hex(lc, Look.Tier, Mathf.Min(lp, 1)); Bowl.Strip(m, path, t0, t1, 3);
-        m.Hex(Kit.Concrete); Bowl.Strip(m, path, t1, new(11, t1.Y + 1.2f));
-        Bowl.Strip(m, path, new(11, t1.Y + 1.2f), new(12, t1.Y + 1.2f));
-        var (cc, cl) = set.Cap;
-        m.Hex(cc, cl);
-        Bowl.Strip(m, path, new(12, t1.Y + 1.2f), new(12, 0));
-        Bowl.Caps(m, new[] { path[0], path[^1] }, new Vector2[] { new(0, 0), new(0, 1.4f), t0, t1, new(11, t1.Y + 1.2f), new(12, t1.Y + 1.2f), new(12, 0) });
-        var fans = set.LowerFans();
-        fans.Fill = 0.85f;
-        fans.Vom = default;
-        Crowd.Tier(path, t0, t1, fans);
     }
 }

@@ -175,17 +175,10 @@ public sealed class Comunale : Ground
         Scenery(m, corners, tower);
         Pitchside.Tunnel(m, -BowlZ, Section);
 
-        // The paddock on the near side.
-        float nearX = BowlX - 10 - 8;
-        var near = Bowl.Straight(nearX, BowlZ, -nearX, BowlZ, 0, 1);
-        S(m, near, new(0, 0), new(0, 1.4f), wall, Look.Wall);
-        S(m, near, new(0, 1.4f), new(0.4f, 1.4f), Concrete);
-        S(m, near, new(0.4f, 1.4f), new(11, 6.9f), seat, Look.Tier, 1, 3);
-        S(m, near, new(11, 6.9f), new(12, 6.9f), Concrete);
-        m.Hex(Concrete);
-        Bowl.Caps(m, new[] { near[0], near[^1] }, new Vector2[] { new(0, 0), new(0, 1.4f), new(0.4f, 1.4f), new(11, 6.9f), new(12, 6.9f), new(12, 0) });
-        // The near curve of the bowl behind the camera: solid for the sun, never drawn.
-        BowlSection(ShadowOnly, Bowl.NearPath(BowlX, BowlZ, BowlR));
+        // The near curve of the bowl, behind the camera: drawn in its own batch that the shader
+        // cuts away wherever it would hide the pitch (it shows when the camera turns).
+        var np = Bowl.NearPath(BowlX, BowlZ, BowlR);
+        BowlSection(Near, np);
 
         Pitchside.AdBoards(m);
         Pitchside.CornerFlags(m);
@@ -202,7 +195,8 @@ public sealed class Comunale : Ground
         Crowd.Tier(left, Upper0, Upper1, new TierFans());
         Crowd.Tier(right, Upper0, Upper1, new TierFans());
         Crowd.Tier(main, Upper0, Upper1, new TierFans { Shade = new(4, 16), Fill = 0.92f });
-        Crowd.Tier(near, new(0.4f, 1.4f), new(11, 6.9f), new TierFans { Fill = 0.85f });
+        Crowd.Tier(np, Lower0, Lower1, new TierFans { Vom = new(7.2f, 10.2f), Near = true });
+        Crowd.Tier(np, Upper0, Upper1, new TierFans { Near = true });
     }
 
     static uint Darken(uint hex, float k) =>

@@ -37,4 +37,16 @@ vec3 world_fog(vec3 c, float dist, float base) {
 	return mix(c, gn_fog, (base + f * 0.7) * gn_haze);
 }
 
+// The near stand (behind the match camera) is drawn, but cut away wherever it would stand
+// between the camera and the pitch: true where the line from the camera through this point
+// comes down onto the pitch (or just round it) beyond it.
+bool world_near_hides(vec3 p, vec3 cam) {
+	vec3 d = p - cam;
+	if (d.y > -0.001) return false;
+	float t = cam.y / -d.y;
+	if (t <= 1.0) return false;
+	vec3 g = cam + d * t;
+	return abs(g.x) < 60.0 && abs(g.z) < 40.0;
+}
+
 float world_hash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 15731.743); }
