@@ -169,6 +169,7 @@ public partial class Main : Node
         {
             Direct(false);
             Cutscene.Start(_match, _cur, Request?.Ground ?? "big");
+            _prewarm = 4;
         }
     }
 
@@ -340,6 +341,7 @@ public partial class Main : Node
         _controls.SetMode(ButtonMode(_cur, attack, out int picked), picked);
         _hud.Tick(_prev, _cur, alpha, _controls.Input, attack, delta);
         _drillHud?.Tick();
+        if (_prewarm > 0) Prewarm(--_prewarm == 0);
         _prof.Lap(Profiler.Sys.Hud);
         _prof.End(delta);
         // Full time: a few seconds of the scene, then back to the menus.
@@ -355,6 +357,26 @@ public partial class Main : Node
     }
 
     double _thunderFor = -10;
+    int _prewarm;
+
+    /// <summary>The first frames of the walk-out draw the match HUD, the controls, the markers
+    /// and the officials once, all but invisible, so their shaders compile behind the opening
+    /// shot instead of stuttering at kick-off (the PWA's prewarm).</summary>
+    void Prewarm(bool done)
+    {
+        if (!done)
+        {
+            _hud.Visible = _controls.Visible = _officials.Visible = true;
+            _players.Markers = true;
+        }
+        else
+        {
+            _hud.Visible = !Directed;
+            _controls.Visible = !Directed && !_pause.IsOpen;
+            _players.Markers = !Directed;
+        }
+        _hud.Modulate = _controls.Modulate = new Color(1, 1, 1, done ? 1 : 0.004f);
+    }
 
     /// <summary>The rain's hiss, and thunder after each flash (later the farther off it struck).</summary>
     void Weather()

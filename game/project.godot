@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="GameNight"
-config/version="0.16.0"
+config/version="0.17.0"
 run/main_scene="res://App.tscn"
 config/features=PackedStringArray("4.7", "C#", "Mobile")
 boot_splash/bg_color=Color(0.054902, 0.0627451, 0.0901961, 1)
@@ -33,6 +33,8 @@ window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=4
 window/vsync/vsync_mode=1
+window/frame_pacing/android/enable_frame_pacing=true
+window/frame_pacing/android/swappy_mode=0
 
 [dotnet]
 
@@ -43,6 +45,8 @@ project/assembly_name="GameNight"
 pointing/emulate_touch_from_mouse=true
 
 [rendering]
+
+rendering_device/vsync/frame_queue_size=3
 
 renderer/rendering_method="mobile"
 renderer/rendering_method.mobile="mobile"

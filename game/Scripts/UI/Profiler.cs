@@ -52,7 +52,7 @@ public sealed partial class Profiler : Control
     static readonly string[] ChNames =
     {
         "camera & replays", "players & refs", "stadium & crowd", "sound director", "hud & controls",
-        "the rest of the game thread", "render thread", "GPU: 3D world", "GPU: screen pass", "engine step (lock)",
+        "all our game code (sum)", "render thread", "GPU: 3D world", "GPU: screen pass", "engine step (lock)",
     };
 
     struct Rec
@@ -160,14 +160,13 @@ public sealed partial class Profiler : Control
         double cpuWorld = _art.IsValid ? RenderingServer.ViewportGetMeasuredRenderTimeCpu(_art) : 0;
         double cpuScreen = _screen.IsValid ? RenderingServer.ViewportGetMeasuredRenderTimeCpu(_screen) : 0;
         double setup = RenderingServer.GetFrameSetupTimeCpu();
-        double game = Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000;
         double sim = SimStepMs?.Invoke() ?? 0;
         double audio = AudioBlockMs?.Invoke() ?? 0;
         double ours = 0;
         foreach (var v in _sys) ours += v / n;
 
         _l1 = $"{1000 / _frameMs:0} fps · {_frameMs:0.00} ms a frame";
-        _l2 = $"GPU {gpuWorld + gpuScreen:0.00} ms · CPU game {game:0.00} · render {cpuWorld + cpuScreen + setup:0.00}";
+        _l2 = $"GPU {gpuWorld + gpuScreen:0.00} ms · CPU our code {ours:0.00} · render {cpuWorld + cpuScreen + setup:0.00}";
         _l3 = $"engine {sim:0.000} ms a step (120 a s, own thread) · sound {audio / Audio.GameAudio.BlockPlayMs * 100:0}% of its thread";
         _l4 = $"{Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame):0} draw calls · {Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame) / 1000:0}k triangles · {Performance.GetMonitor(Performance.Monitor.RenderTotalObjectsInFrame):0} objects";
 
@@ -176,7 +175,7 @@ public sealed partial class Profiler : Control
         _bars[b++] = ("GPU: screen (upscale, post, HUD)", gpuScreen, Gpu);
         _bars[b++] = ("render thread: draw lists", cpuWorld + cpuScreen + setup, Cpu);
         for (int i = 0; i < _sys.Length; i++) _bars[b++] = ("game: " + SysNames[i], _sys[i] / n, Cpu);
-        _bars[b++] = ("game: the rest (Godot itself, waiting on the GPU)", Math.Max(0, game - ours), Cpu);
+        _bars[b++] = ("game: all our code (sum of the above)", ours, Cpu);
         // The report's row for this half second (before the bars are sorted).
         var row = new StringBuilder();
         row.Append($"{_now,8:0.0} {1000 / _frameMs,4:0} {_frameMs,6:0.00} {_periodMax,6:0.0} {_periodSpikes,2}");
@@ -231,18 +230,16 @@ public sealed partial class Profiler : Control
         r.Context = Context?.Invoke() ?? "";
         for (int i = 0; i < 5; i++) r.V[i] = (float)_frameSys[i];
         Array.Clear(_frameSys);
-        // The frame's length (delta) and the process time read now are the previous frame's:
-        // they go on that frame.
-        double process = Performance.GetMonitor(Performance.Monitor.TimeProcess) * 1000;
+        // Our code's total (a sum of the parts, for the log; never blamed itself).
+        r.V[Rest] = 0;
+        for (int i = 0; i < 5; i++) r.V[Rest] += r.V[i];
+        // The frame's length (delta) is the previous frame's: it goes on that frame.
         if (_f > 0)
         {
             ref var p = ref _hist[(_f - 1) % Hist];
             p.Frame = (float)(delta * 1000);
             _periodMax = MathF.Max(_periodMax, p.Frame);
             if (_allFrames.Count < 200_000) _allFrames.Add(p.Frame);
-            float ours = 0;
-            for (int i = 0; i < 5; i++) ours += p.V[i];
-            p.V[Rest] = MathF.Max(0, (float)process - ours);
         }
         r.V[Render] = (float)((_art.IsValid ? RenderingServer.ViewportGetMeasuredRenderTimeCpu(_art) : 0)
             + (_screen.IsValid ? RenderingServer.ViewportGetMeasuredRenderTimeCpu(_screen) : 0) + RenderingServer.GetFrameSetupTimeCpu());
@@ -296,6 +293,7 @@ public sealed partial class Profiler : Control
         int who = -1;
         for (int c = 0; c < Ch; c++)
         {
+            if (c == Rest) continue;
             float v = r.V[c];
             if (c == Render || c == GpuWorld || c == GpuScreen)
                 for (long j = e + 1; j <= _f; j++) v = MathF.Max(v, _hist[j % Hist].V[c]);
@@ -316,7 +314,7 @@ public sealed partial class Profiler : Control
             cause = ChNames[who];
             what = cause + $" (+{best:0.0})";
         }
-        else what = cause = "outside the game: Android, a missed vsync or heat";
+        else what = cause = "missed screen refresh: nothing in the game was slow (frame pacing, Android, heat)";
         _causes[cause] = _causes.TryGetValue(cause, out var tally) ? (tally.n + 1, tally.ms + excess) : (1, excess);
         _periodSpikes++;
         var sb = new StringBuilder();
@@ -340,6 +338,7 @@ public sealed partial class Profiler : Control
         sb.AppendLine($"GPU: {RenderingServer.GetVideoAdapterVendor()} {RenderingServer.GetVideoAdapterName()} · API {RenderingServer.GetVideoAdapterApiVersion()}");
         sb.AppendLine($"CPU: {OS.GetProcessorName()} · {OS.GetProcessorCount()} cores · device {OS.GetModelName()} · {OS.GetName()} {OS.GetVersion()}");
         sb.AppendLine($"Screen: {DisplayServer.ScreenGetSize()} at {DisplayServer.ScreenGetRefreshRate():0} Hz · budget {_budget:0.00} ms");
+        sb.AppendLine($"Pacing: vsync {DisplayServer.WindowGetVsyncMode()} · swappy {ProjectSettings.GetSetting("display/window/frame_pacing/android/enable_frame_pacing")} mode {ProjectSettings.GetSetting("display/window/frame_pacing/android/swappy_mode")} · frame queue {ProjectSettings.GetSetting("rendering/rendering_device/vsync/frame_queue_size")} · swapchain {ProjectSettings.GetSetting("rendering/rendering_device/vsync/swapchain_image_count")}");
         sb.AppendLine();
         if (_allFrames.Count > 0)
         {
@@ -365,7 +364,7 @@ public sealed partial class Profiler : Control
         foreach (var l in _spikeLog) sb.AppendLine(l);
         sb.AppendLine();
         sb.AppendLine("Every half second (time s, fps, avg ms, worst frame ms, spikes, then ms for: GPU world, GPU screen, render thread,");
-        sb.AppendLine("  camera, players, stadium, sound, hud, rest of game thread; engine step ms, sound thread %, draw calls, triangles, context):");
+        sb.AppendLine("  camera, players, stadium, sound, hud, all our code; engine step ms, sound thread %, draw calls, triangles, context):");
         foreach (var l in _rows) sb.AppendLine(l);
         return sb.ToString();
     }
