@@ -122,6 +122,8 @@ jobs:
           mkdir -p ../build
           "$GODOT" --headless --path . --export-release Android ../build/GameNight.apk 2>&1 | tee ../build/export.log
           test -s ../build/GameNight.apk
+          # The same APK with its version in the name (the plain name keeps the latest/download link working).
+          cp ../build/GameNight.apk "../build/GameNight-$APP_VERSION.apk"
 
       - name: Upload build log
         if: failure()
@@ -142,6 +144,9 @@ jobs:
             Build ${{ github.run_number }} from ${{ github.sha }}.
             ${{ github.event.head_commit.message }}
 
-            Install: open this page on the phone and tap GameNight.apk.
-          files: build/GameNight.apk
+            Install: open this page on the phone and tap GameNight-${{ env.APP_VERSION }}.apk (or GameNight.apk, the same file).
+            It installs over the previous version: same app id, same signing key, higher version code.
+          files: |
+            build/GameNight-${{ env.APP_VERSION }}.apk
+            build/GameNight.apk
           make_latest: true
