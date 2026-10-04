@@ -115,6 +115,7 @@ public partial class Main : Node
         if (Request != null && !Request.Demo) _pause.Leave = () => Report(false);
         _pause.WeatherName = () => Atmosphere.Names[(int)_ground.Atmosphere.Weather];
         _pause.CycleWeather = () => Atmosphere.Names[(int)_ground.Atmosphere.Cycle()];
+        _pause.SaveReport = SaveReport;
         ApplySettings();
         if (Request?.Demo == true)
         {
@@ -351,6 +352,27 @@ public partial class Main : Node
             _thunderFor = atm.FlashAt;
             audio.Thunder(0.4f + (float)Random.Shared.NextDouble() * 3f);
         }
+    }
+
+    /// <summary>The frame-time report into Downloads (and onto the clipboard, to paste anywhere).</summary>
+    string SaveReport()
+    {
+        string version = (string)ProjectSettings.GetSetting("application/config/version", "?");
+        var header = $"App {version} · {DateTime.Now:yyyy-MM-dd HH:mm} · ground {Request?.Ground ?? "big"} · weather {Atmosphere.Names[(int)_ground.Atmosphere.Weather]}"
+            + $"\nSettings: graphics {(MatchSettings.Fast ? "fast" : "full")} · pixels {_view.ArtHeight} tall (setting {(MatchSettings.Pixels > 0 ? MatchSettings.Pixels.ToString() : "auto")}) · camera {MatchSettings.Camera} · sound {(MatchSettings.Sound ? "on" : "off")}"
+            + $"\nMatch: {_cur.ClockLabel} · {_cur.Score[0]}-{_cur.Score[1]} · {SpikeContext()}{(Request?.Drill != null ? $" · training {Request.Drill}" : "")}";
+        string text = _prof.Report(header);
+        DisplayServer.ClipboardSet(text);
+        string name = $"GameNight-report-{version}-{DateTime.Now:yyyyMMdd-HHmmss}.txt";
+        foreach (var dir in new[] { OS.GetSystemDir(OS.SystemDir.Downloads), OS.GetUserDataDir() })
+        {
+            if (string.IsNullOrEmpty(dir)) continue;
+            using var f = FileAccess.Open(dir + "/" + name, FileAccess.ModeFlags.Write);
+            if (f == null) continue;
+            f.StoreString(text);
+            return dir == OS.GetUserDataDir() ? "COPIED (PASTE IT IN THE CHAT)" : "SAVED IN DOWNLOADS · ALSO COPIED";
+        }
+        return "COPIED (PASTE IT IN THE CHAT)";
     }
 
     /// <summary>What's happening, in a few words, for the frame-time breakdown's spike list.</summary>

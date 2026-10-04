@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Text;
 using System.Diagnostics;
 using Godot;
 
@@ -72,6 +74,19 @@ public sealed partial class Profiler : Control
     int _spikeN;
     double _spikeTotal;
 
+    // ---------------------------------------------------------------- the report (SAVE REPORT)
+
+    /// <summary>Half-second rows (the last ten minutes) and every spike (the last 500), kept only
+    /// while DETAIL is on.</summary>
+    const int Rows = 1200, SpikeLog = 500;
+    readonly Queue<string> _rows = new(), _spikeLog = new();
+    readonly Dictionary<string, (int n, double ms)> _causes = new();
+    readonly List<float> _allFrames = new();
+    float _periodMax;
+    int _periodSpikes;
+    double _stepSum;
+    int _stepN;
+
     public Profiler()
     {
         MouseFilter = MouseFilterEnum.Ignore;
@@ -99,6 +114,10 @@ public sealed partial class Profiler : Control
             _frames = 0;
             _t = _frameMs = 0;
             if (value) ResetSpikes();
+            _rows.Clear();
+            _spikeLog.Clear();
+            _causes.Clear();
+            _allFrames.Clear();
         }
     }
 
@@ -158,6 +177,18 @@ public sealed partial class Profiler : Control
         _bars[b++] = ("render thread: draw lists", cpuWorld + cpuScreen + setup, Cpu);
         for (int i = 0; i < _sys.Length; i++) _bars[b++] = ("game: " + SysNames[i], _sys[i] / n, Cpu);
         _bars[b++] = ("game: the rest (Godot itself, waiting on the GPU)", Math.Max(0, game - ours), Cpu);
+        // The report's row for this half second (before the bars are sorted).
+        var row = new StringBuilder();
+        row.Append($"{_now,8:0.0} {1000 / _frameMs,4:0} {_frameMs,6:0.00} {_periodMax,6:0.0} {_periodSpikes,2}");
+        foreach (var bar in _bars) row.Append($" {bar.ms,5:0.00}");
+        row.Append($" {(_stepN > 0 ? _stepSum / _stepN : 0),5:0.000} {audio / Audio.GameAudio.BlockPlayMs * 100,3:0}");
+        row.Append($" {Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame),4:0} {Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame) / 1000,4:0}k {Context?.Invoke()}");
+        if (_rows.Count == Rows) _rows.Dequeue();
+        _rows.Enqueue(row.ToString());
+        _periodMax = 0;
+        _periodSpikes = 0;
+        _stepSum = 0;
+        _stepN = 0;
         Array.Sort(_bars, (x, y) => y.ms.CompareTo(x.ms));
         // The bars are drawn against the frame's budget at the screen's refresh rate.
         float hz = DisplayServer.ScreenGetRefreshRate();
@@ -207,6 +238,8 @@ public sealed partial class Profiler : Control
         {
             ref var p = ref _hist[(_f - 1) % Hist];
             p.Frame = (float)(delta * 1000);
+            _periodMax = MathF.Max(_periodMax, p.Frame);
+            if (_allFrames.Count < 200_000) _allFrames.Add(p.Frame);
             float ours = 0;
             for (int i = 0; i < 5; i++) ours += p.V[i];
             p.V[Rest] = MathF.Max(0, (float)process - ours);
@@ -216,6 +249,8 @@ public sealed partial class Profiler : Control
         r.V[GpuWorld] = (float)(_art.IsValid ? RenderingServer.ViewportGetMeasuredRenderTimeGpu(_art) : 0);
         r.V[GpuScreen] = (float)(_screen.IsValid ? RenderingServer.ViewportGetMeasuredRenderTimeGpu(_screen) : 0);
         r.V[Step] = (float)(SimStepPeak?.Invoke() ?? 0);
+        _stepSum += r.V[Step];
+        _stepN++;
         // Collections and compiles since the last frame.
         double pause = GC.GetTotalPauseDuration().TotalMilliseconds;
         r.Gc = (float)(pause - _gcPause);
@@ -269,14 +304,70 @@ public sealed partial class Profiler : Control
         }
         int compiles = 0;
         for (long j = e; j <= _f; j++) compiles += _hist[j % Hist].Compiles;
-        string what;
-        if (r.Gc > 0.3f * excess && r.Gc > 0.5f) what = $"garbage collection pause (gen {Math.Max(0, r.Gen)})";
-        else if (compiles > 0) what = $"shader compiled on first use (×{compiles})" + (who >= 0 ? $", {ChNames[who]}" : "");
-        else if (who >= 0 && best > 0.3f * excess) what = ChNames[who] + $" (+{best:0.0})";
-        else what = "outside the game: Android, a missed vsync or heat";
+        string what, cause;
+        if (r.Gc > 0.3f * excess && r.Gc > 0.5f) what = cause = $"garbage collection pause (gen {Math.Max(0, r.Gen)})";
+        else if (compiles > 0)
+        {
+            cause = "shader compiled on first use";
+            what = cause + $" (×{compiles})" + (who >= 0 ? $", {ChNames[who]}" : "");
+        }
+        else if (who >= 0 && best > 0.3f * excess)
+        {
+            cause = ChNames[who];
+            what = cause + $" (+{best:0.0})";
+        }
+        else what = cause = "outside the game: Android, a missed vsync or heat";
+        _causes[cause] = _causes.TryGetValue(cause, out var tally) ? (tally.n + 1, tally.ms + excess) : (1, excess);
+        _periodSpikes++;
+        var sb = new StringBuilder();
+        sb.Append($"{r.At,8:0.00}  +{excess,5:0.0}  frame {r.Frame,5:0.0}  {what}  [{r.Context}]  ch:");
+        for (int c = 0; c < Ch; c++) sb.Append($" {r.V[c]:0.00}");
+        if (r.Gc > 0) sb.Append($"  gc {r.Gc:0.00}");
+        if (_spikeLog.Count == SpikeLog) _spikeLog.Dequeue();
+        _spikeLog.Enqueue(sb.ToString());
         _spikes[_spikeN % _spikes.Length] = (r.At, excess, what, r.Context);
         _spikeN++;
         _spikeTotal += excess;
+    }
+
+    /// <summary>The report: the device and settings (from the caller), a summary, the causes of
+    /// every spike, the spike log, and the half-second rows. Plain text, a few tens of KB.</summary>
+    public string Report(string header)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("GameNight performance report");
+        sb.AppendLine(header);
+        sb.AppendLine($"GPU: {RenderingServer.GetVideoAdapterVendor()} {RenderingServer.GetVideoAdapterName()} · API {RenderingServer.GetVideoAdapterApiVersion()}");
+        sb.AppendLine($"CPU: {OS.GetProcessorName()} · {OS.GetProcessorCount()} cores · device {OS.GetModelName()} · {OS.GetName()} {OS.GetVersion()}");
+        sb.AppendLine($"Screen: {DisplayServer.ScreenGetSize()} at {DisplayServer.ScreenGetRefreshRate():0} Hz · budget {_budget:0.00} ms");
+        sb.AppendLine();
+        if (_allFrames.Count > 0)
+        {
+            var f = _allFrames.ToArray();
+            Array.Sort(f);
+            double sum = 0;
+            foreach (var v in f) sum += v;
+            float P(double q) => f[Math.Min(f.Length - 1, (int)(q * f.Length))];
+            sb.AppendLine($"Frames since DETAIL on: {f.Length} over {_now:0} s · average {sum / f.Length:0.00} ms ({1000 * f.Length / sum:0} fps)");
+            sb.AppendLine($"Frame ms: median {P(0.5):0.00} · 90% {P(0.9):0.00} · 99% {P(0.99):0.00} · 99.9% {P(0.999):0.00} · worst {f[^1]:0.00}");
+            int over = 0;
+            foreach (var v in f) if (v > _budget * 1.05) over++;
+            sb.AppendLine($"Over budget: {over} frames ({100.0 * over / f.Length:0.0}%) · spikes {_spikeN}, {_spikeTotal:0} ms lost in all");
+        }
+        sb.AppendLine();
+        sb.AppendLine("Spike causes (count, ms lost):");
+        var causes = new List<KeyValuePair<string, (int n, double ms)>>(_causes);
+        causes.Sort((a, b) => b.Value.ms.CompareTo(a.Value.ms));
+        foreach (var (k, v) in causes) sb.AppendLine($"  {v.n,5} {v.ms,8:0.0}  {k}");
+        sb.AppendLine();
+        sb.AppendLine("Spikes (time s, ms over the median, frame ms, cause, context, then per channel ms:");
+        sb.AppendLine("  " + string.Join(" | ", ChNames) + ")");
+        foreach (var l in _spikeLog) sb.AppendLine(l);
+        sb.AppendLine();
+        sb.AppendLine("Every half second (time s, fps, avg ms, worst frame ms, spikes, then ms for: GPU world, GPU screen, render thread,");
+        sb.AppendLine("  camera, players, stadium, sound, hud, rest of game thread; engine step ms, sound thread %, draw calls, triangles, context):");
+        foreach (var l in _rows) sb.AppendLine(l);
+        return sb.ToString();
     }
 
     public override void _Draw()
