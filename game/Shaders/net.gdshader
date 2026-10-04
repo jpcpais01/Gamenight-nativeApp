@@ -27,15 +27,23 @@ void vertex() {
 }
 
 void fragment() {
-	vec2 g = UV / 0.14;
-	vec2 f = abs(fract(g) - 0.5);
-	vec2 w = fwidth(g);
-	float lx = 1.0 - smoothstep(0.5 - w.x * 1.2, 0.5, f.x + 0.06);
-	float ly = 1.0 - smoothstep(0.5 - w.y * 1.2, 0.5, f.y + 0.06);
-	float line = max(1.0 - lx, 1.0 - ly);
-	// Tiny on screen: a soft haze instead of moiré.
-	float far = smoothstep(0.25, 0.8, max(w.x, w.y));
-	float a = mix(line * 0.8, 0.24, far);
+	// Diamond mesh in metres. At art res the real 14 cm cell is far below a pixel, so the cell
+	// doubles until it spans a few pixels: the net always reads as cord, one pixel thick, and
+	// the coarser levels are every other cord of the finer one, so the seams between them sit
+	// on shared cords.
+	vec2 m = vec2(UV.x + UV.y, UV.x - UV.y) * 0.70710678;
+	vec2 px = fwidth(m);
+	// Sized on the less foreshortened axis, so a grazing roof doesn't blow the cells up.
+	float wpx = min(px.x, px.y);
+	float level = clamp(ceil(log2(wpx * 5.0 / 0.14)), 0.0, 3.0);
+	float cell = 0.14 * exp2(level);
+	vec2 g = m / cell;
+	vec2 dpx = (0.5 - abs(fract(g) - 0.5)) * cell / max(px, vec2(1e-5));
+	bool cord = min(dpx.x, dpx.y) < 0.5;
+	// Farther than even the coarsest cell can show: a soft stipple haze.
+	float far = smoothstep(1.2, 2.0, wpx * 5.0 / (0.14 * 8.0));
+	float a = mix(cord ? 1.0 : 0.0, 0.24, far);
 	if (bayer4(FRAGCOORD.xy) >= a) discard;
-	ALBEDO = pow(color, vec3(2.2));
+	// The side panels sit a touch darker than the roof and back, for depth.
+	ALBEDO = pow(color * mix(0.82, 1.0, step(0.6, COLOR.g)), vec3(2.2));
 }

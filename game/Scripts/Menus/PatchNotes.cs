@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.10", "The goal nets now look like real nets in a match: a diamond mesh of cord you can see from the normal camera, not a faint haze, still bulging and rippling when the ball hits them."),
         ("0.9", "Shot aim fixed from wide: the stick now picks the post it points at as seen from the ball, so cutting in from the wing you can go near post by pointing at it. Stick idle always means far post."),
         ("0.8", "Each download now carries its version in the file name (GameNight-0.8.x.apk) and still installs as an update over the one you have."),
         ("0.7", "The buttons change with the moment, like the browser game: gold celebration moves after you score (the one you pick lights up), Whip, Short, Float on your corners, Drive, Short, Float on goal kicks, and Dive in goal at training."),
