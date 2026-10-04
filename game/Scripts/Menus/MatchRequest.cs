@@ -22,6 +22,9 @@ public sealed class MatchRequest
     public bool Showcase;
     /// <summary>Called once when the match ends (full time) or is left.</summary>
     public Action<MatchOutcome> Done;
+    /// <summary>An away day (the league): the hosts' crest. The ground dresses in side 1's
+    /// colours and crest instead of your club's; null = you're the home side.</summary>
+    public GameNight.Club.Crest HostCrest;
 }
 
 public sealed class MatchOutcome
@@ -31,6 +34,13 @@ public sealed class MatchOutcome
     public int Home, Away;
     /// <summary>Training: the best streak, to keep.</summary>
     public int DrillBest;
+    /// <summary>Every goal in order: side, shirt slot of the scorer, match minute.</summary>
+    public System.Collections.Generic.List<GoalEvent> Goals = new();
+}
+
+public sealed class GoalEvent
+{
+    public int Team, Index, Minute;
 }
 
 /// <summary>The grounds a match can be played at. The stadium thread adds its grounds here; the

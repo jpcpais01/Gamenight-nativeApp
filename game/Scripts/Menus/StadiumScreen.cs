@@ -157,6 +157,18 @@ public sealed partial class StadiumScreen : PxCanvas
         Px.Text(this, Px.Small, new Vector2(panel.Position.X + 16, ty - 12), Kit.SlotNames[(int)Selected].ToUpperInvariant(), 8, Px.InkDim);
         Px.Text(this, Px.Big, new Vector2(panel.Position.X + 16, ty + 14), set.Name, 28, Px.Hex((int)set.Swatch), new Color(0, 0, 0, 0.5f), 2);
         float ly = Colours(new Rect2(panel.Position.X + 16, ty + 26, panel.Size.X - 32, 0), Plan.Get(Selected)) + 14;
+        // Which sets can hang the club's giant tifo (as the main stand).
+        string tifo = set.CarriesTifo ? "HANGS YOUR GIANT TIFO AS THE MAIN STAND"
+            : Selected == Slot.Main ? "NO GIANT TIFO HERE: " + string.Join(", ", TifoSets()).ToUpperInvariant() + " HANG IT" : null;
+        if (tifo != null)
+        {
+            foreach (var l in Px.Wrap(Px.Small, tifo, 8, panel.Size.X - 32))
+            {
+                Px.Text(this, Px.Small, new Vector2(panel.Position.X + 16, ly), l, 8, set.CarriesTifo ? Px.Gold : Px.InkDim);
+                ly += 13;
+            }
+            ly += 4;
+        }
         foreach (var l in Px.Wrap(Px.Small, set.About, 8, panel.Size.X - 32))
         {
             if (ly > panel.End.Y - 6) break;
@@ -196,8 +208,22 @@ public sealed partial class StadiumScreen : PxCanvas
             float sw = Mathf.Clamp(cw - 82, 18, 46);
             Swatch(new Rect2(rr.Position + new Vector2(7, 7), new Vector2(sw, ch - 14)), i);
             Px.Text(this, Px.Big, new Vector2(rr.Position.X + sw + 12, rr.GetCenter().Y + 7), Px.Fit(Px.Big, s.Name, 19, cw - sw - 17), 19, on ? Px.Dark : Px.Ink);
+            if (s.CarriesTifo) TifoBadge(new Vector2(rr.End.X - 12, rr.Position.Y + 5), on);
             Tap("set" + i, r, () => Choose(idx));
         }
+    }
+
+    static IEnumerable<string> TifoSets()
+    {
+        foreach (var s in Kit.Sets) if (s.CarriesTifo) yield return s.Name;
+    }
+
+    /// <summary>A little hanging banner: this set carries the giant tifo.</summary>
+    void TifoBadge(Vector2 p, bool on)
+    {
+        var c = on ? Px.Dark : Px.Gold;
+        DrawRect(new Rect2(p, new Vector2(8, 2)), c);
+        DrawColoredPolygon(new[] { p + new Vector2(1, 2), p + new Vector2(7, 2), p + new Vector2(7, 11), p + new Vector2(4, 9), p + new Vector2(1, 11) }, c);
     }
 
     /// <summary>The set's main colour: its own, the club's, or one of the paints; returns the

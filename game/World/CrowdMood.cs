@@ -24,6 +24,8 @@ public sealed class CrowdMood
     int _shotTeam = -1, _gaspTeam = -1;
     float _gaspKind;
     Phase _lastPhase;
+    /// <summary>An away day: the match's side 0 (yours) is the stands' away support.</summary>
+    public bool Flip;
 
     static float Smooth(float a, float b, float x)
     {
@@ -67,12 +69,15 @@ public sealed class CrowdMood
         // the home end hushed after an away goal; whether the song is the jumping one.
         if (terraces != null)
         {
-            RenderingServer.GlobalShaderParameterSet("gn_react_home", new Vector4(terraces.Clapping[0], terraces.Jeering[0], terraces.Heads[0], terraces.Fists[0]));
-            RenderingServer.GlobalShaderParameterSet("gn_react_away", new Vector4(terraces.Clapping[1], terraces.Jeering[1], terraces.Heads[1], terraces.Fists[1]));
+            int h = Flip ? 1 : 0, a = 1 - h;
+            RenderingServer.GlobalShaderParameterSet("gn_react_home", new Vector4(terraces.Clapping[h], terraces.Jeering[h], terraces.Heads[h], terraces.Fists[h]));
+            RenderingServer.GlobalShaderParameterSet("gn_react_away", new Vector4(terraces.Clapping[a], terraces.Jeering[a], terraces.Heads[a], terraces.Fists[a]));
         }
         float bounce = terraces?.Singing?.Chant?.Name == "bounce" ? 1 : 0;
-        RenderingServer.GlobalShaderParameterSet("gn_mood", new Vector4(_rise0, _rise1, s.Dir[0] == 0 ? 1 : s.Dir[0], (terraces?.Hush ?? 0) + bounce * 2));
-        RenderingServer.GlobalShaderParameterSet("gn_gasp", new Vector4(_gaspTeam, (float)Math.Min(99, t - _gaspAt), _gaspKind, 0));
+        float dir0 = s.Dir[0] == 0 ? 1 : s.Dir[0];
+        if (Flip) RenderingServer.GlobalShaderParameterSet("gn_mood", new Vector4(_rise1, _rise0, -dir0, (terraces?.Hush ?? 0) + bounce * 2));
+        else RenderingServer.GlobalShaderParameterSet("gn_mood", new Vector4(_rise0, _rise1, dir0, (terraces?.Hush ?? 0) + bounce * 2));
+        RenderingServer.GlobalShaderParameterSet("gn_gasp", new Vector4(Flip && _gaspTeam >= 0 ? 1 - _gaspTeam : _gaspTeam, (float)Math.Min(99, t - _gaspAt), _gaspKind, 0));
         RenderingServer.GlobalShaderParameterSet("gn_ballout", new Vector4(s.BallX, s.BallZ, outBall ? 1 : 0, 0));
     }
 }

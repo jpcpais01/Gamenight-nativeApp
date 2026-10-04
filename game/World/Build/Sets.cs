@@ -16,6 +16,7 @@ public sealed class Arena : StandSet
     public override string About => "Modern bowl: glass boxes, a sweeping roof, LED ribbons";
     public override uint Swatch => 0x9fc6e8;
     public override uint[] Mains => new uint[] { RoofCol, Facade, Panels };
+    public override Vector2? TifoAt(Section x) => new(x.Edge + 0.6f, x.Top - 2.5f);
     public override float Natural(Kind k) => k == Kind.Side ? 40 : 34;
     public override Vector2 Range => new(24, 46);
     public override (uint col, Look look) Front(BuiltGround g) => (White, Look.Ribbon);
@@ -326,6 +327,7 @@ public sealed class TheWall : StandSet
     public override string About => "One giant, steep standing tier under pylons and a box roof";
     public override uint Swatch => 0xffd447;
     public override uint[] Mains => new uint[] { Clad, RoofCol, RoofTop, Panels };
+    public override Vector2? TifoAt(Section x) => new(x.Edge + 0.6f, x.Top - 2.5f);
     public override float Natural(Kind k) => k == Kind.End ? 42 : 36;
     public override Vector2 Range => new(26, 46);
     public override (uint col, float par) Lower(BuiltGround g) => (g.Seat, 1);

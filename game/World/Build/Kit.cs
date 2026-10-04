@@ -206,6 +206,11 @@ public abstract class StandSet
     /// <summary>Everything above the concourse (the pen is at 20 m back, 11.5 m up): must end on the ground.</summary>
     public abstract void Upper(Section x, float top, Kind kind, BuiltGround g);
 
+    /// <summary>Where it hangs the club's giant tifo as the main stand (offset, top of the
+    /// cloth), or null if it can't carry one.</summary>
+    public virtual Vector2? TifoAt(Section x) => null;
+    public bool CarriesTifo => TifoAt(new Section { Top = Natural(Kind.Side), Edge = 8 }) != null;
+
     /// <summary>The details a sweep can't make: pillars, girders, lamps, towers, flags.</summary>
     public virtual void Dress(Piece p, BuiltGround g) { }
 }

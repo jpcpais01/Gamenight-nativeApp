@@ -222,6 +222,14 @@ public sealed class BuiltGround : Ground
         }
         Painted(null);
 
+        // The giant tifo, from a main stand tall enough to hang it over the lower tier (cut down
+        // to fit, never below two thirds of the big stadium's).
+        if (main.Set.TifoAt(main.Sec[main.Mid]) is Vector2 at)
+        {
+            float h = Mathf.Min(38, at.Y - Kit.LowerAt(at.X) - 1.2f);
+            if (h >= 25) Giant = new GiantTifo(main.Path[main.Mid], at.X, at.Y, h / 38);
+        }
+
         Pitchside.Tunnel(m, -Kit.BZ, Kit.DarkConcrete);
         Pitchside.AdBoards(m);
         Pitchside.CornerFlags(m);
