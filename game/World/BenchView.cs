@@ -25,7 +25,7 @@ namespace GameNight.Grounds;
 /// Purely visual (its own Random): the simulation doesn't know they exist. Every part is one
 /// MultiMesh, so the lot is 14 draws.
 /// </summary>
-public sealed class BenchView
+public sealed partial class BenchView
 {
     const int PerBench = 7, Subs = PerBench * 2, Count = Subs + 2;
     const float THIGH = 0.43f, SHIN = 0.42f, HIP_Y = 0.94f, HEAD_TOP = 0.24f;
@@ -104,7 +104,10 @@ public sealed class BenchView
         public float Lift, Clap;
     }
 
-    readonly Fig[] _f = new Fig[Count];
+    readonly Fig[] _f;
+    // Each figure's slot in the kit arrays (ka/kb): the bench its own, the photographers their outfit's.
+    readonly int[] _pid;
+    readonly int _n;
     readonly MultiMesh[] _mm = new MultiMesh[BodyMeshes.PartCount];
     readonly float[][] _buf = new float[BodyMeshes.PartCount][];
     readonly Random _rng = new();
@@ -114,8 +117,12 @@ public sealed class BenchView
     Phase _phase;
     float _ballX, _ballZ;
 
-    public BenchView(Node3D root, Kit home, Kit away, Coach coach = null)
+    public BenchView(Node3D root, Kit home, Kit away, Coach coach = null, bool press = false)
     {
+        _n = Count + (press ? PressCount : 0);
+        _f = new Fig[_n];
+        _pid = new int[_n];
+        for (int i = 0; i < Count; i++) _pid[i] = i;
         var meshes = BodyMeshes.Build(0.5f);
         var shader = GD.Load<Shader>("res://Shaders/body.gdshader");
         var shaderDouble = GD.Load<Shader>("res://Shaders/body_double.gdshader");
@@ -128,7 +135,7 @@ public sealed class BenchView
             mats[k].SetShaderParameter("part", ShaderPart[k]);
             ka[k] = new Vector4[MatchSnapshot.N];
             kb[k] = new Vector4[MatchSnapshot.N];
-            int count = Count * PerPlayer[k];
+            int count = _n * PerPlayer[k];
             _mm[k] = new MultiMesh { TransformFormat = MultiMesh.TransformFormatEnum.Transform3D, UseColors = true, UseCustomData = true, Mesh = meshes[k] };
             _mm[k].InstanceCount = count;
             _buf[k] = new float[count * Stride];
@@ -179,12 +186,14 @@ public sealed class BenchView
             Shape(f, 0, false);
             Array.Copy(f.Tgt, f.Cur, ShapeN);
         }
+        if (press) PressInit(root, ka, kb);
         for (int k = 0; k < BodyMeshes.PartCount; k++)
         {
             mats[k].SetShaderParameter("ka", ka[k]);
             mats[k].SetShaderParameter("kb", kb[k]);
         }
         for (int i = 0; i < Count; i++) Pose(i, _f[i], 0);
+        if (press) PressUpdate(null, 0);
         Upload();
     }
 
@@ -248,19 +257,7 @@ public sealed class BenchView
             pattern = gk ? 0 : kit.Pattern;
             numCol = gk ? 0x1d1d1d : kit.Shirt2 == kit.Shirt ? 0xffffff : kit.Shirt2;
         }
-        void Set(Part part, int rgb)
-        {
-            int k = (int)part, per = PerPlayer[k];
-            var c = Lin(rgb);
-            for (int s = 0; s < per; s++)
-            {
-                int o = (id * per + s) * Stride + 12;
-                _buf[k][o] = c.R;
-                _buf[k][o + 1] = c.G;
-                _buf[k][o + 2] = c.B;
-                _buf[k][o + 3] = 1;
-            }
-        }
+        void Set(Part part, int rgb) => Paint(id, part, rgb);
         Set(Part.Torso, shirt);
         ka[(int)Part.Torso][id] = Lin4(trim, number);
         kb[(int)Part.Torso][id] = Lin4(numCol, pattern);
@@ -283,6 +280,21 @@ public sealed class BenchView
         Set(Part.HairBun, hair);
         Set(Part.Boot, boot);
         ka[(int)Part.Boot][id] = Lin4(sole, 0);
+    }
+
+    /// <summary>A figure's part in one colour (linear, in the instance colour).</summary>
+    void Paint(int id, Part part, int rgb)
+    {
+        int k = (int)part, per = PerPlayer[k];
+        var c = Lin(rgb);
+        for (int s = 0; s < per; s++)
+        {
+            int o = (id * per + s) * Stride + 12;
+            _buf[k][o] = c.R;
+            _buf[k][o + 1] = c.G;
+            _buf[k][o + 2] = c.B;
+            _buf[k][o + 3] = 1;
+        }
     }
 
     // ------------------------------------------------------------------ helpers
@@ -313,7 +325,7 @@ public sealed class BenchView
         a[o + 4] = x.Y; a[o + 5] = y.Y; a[o + 6] = z.Y; a[o + 7] = m.Origin.Y;
         a[o + 8] = x.Z; a[o + 9] = y.Z; a[o + 10] = z.Z; a[o + 11] = m.Origin.Z;
         a[o + 16] = c0; a[o + 17] = c1; a[o + 18] = c2;
-        a[o + 19] = PerPlayer[(int)part] == 2 ? index / 2 : index;
+        a[o + 19] = _pid[PerPlayer[(int)part] == 2 ? index / 2 : index];
     }
 
     void Upload()
@@ -351,6 +363,7 @@ public sealed class BenchView
             Shape(f, dt, reacting);
             Pose(i, f, dt);
         }
+        if (_n > Count) PressUpdate(s, dt);
         Upload();
     }
 
@@ -367,8 +380,9 @@ public sealed class BenchView
         _score0 = s.Score[0];
         _score1 = s.Score[1];
         if (scored >= 0)
-            foreach (var f in _f)
+            for (int i = 0; i < Count; i++)
             {
+                var f = _f[i];
                 bool ours = f.Team == scored;
                 if (f.Boss)
                 {
@@ -403,8 +417,9 @@ public sealed class BenchView
                 else Act(f, _rng.NextDouble() < 0.7 ? React.Despair : React.Sulk, R(0.3f, 1.2f), R(3, 6));
             }
         if (s.Phase != _phase && s.Phase == Phase.Fulltime)
-            foreach (var f in _f)
+            for (int i = 0; i < Count; i++)
             {
+                var f = _f[i];
                 bool won = f.Team == 0 ? s.Score[0] >= s.Score[1] : s.Score[1] >= s.Score[0];
                 if (f.Boss) Act(f, won ? React.Applaud : React.Slump, R(0.5f, 1.5f), R(6, 10));
                 else Act(f, won ? React.Clap : React.Sulk, R(0.2f, 1.5f), R(6, 10));
@@ -441,7 +456,7 @@ public sealed class BenchView
             return;
         }
         int up = 0;
-        foreach (var o in _f) if (o != f && !o.Boss && o.Team == f.Team && o.Want != Want.Sit) up++;
+        for (int i = 0; i < Count; i++) if (_f[i] is var o && o != f && !o.Boss && o.Team == f.Team && o.Want != Want.Sit) up++;
         double r = _rng.NextDouble();
         if (up >= 2 || r < 0.66)
         {

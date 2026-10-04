@@ -255,7 +255,7 @@ public abstract class Ground
         Root.AddChild(new Signage(ClubName, HomeColor, AwayColor, Banners, BoardArt, Paint, Art));
         Giant?.Attach(Root, Art, ClubName, HomeColor, Art.Motto?.text ?? "ONE CLUB · ONE NIGHT");
         FanBanners.Build(Root, Art.FanTifo, HomeColor);
-        if (_hasBench) _bench = new BenchView(Root, _kits[0], _kits[1], Club?.S.Coach);
+        if (_hasBench) _bench = new BenchView(Root, _kits[0], _kits[1], Club?.S.Coach, press: Crowd.Fans > 0);
         if (HasScreen) Root.AddChild(_screen = new ScreenView(ClubName, HomeShort, AwayShort, HomeColor, AwayColor, Art));
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--hang") >= 0) { _debugHang = true; _drop = 1; }
         GD.Print($"Ground {GetType().Name}: {Static.Count / 3} triangles, {Crowd.Fans} fans, {Flags.Count} flags; built in {tBuild} ms, total {clock.ElapsedMilliseconds} ms");

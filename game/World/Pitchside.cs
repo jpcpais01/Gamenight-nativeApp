@@ -94,9 +94,9 @@ public static class Pitchside
         }
     }
 
-    /// <summary>The people working the match round the pitch: ball boys sitting by the boards,
-    /// photographers crouched behind each goal line either side of the goal, stewards behind
-    /// the boards with their backs to the game, watching the stands. Drawn with the crowd.</summary>
+    /// <summary>The people working the match round the pitch: ball boys sitting by the boards and
+    /// stewards behind the boards with their backs to the game, watching the stands. Drawn with
+    /// the crowd (the photographers are real figures: BenchView.Press).</summary>
     public static void Staff(Crowd c, float side = HW + 3.8f, float end = HL + 4.5f)
     {
         var toPitchZ = new Vector3(0, 0, -1);
@@ -108,8 +108,6 @@ public static class Pitchside
             foreach (int sz in new[] { -1, 1 })
             {
                 c.Staff(new Vector3(sx * (end - 0.8f), 0, sz * 24), toPitch, Crowd.Role.BallBoy);
-                for (int k = 0; k < 6; k++)
-                    c.Staff(new Vector3(sx * (end - 1.1f - (k % 2) * 0.5f), 0, sz * (GoalHalf + 1.6f + k * 1.7f)), toPitch, Crowd.Role.Photographer);
                 foreach (float z in new[] { 9f, 26f }) c.Staff(new Vector3(sx * (end + 0.7f), 0, sz * z), -toPitch, Crowd.Role.Steward);
             }
         }
