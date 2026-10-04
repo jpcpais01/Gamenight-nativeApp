@@ -19,6 +19,8 @@ public sealed class MatchRunner : IDisposable
     public readonly Match Match;
     /// <summary>Optional: called after every Match.Step on the sim thread (a training Drill.Step).</summary>
     public Action? AfterStep;
+    /// <summary>The aimed corner / goal kick / cross flight preview, kept up to date every step.</summary>
+    public readonly DeliveryPreview Preview = new DeliveryPreview();
 
     readonly object gate = new object();
     readonly InputState staged = new InputState();
@@ -172,10 +174,12 @@ public sealed class MatchRunner : IDisposable
         act?.Invoke(Match);
         Match.Step(live);
         AfterStep?.Invoke();
+        Preview.Update(Match, live);
         live.Events.Clear();
         live.TackleSwipe = TackleSwipe.None;
         var e = Match.TakeEvents();
         Match.Write(work);
+        Preview.Write(work);
         lock (gate)
         {
             prev.CopyFrom(last);

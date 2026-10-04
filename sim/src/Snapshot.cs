@@ -81,6 +81,12 @@ public sealed class MatchSnapshot
     /// <summary>The dead-ball shot's aim point on the goal mouth (Match.AimPoint()).</summary>
     public bool HasAimPoint;
     public float AimX, AimY, AimZ;
+    /// <summary>The aimed delivery's dotted flight (DeliveryPreview): ArcCount points from the foot to where
+    /// it comes down, to draw faint to strong, and the ring where it lands.</summary>
+    public bool HasArc;
+    public int ArcCount;
+    public readonly float[] ArcX = new float[DeliveryPreview.Dots], ArcY = new float[DeliveryPreview.Dots], ArcZ = new float[DeliveryPreview.Dots];
+    public float ArcRingX, ArcRingZ;
     public CelebrationKind? Celebration;
     public float CelebrationAt;
     public float Excitement;
@@ -126,6 +132,8 @@ public sealed class MatchSnapshot
         DeadBallTaker = o.DeadBallTaker; DeadBallX = o.DeadBallX; DeadBallZ = o.DeadBallZ; DeadBallKind = o.DeadBallKind;
         AimingCorner = o.AimingCorner; AimingGoalKick = o.AimingGoalKick; AimingShot = o.AimingShot;
         HasAimPoint = o.HasAimPoint; AimX = o.AimX; AimY = o.AimY; AimZ = o.AimZ;
+        HasArc = o.HasArc; ArcCount = o.ArcCount; ArcRingX = o.ArcRingX; ArcRingZ = o.ArcRingZ;
+        Array.Copy(o.ArcX, ArcX, ArcX.Length); Array.Copy(o.ArcY, ArcY, ArcY.Length); Array.Copy(o.ArcZ, ArcZ, ArcZ.Length);
         Celebration = o.Celebration; CelebrationAt = o.CelebrationAt; Excitement = o.Excitement;
         KickCount = o.KickCount; KickMax = o.KickMax;
         Whistle = o.Whistle; Goal = o.Goal; Foul = o.Foul; Card = o.Card; Offside = o.Offside;
