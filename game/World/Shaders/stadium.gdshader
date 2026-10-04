@@ -10,7 +10,8 @@ render_mode unshaded, cull_disabled, shadows_disabled, depth_draw_opaque;
 
 const float LOOK_ROOF = 1.0, LOOK_GLASS = 2.0, LOOK_CURTAIN = 3.0, LOOK_FASCIA = 4.0, LOOK_RIBBON = 5.0,
 	LOOK_LAMP = 6.0, LOOK_ROOFLIGHT = 7.0, LOOK_BOARD = 8.0, LOOK_TIER = 9.0, LOOK_SCREEN = 10.0,
-	LOOK_CLOTH = 11.0, LOOK_STIPPLE = 12.0, LOOK_UNLIT = 13.0, LOOK_ARCADE = 14.0, LOOK_COFFER = 15.0, LOOK_WALL = 16.0, LOOK_BRICK = 17.0;
+	LOOK_CLOTH = 11.0, LOOK_STIPPLE = 12.0, LOOK_UNLIT = 13.0, LOOK_ARCADE = 14.0, LOOK_COFFER = 15.0, LOOK_WALL = 16.0, LOOK_BRICK = 17.0,
+	LOOK_DECAL = 18.0, LOOK_HOUSE = 19.0;
 
 varying vec3 wpos;
 varying vec3 wnrm;
@@ -147,6 +148,24 @@ void fragment() {
 		b.x += 0.5 * step(0.5, fract(b.y * 0.5));
 		float mortar = max(step(0.9, fract(b.y)), step(0.94, fract(b.x)));
 		alb *= mix(0.86 + 0.2 * world_hash(floor(b)), 1.35, mortar) * (1.0 - 0.25 * smoothstep(3.0, 0.0, uv.y));
+	} else if (look == LOOK_DECAL) {
+		// A painted sign: uv is straight atlas uv (0..1). par 1: self-lit (a clock face, a lit sign).
+		vec3 t = texture(gn_atlas, uv).rgb;
+		alb = t * (1.0 - par);
+		emis = t * par * (0.55 + gn_flood * 0.45);
+	} else if (look == LOOK_HOUSE) {
+		// Terraced houses (world-space layout): brick or painted fronts, warm windows at night.
+		float s = abs(wnrm.x) > 0.5 ? wpos.z : wpos.x;
+		float y = wpos.y;
+		float hh = world_hash(vec2(floor(s / 5.0), floor(wpos.x * 0.01 + wpos.z * 0.013)));
+		vec3 wall = hh < 0.62 ? mix(vec3(0.55, 0.3, 0.22), vec3(0.42, 0.24, 0.2), fract(hh * 7.0))
+			: hh < 0.82 ? vec3(0.82, 0.78, 0.68) : vec3(0.62, 0.6, 0.55);
+		wall = pow(wall, vec3(2.2));
+		vec2 w = vec2(fract(s / 2.5), fract(y / 3.0));
+		float win = step(abs(w.x - 0.5), 0.2) * step(0.32, w.y) * step(w.y, 0.8) * step(y, 6.0) * step(abs(wnrm.y), 0.5);
+		float on = step(0.55, world_hash(vec2(floor(s / 2.5), floor(y / 3.0)) + 3.3));
+		alb = mix(wall, vec3(0.01), win);
+		emis = vec3(1.0, 0.5, 0.17) * win * on * gn_flood * 0.9;
 	} else if (look == LOOK_UNLIT) {
 		emis = alb;
 		alb = vec3(0.0);

@@ -38,6 +38,8 @@ public abstract class Ground
     protected float Haze = 1f;
     /// <summary>The height map's extent (must cover every caster, the near stand included).</summary>
     protected Rect2 BakeArea = new(-130, -120, 260, 230);
+    /// <summary>The land beyond the pitch's apron (sRGB): the grey track, or grass.</summary>
+    protected Vector3 Land = new(0.16f, 0.15f, 0.16f);
 
     public uint HomeColor = 0xc8393b, AwayColor = 0x2a4a8c;
     public string ClubName = "Rossoneri";
@@ -62,6 +64,19 @@ public abstract class Ground
         cam.Fov = 50;
     }
 
+    /// <summary>This ground's own art in the atlas (x 0..1024, y 640..768).</summary>
+    protected virtual void Paint(Signage s) { }
+
+    /// <summary>A sign facing `n`, centred at `c`, w x h metres, showing atlas pixels `px`.</summary>
+    protected static void Sign(MeshData m, Vector3 c, Vector3 n, float w, float h, Rect2 px, bool selfLit = false)
+    {
+        m.Hex(0xffffff, Look.Decal, selfLit ? 1 : 0);
+        var x = Vector3.Up.Cross(n).Normalized() * (w / 2);
+        var y = new Vector3(0, h / 2, 0);
+        Vector2 u0 = px.Position / 1024f, u1 = px.End / 1024f;
+        m.QuadUV(c - x - y, c + x - y, c + x + y, c - x + y, new(u0.X, u1.Y), new(u1.X, u1.Y), new(u1.X, u0.Y), new(u0.X, u0.Y));
+    }
+
     /// <summary>Banks that get a visible glow (default: all of them).</summary>
     protected virtual Vector3[] GlowSpots => Lamps;
 
@@ -73,6 +88,8 @@ public abstract class Ground
         return id switch
         {
             "comunale" => new Comunale(),
+            "old" => new OldGround(),
+            "training" => new TrainingGround(),
             _ => new BigStadium(),
         };
     }
@@ -86,6 +103,7 @@ public abstract class Ground
         RenderingServer.GlobalShaderParameterSet("gn_away", Lin(AwayColor));
         RenderingServer.GlobalShaderParameterSet("gn_fog_range", FogRange);
         RenderingServer.GlobalShaderParameterSet("gn_haze", Haze);
+        RenderingServer.GlobalShaderParameterSet("gn_land", Land);
         RenderingServer.GlobalShaderParameterSet("gn_flood_col", Lin(0xfff4e0));
         RenderingServer.GlobalShaderParameterSet("gn_goal", new Vector2(-1, 100));
         Atmosphere.Set(0);
@@ -111,7 +129,7 @@ public abstract class Ground
         Root.AddChild(mi);
         Crowd.Build(Root, bake);
         if (GlowSpots.Length > 0) _glows = new GlowView(Root, GlowSpots);
-        Root.AddChild(new Signage(ClubName, HomeColor, AwayColor, Banners, BoardArt));
+        Root.AddChild(new Signage(ClubName, HomeColor, AwayColor, Banners, BoardArt, Paint));
         GD.Print($"Ground {GetType().Name}: {Static.Count / 3} triangles, {Crowd.Fans} fans; built in {tBuild} ms, total {clock.ElapsedMilliseconds} ms");
         return this;
     }

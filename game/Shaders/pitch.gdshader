@@ -17,7 +17,8 @@ const float CIRCLE = 9.15;
 uniform vec3 grass_dark = vec3(0.20, 0.40, 0.16);
 uniform vec3 grass_light = vec3(0.25, 0.47, 0.19);
 uniform vec3 surround = vec3(0.17, 0.33, 0.14);
-uniform vec3 track = vec3(0.16, 0.15, 0.16);
+// Beyond the apron: the ground sets it (grey track, or grass at the training ground). sRGB.
+global uniform vec3 gn_land;
 uniform vec3 chalk = vec3(0.92, 0.93, 0.88);
 uniform float line_half_width = 0.06;
 
@@ -82,7 +83,7 @@ void fragment() {
 	float outside = max(o.x, o.y);
 	g = mix(g, surround * (0.92 + 0.08 * band), step(0.0, outside) * 0.55);
 	float trackMask = step(9.0, outside);
-	g = mix(g, track * (0.9 + 0.1 * vnoise(p * 1.7)), trackMask);
+	g = mix(g, gn_land * (0.9 + 0.1 * vnoise(p * 1.7)), trackMask);
 
 	// Chalk: hard-edged, never thinner than about one art pixel (so far lines don't break up).
 	float d = lines_dist(p);

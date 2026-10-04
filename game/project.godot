@@ -92,6 +92,10 @@ gn_fog_range={
 "type": "vec2",
 "value": Vector2(95, 300)
 }
+gn_land={
+"type": "vec3",
+"value": Vector3(0.16, 0.15, 0.16)
+}
 gn_haze={
 "type": "float",
 "value": 1.0
