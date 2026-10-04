@@ -34,6 +34,8 @@ public partial class Main : Node
     public readonly MatchSound Sound = new();
     MatchCamera _camera;
     PlayersView _players;
+    Officials _officials;
+    Goals _goals;
     DeliveryView _delivery;
     TouchControls _controls;
     Hud _hud;
@@ -58,6 +60,8 @@ public partial class Main : Node
         World.Build(_view.WorldRoot);
         _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup).AddTo(_view.WorldRoot);
         _players = new PlayersView(_view.WorldRoot);
+        _officials = new Officials(_view.WorldRoot);
+        _goals = new Goals(_view.WorldRoot);
         _delivery = new DeliveryView(_view.WorldRoot);
         _camera = new MatchCamera(_view.Camera);
 
@@ -81,6 +85,7 @@ public partial class Main : Node
         _replay.OnRewind = _players.Snap;
         _replay.OnEvents = f =>
         {
+            if (f.Net > 0) _goals.Impact(f.BallX, f.BallY, f.BallZ, f.Net, _time);
             var audio = GameAudio.Instance;
             if (audio == null) return;
             if (f.KickMax > 0) audio.Kick(f.KickMax);
@@ -125,6 +130,7 @@ public partial class Main : Node
         _runner?.Stop();
         if (Directed) EndDirected();
         _replay.Reset();
+        _officials.Reset();
         _match = Request != null ? new Match(Request.Seed, Request.Setup) : new Match(seed: DateTime.Now.Ticks % 2147483647);
         if (Request?.Demo == true) _match.AutoPlay = true;
         // Names and kits are read before the match's own thread starts.
@@ -271,6 +277,12 @@ public partial class Main : Node
             }
         }
         _delivery.Update(_cur);
+        // The referee and his assistants (not at training, and off screen during the walk-out).
+        _officials.Visible = Request?.Drill == null && !Cutscene.Active;
+        if (Request?.Drill == null) _officials.Update(_match, _cur, _time, Directed ? 0 : run);
+        // The net takes the ball (live, or again on the replay's tape).
+        if (!Directed && _cur.Net > 0) _goals.Impact(_cur.BallX, _cur.BallY, _cur.BallZ, _cur.Net, _time);
+        _goals.Update(_time);
         _ground.Update(_cur, _time, dt);
         Sound.Frame(_match, _cur, Request?.Demo != true, Request?.Drill == null, Request?.Drill != null, _pause.IsOpen ? 0 : dt);
         _view.Present(_camera.SubPixelX, _camera.SubPixelY);

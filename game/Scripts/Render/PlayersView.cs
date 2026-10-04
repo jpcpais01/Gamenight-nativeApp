@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Godot;
 using GameNight.Sim;
 using Part = GameNight.Render.BodyMeshes.Part;
@@ -76,7 +77,11 @@ public sealed class PlayersView
     float _ikH, _ikK, _ikOut;
     Transform3D _pinv;
 
-    public PlayersView(Node3D root)
+    readonly List<MultiMeshInstance3D> _instances = new();
+    readonly Vector4[][] _ka = new Vector4[BodyMeshes.PartCount][], _kb = new Vector4[BodyMeshes.PartCount][];
+
+    /// <summary>The bodies only (no ball, no markers): for the officials, or anyone else drawn as a player.</summary>
+    public PlayersView(Node3D root, bool matchProps = true)
     {
         var meshes = BodyMeshes.Build();
         var shader = GD.Load<Shader>("res://Shaders/body.gdshader");
@@ -97,15 +102,20 @@ public sealed class PlayersView
             mm.InstanceCount = count;
             _mm[k] = mm;
             _buf[k] = new float[count * Stride];
-            root.AddChild(new MultiMeshInstance3D
+            _ka[k] = new Vector4[N];
+            _kb[k] = new Vector4[N];
+            var inst = new MultiMeshInstance3D
             {
                 Multimesh = mm,
                 MaterialOverride = mat,
                 CastShadow = NoShadow[k] ? GeometryInstance3D.ShadowCastingSetting.Off : GeometryInstance3D.ShadowCastingSetting.On,
                 // The squad spans the pitch; never cull it.
                 ExtraCullMargin = 200,
-            });
+            };
+            root.AddChild(inst);
+            _instances.Add(inst);
         }
+        if (!matchProps) return;
 
         var ballMesh = new SphereMesh { Radius = 0.11f, Height = 0.22f, RadialSegments = 8, Rings = 4 };
         _ball = Geo.Instance(root, ballMesh, new StandardMaterial3D { AlbedoColor = new Color(0.97f, 0.97f, 0.95f), Roughness = 0.5f }, shadows: true);
@@ -130,23 +140,68 @@ public sealed class PlayersView
         Array.Clear(_ikOn);
     }
 
+    // ---- the officials (set only on their view): the referee's pointing arm, the linesmen's flags.
+    public float RefPoint, RefPointSide = 1;
+    public int RefSlot = -1;
+    public int[] LineSlots = Array.Empty<int>();
+    public readonly float[] FlagUp = new float[2];
+    MeshInstance3D[] _flags;
+
+    /// <summary>A flag in each linesman's right hand: a short stick with a checked cloth.</summary>
+    public void AddFlags(Node3D root)
+    {
+        var st = new SurfaceTool();
+        st.Begin(Mesh.PrimitiveType.Triangles);
+        st.SetColor(new Color(0, 0, 0));
+        Geo.Box(st, new Vector3(-0.01f, -0.475f, -0.01f), new Vector3(0.01f, 0.075f, 0.01f));
+        st.SetColor(new Color(1, 1, 1));
+        Geo.Quad(st, new Vector3(0.15f, -0.46f, 0.15f), new Vector3(0.15f, -0.46f, -0.15f), new Vector3(0.15f, -0.24f, -0.15f), new Vector3(0.15f, -0.24f, 0.15f), 1, 1);
+        var mesh = st.Commit();
+        var mat = Geo.Material("res://Shaders/flag.gdshader");
+        _flags = new MeshInstance3D[2];
+        for (int i = 0; i < 2; i++)
+        {
+            _flags[i] = Geo.Instance(root, mesh, mat);
+            _flags[i].CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        }
+    }
+
+    /// <summary>Shown or hidden as a whole.</summary>
+    public bool Visible
+    {
+        set
+        {
+            foreach (var i in _instances) i.Visible = value;
+            if (_flags != null)
+                foreach (var f in _flags) f.Visible = value;
+        }
+    }
+
     /// <summary>A new match: each player's body, kit, skin, hair and boots.</summary>
     public void SetMatch(Match m)
     {
         Snap();
         _lastTime = -1;
-        var ka = new Vector4[BodyMeshes.PartCount][];
-        var kb = new Vector4[BodyMeshes.PartCount][];
-        for (int k = 0; k < BodyMeshes.PartCount; k++)
-        {
-            ka[k] = new Vector4[N];
-            kb[k] = new Vector4[N];
-        }
-        var rng = new Random();
         foreach (var p in m.All)
         {
-            int id = p.Id;
-            if (id < 0 || id >= N) continue;
+            if (p.Id < 0 || p.Id >= N) continue;
+            var team = m.Teams[p.Team];
+            bool captain = team.Captain == p.Index && team.Players.Count > p.Index && team.Players[p.Index] == p;
+            int number = p.Number > 0 ? p.Number : p.Role == Role.GK ? 1 : p.Index + 1;
+            SetBody(p.Id, p, team.Info.Kit, number, captain);
+        }
+        Flush();
+    }
+
+    readonly Random _rng = new();
+
+    /// <summary>One body in slot id: his build, the kit (a keeper wears its keeper colours), number
+    /// (negative: none) and armband. Call Flush when done.</summary>
+    public void SetBody(int id, Player p, Kit kit, int number, bool captain)
+    {
+        var ka = _ka;
+        var kb = _kb;
+        {
             var b = Body.Shape(p.Attrs.Height, p.Attrs.Weight, p.Attrs.Strength, id * 7 + p.Index + (p.Name.Length > 0 ? p.Name.Length * 13 : 0));
             _body[id] = b;
             float hip = (THIGH + SHIN) * (float)b.Leg + (HIP_Y - THIGH - SHIN);
@@ -154,8 +209,6 @@ public sealed class PlayersView
             _bodyScale[id] = BASE_HEIGHT / (hip + 0.04f + 0.6f * (float)b.TorsoL + ((float)b.NeckLen - 1) * 0.08f + HEAD_TOP);
             _hair[id] = Math.Clamp(p.Look.HairStyle, 0, 3);
 
-            var team = m.Teams[p.Team];
-            var kit = team.Info.Kit;
             bool gk = p.Role == Role.GK;
             int shirt = gk ? kit.GkShirt : kit.Shirt;
             int trim = gk ? kit.GkShorts : kit.Shirt2;
@@ -175,12 +228,10 @@ public sealed class PlayersView
                 }
             }
             Set(Part.Torso, shirt);
-            int num = p.Number > 0 ? p.Number : gk ? 1 : p.Index + 1;
-            ka[(int)Part.Torso][id] = Lin4(trim, num);
+            ka[(int)Part.Torso][id] = Lin4(trim, number);
             // Numbers in the trim colour unless that's too close to the shirt.
             kb[(int)Part.Torso][id] = Lin4(gk ? 0x1d1d1d : kit.Shirt2 == kit.Shirt ? 0xffffff : kit.Shirt2, gk ? 0 : kit.Pattern);
             Set(Part.UpperArm, shirt);
-            bool captain = team.Captain == p.Index && team.Players.Count > p.Index && team.Players[p.Index] == p;
             ka[(int)Part.UpperArm][id] = Lin4(trim, captain ? 1 : 0);
             kb[(int)Part.UpperArm][id] = Lin4(gk ? shirt : skin, 0);
             Set(Part.Forearm, gk ? shirt : skin);
@@ -197,14 +248,19 @@ public sealed class PlayersView
             Set(Part.HairShort, hair);
             Set(Part.HairCurly, hair);
             Set(Part.HairBun, hair);
-            var (boot, sole) = Boots[rng.Next(Boots.Length)];
+            var (boot, sole) = Boots[_rng.Next(Boots.Length)];
             Set(Part.Boot, boot);
             ka[(int)Part.Boot][id] = Lin4(sole, 0);
         }
+    }
+
+    /// <summary>Hand the kits set by SetBody to the shaders.</summary>
+    public void Flush()
+    {
         for (int k = 0; k < BodyMeshes.PartCount; k++)
         {
-            _mat[k].SetShaderParameter("ka", ka[k]);
-            _mat[k].SetShaderParameter("kb", kb[k]);
+            _mat[k].SetShaderParameter("ka", _ka[k]);
+            _mat[k].SetShaderParameter("kb", _kb[k]);
         }
     }
 
@@ -361,6 +417,7 @@ public sealed class PlayersView
             PosePlayer(a, b, alpha, id, time, dt, mt, held, owner, throwInSp, ballX, ballY, ballZ, ballVX, ballVZ);
         }
         for (int k = 0; k < BodyMeshes.PartCount; k++) _mm[k].Buffer = _buf[k];
+        if (_ball == null) return;
 
         _ball.Position = new Vector3(Mathf.Lerp(a.BallX, b.BallX, alpha), Mathf.Lerp(a.BallY, b.BallY, alpha), Mathf.Lerp(a.BallZ, b.BallZ, alpha));
 
@@ -1328,6 +1385,36 @@ public sealed class PlayersView
             armOutL = armOutR = 0.3f + 0.2f * MathF.Sin(time * 9 + id);
         }
 
+        // Officials' signals: the referee points for a restart, linesmen raise the flag.
+        if (id == RefSlot && RefPoint > 0)
+        {
+            // Arm straight out, level, toward the way play goes: the arm on that side, swung
+            // up to horizontal and round from the front by the angle to it.
+            float k = Smooth(0, 0.25f, RefPoint) * Smooth(2.2f, 1.9f, RefPoint);
+            float fw = RefPointSide * MathF.Cos(facing), lf = RefPointSide * MathF.Sin(facing);
+            float ang = MathF.Atan2(MathF.Abs(lf), fw);
+            if (lf > 0)
+            {
+                armL = Lerp(armL, PI / 2, k);
+                armOutL = Lerp(armOutL, ang, k);
+                elbowL = Lerp(elbowL, 0.05f, k);
+            }
+            else
+            {
+                armR = Lerp(armR, PI / 2, k);
+                armOutR = Lerp(armOutR, ang, k);
+                elbowR = Lerp(elbowR, 0.05f, k);
+            }
+        }
+        int li = Array.IndexOf(LineSlots, id);
+        if (li >= 0)
+        {
+            float up = Smooth(0, 0.2f, FlagUp[li]) * Smooth(2.0f, 1.8f, FlagUp[li]);
+            armR = Lerp(armR * 0.5f, -2.95f, up);
+            armOutR = Lerp(0.12f, 0.08f, up);
+            elbowR = Lerp(0.35f, 0.05f, up);
+        }
+
         // ---------------- secondary motion: limbs and head carry inertia
         bool sc0 = !_secReady[id];
         float yNow = hipY + lift;
@@ -1531,6 +1618,11 @@ public sealed class PlayersView
             var j3 = Chain(j2, 0, -0.245f * armLen, 0, wristFree ? (sd == 0 ? wristL : wristR) : 0.1f, 0, sideSign * -0.08f);
             float g = gk ? 1.25f : 1;
             Put(Part.Hand, id * 2 + sd, j3, g, g, g);
+            if (sd == 1 && _flags != null)
+            {
+                int fi = Array.IndexOf(LineSlots, id);
+                if (fi >= 0) _flags[fi].Transform = ChainT(j3, 0, -0.08f, 0.02f);
+            }
         }
 
         // Legs: the thigh curves into a soft knee (shader bend), the shin takes the rest. Through
