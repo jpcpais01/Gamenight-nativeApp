@@ -54,6 +54,8 @@ public sealed class BuiltGround : Ground
     {
         // The builder's camera stands well back: thin the haze for it.
         if (_preview) FogRange = new(260, 700);
+        // Room for the biggest sets' backs and towers in the sun's height map.
+        BakeArea = new Rect2(-150, -140, 300, 280);
         Banners = new[]
         {
             new BannerArt(ClubName.ToUpperInvariant(), HomeColor, 0xf3eee2, 1),

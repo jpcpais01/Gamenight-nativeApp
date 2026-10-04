@@ -107,20 +107,22 @@ public sealed partial class StadiumScreen : PxCanvas
         if (_building || _changedAt >= 0)
             Px.TextR(this, Px.Big, W - 20, 82, (T % 0.6) < 0.3 ? "BUILDING..." : "BUILDING", 22, Px.Gold, new Color(0, 0, 0, 0.6f), 2);
 
-        // The five sets along the bottom.
-        float x0 = 340, x1 = W - 16, y0 = H - 96, gap = 10;
-        float cw = (x1 - x0 - gap * (Kit.Sets.Length - 1)) / Kit.Sets.Length;
+        // The sets along the bottom, in two rows.
+        int per = (Kit.Sets.Length + 1) / 2;
+        float x0 = 340, x1 = W - 16, gap = 6, ch = 44;
+        float cw = (x1 - x0 - gap * (per - 1)) / per;
         for (int i = 0; i < Kit.Sets.Length; i++)
         {
             int idx = i;
             var s = Kit.Sets[i];
-            var r = new Rect2(x0 + i * (cw + gap), y0, cw, 80);
+            var r = new Rect2(x0 + i % per * (cw + gap), H - 16 - (2 - i / per) * (ch + gap) + gap, cw, ch);
             bool on = Plan.Get(Selected) == i;
             bool held = Held("set" + i);
             var rr = held ? new Rect2(r.Position + new Vector2(2, 2), r.Size) : r;
             Px.Frame(this, rr, on ? Px.Gold : Px.Glass2, on ? Px.Hex(0xb37400) : Px.Line2, held ? null : Px.ShadowSoft);
-            Swatch(new Rect2(rr.Position + new Vector2(10, 10), new Vector2(rr.Size.X - 20, 30)), i);
-            Px.TextC(this, Px.Big, rr.GetCenter().X, rr.End.Y - 14, s.Name, 22, on ? Px.Dark : Px.Ink);
+            float sw = Mathf.Clamp(cw - 82, 18, 46);
+            Swatch(new Rect2(rr.Position + new Vector2(7, 7), new Vector2(sw, ch - 14)), i);
+            Px.Text(this, Px.Big, new Vector2(rr.Position.X + sw + 12, rr.GetCenter().Y + 7), Px.Fit(Px.Big, s.Name, 19, cw - sw - 17), 19, on ? Px.Dark : Px.Ink);
             Tap("set" + i, r, () => Choose(idx));
         }
     }
@@ -152,6 +154,32 @@ public sealed partial class StadiumScreen : PxCanvas
                 DrawColoredPolygon(new[] { P(0, 0), P(0, 0.1f), P(0.68f, 0.82f), P(0.72f, 0.82f), P(0.72f, 0) }, c);
                 DrawColoredPolygon(new[] { P(0.12f, 0.88f), P(0.78f, 0.88f), P(0.78f, 0.82f), P(0.12f, 0.82f) }, dark);
                 DrawRect(new Rect2(P(0.8f, 1), new Vector2(Mathf.Max(3, w * 0.05f), h)), c.Lightened(0.2f));
+                break;
+            case 5: // containers stacked, a crane
+                for (int i = 0; i < 6; i++) DrawRect(new Rect2(P(0.05f + i % 3 * 0.22f, 0.25f + i / 3 * 0.25f), new Vector2(w * 0.2f, h * 0.22f)), Px.Hex(new[] { 0xc0392b, 0x2f7fb8, 0xe0a030, 0x2e8b57, 0xd35400, 0xbdc3c7 }[i]));
+                DrawRect(new Rect2(P(0.8f, 0.95f), new Vector2(3, h * 0.95f)), dark);
+                DrawRect(new Rect2(P(0.45f, 0.95f), new Vector2(w * 0.5f, 3)), dark);
+                break;
+            case 6: // a tier under a swept roof, red pillars
+                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.8f, 0.45f), P(0.8f, 0) }, Px.Hex(0x6e2a22));
+                DrawColoredPolygon(new[] { P(0, 0.62f), P(0.15f, 0.55f), P(0.9f, 0.8f), P(1, 0.72f), P(0.9f, 0.86f), P(0.1f, 0.66f) }, Px.Hex(0x34433f).Lightened(0.2f));
+                for (int i = 0; i < 3; i++) DrawRect(new Rect2(P(0.1f + i * 0.25f, 0.6f), new Vector2(2, h * 0.5f)), c);
+                break;
+            case 7: // stepped cream stand and its clock tower
+                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.15f), P(0.55f, 0.55f), P(0.62f, 0.55f), P(0.62f, 0.68f), P(0.7f, 0.68f), P(0.7f, 0) }, c);
+                DrawRect(new Rect2(P(0.75f, 1), new Vector2(w * 0.16f, h)), c);
+                DrawRect(new Rect2(P(0.78f, 0.82f), new Vector2(w * 0.1f, w * 0.1f)), Px.Hex(0xd4a63a));
+                break;
+            case 8: // black rock, a lava seam, a spire
+                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.1f), P(0.6f, 0.75f), P(0.7f, 0.9f), P(0.8f, 0.7f), P(1, 0) }, Px.Hex(0x3a3533).Lightened(0.15f));
+                DrawRect(new Rect2(P(0.1f, 0.3f), new Vector2(w * 0.5f, 2)), c);
+                DrawColoredPolygon(new[] { P(0.85f, 0), P(0.9f, 1), P(0.95f, 0) }, Px.Hex(0x4d4642).Lightened(0.2f));
+                DrawRect(new Rect2(P(0.88f, 1.0f), new Vector2(4, 3)), Px.Hex(0xffb347));
+                break;
+            case 9: // white tiers under a floating halo
+                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.65f, 0.55f), P(0.7f, 0.55f), P(0.7f, 0) }, Px.Hex(0xe6eaee));
+                DrawRect(new Rect2(P(0.05f, 0.85f), new Vector2(w * 0.85f, 3)), c);
+                DrawRect(new Rect2(P(0.78f, 0.85f), new Vector2(2, h * 0.85f)), Px.Hex(0xe6eaee));
                 break;
             default: // walls, battlements and a keep
                 DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.62f, 0.55f), P(0.62f, 0.6f), P(0.7f, 0.6f), P(0.7f, 0) }, c);
