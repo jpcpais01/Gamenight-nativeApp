@@ -86,6 +86,8 @@ jobs:
           name="${base%.*}.${{ github.run_number }}"
           echo "APP_VERSION=$name" >> $GITHUB_ENV
           sed -i "s/^version\/code=.*/version\/code=${{ github.run_number }}/; s/^version\/name=.*/version\/name=\"$name\"/" export_presets.cfg
+          # The app reads its own version (shown on the home screen) from the project settings.
+          sed -i "s/^config\/version=.*/config\/version=\"$name\"/" project.godot
 
       - name: Signing key
         env:

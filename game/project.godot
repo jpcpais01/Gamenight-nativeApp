@@ -11,8 +11,8 @@ config_version=5
 [application]
 
 config/name="GameNight"
-config/version="0.1.0"
-run/main_scene="res://Main.tscn"
+config/version="0.2.0"
+run/main_scene="res://App.tscn"
 config/features=PackedStringArray("4.7", "C#", "Mobile")
 boot_splash/bg_color=Color(0.054902, 0.0627451, 0.0901961, 1)
 boot_splash/show_image=false
@@ -53,3 +53,78 @@ lights_and_shadows/positional_shadow/atlas_size=0
 lights_and_shadows/positional_shadow/atlas_size.mobile=0
 environment/defaults/default_clear_color=Color(0.054902, 0.0627451, 0.0901961, 1)
 textures/vram_compression/import_etc2_astc=true
+
+[shader_globals]
+
+gn_sun_dir={
+"type": "vec3",
+"value": Vector3(0.4, -0.5, -0.7)
+}
+gn_sun={
+"type": "vec3",
+"value": Vector3(1, 0.9, 0.7)
+}
+gn_amb_sky={
+"type": "vec3",
+"value": Vector3(0.3, 0.33, 0.45)
+}
+gn_amb_ground={
+"type": "vec3",
+"value": Vector3(0.15, 0.17, 0.1)
+}
+gn_flood={
+"type": "float",
+"value": 0.0
+}
+gn_flood_col={
+"type": "vec3",
+"value": Vector3(1, 0.9, 0.78)
+}
+gn_fog={
+"type": "vec3",
+"value": Vector3(0.7, 0.65, 0.55)
+}
+gn_fog_range={
+"type": "vec2",
+"value": Vector2(95, 300)
+}
+gn_haze={
+"type": "float",
+"value": 1.0
+}
+gn_night={
+"type": "float",
+"value": 0.0
+}
+gn_excite={
+"type": "float",
+"value": 0.2
+}
+gn_goal={
+"type": "vec2",
+"value": Vector2(-1, 100)
+}
+gn_tifo={
+"type": "float",
+"value": 0.0
+}
+gn_home={
+"type": "vec3",
+"value": Vector3(0.58, 0.04, 0.045)
+}
+gn_away={
+"type": "vec3",
+"value": Vector3(0.023, 0.07, 0.26)
+}
+gn_atlas={
+"type": "sampler2D",
+"value": ""
+}
+gn_light_map={
+"type": "sampler2D",
+"value": ""
+}
+gn_light_rect={
+"type": "vec4",
+"value": Vector4(-84, -58, 0.005952, 0.008621)
+}
