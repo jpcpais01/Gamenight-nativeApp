@@ -2,6 +2,7 @@ using System;
 using Godot;
 using GameNight.Render;
 using GameNight.Sim;
+using GameNight.Club;
 using Part = GameNight.Render.BodyMeshes.Part;
 
 namespace GameNight.Grounds;
@@ -18,7 +19,8 @@ namespace GameNight.Grounds;
 /// attacks, leaping up for a goal, hands on heads or slumped when they concede, clapping or
 /// sulking at the end. The managers drift along the line with the play, arms folded, hands in
 /// pockets, a hand on the chin, shouting, pointing, waving the team on; a goal brings the fist
-/// pump or the arms out wide.
+/// pump or the arms out wide. The home manager is the club's own, as made in the coach
+/// designer (looks, outfit, temper); the visitors' gets a random outfit and temper.
 ///
 /// Purely visual (its own Random): the simulation doesn't know they exist. Every part is one
 /// MultiMesh, so the lot is 14 draws.
@@ -78,7 +80,7 @@ public sealed class BenchView
         (1.1f, 1.08f, 1, 1, 0.1f, -0.05f, -0.15f, Thighs),        // slouched, legs stretched
     };
     static readonly float[][] Stands = { Folded, Hips, Behind, null };
-    static readonly float[][] Idles = { Folded, Hips, Behind, Pockets, Chin, Shout, Point, Beckon, Watch, Folded, Pockets };
+    static readonly float[][] Idles = { Folded, Hips, Behind, Pockets, Chin, Shout, Point, Beckon, Watch, Clap };
 
     enum Want { Sit, Stand, Warm }
     enum React { None, Cheer, Despair, Sulk, Clap, Fist, What, Face, Applaud, Slump }
@@ -95,6 +97,7 @@ public sealed class BenchView
         public float Until, SpotX, SpotZ, StretchUntil;
         public float Sit = 1;
         public int Style, Stand, Idle;
+        public CoachTemper Temper;
         public React React;
         public float ReactAt, ReactEnd, Ph;
         public int V;
@@ -112,7 +115,7 @@ public sealed class BenchView
     Phase _phase;
     float _ballX, _ballZ;
 
-    public BenchView(Node3D root, Kit home, Kit away)
+    public BenchView(Node3D root, Kit home, Kit away, Coach coach = null)
     {
         var meshes = BodyMeshes.Build();
         var shader = GD.Load<Shader>("res://Shaders/body.gdshader");
@@ -145,11 +148,13 @@ public sealed class BenchView
             int team = boss ? i - Subs : i / PerBench, seat = i % PerBench;
             float cx = (team == 0 ? -1 : 1) * DugX;
             var f = _f[i] = new Fig { Team = team, Boss = boss, Gk = !boss && seat == 0, Ph = R(0, 100), V = _rng.Next(3) };
-            double hM = boss ? R(1.72f, 1.88f) : R(1.74f, 1.94f), wKg = boss ? R(76, 92) : R(68, 86);
+            var mine = boss && team == 0 ? coach : null;
+            double hM = mine?.Height ?? (boss ? R(1.72f, 1.88f) : R(1.74f, 1.94f));
+            double wKg = mine != null ? hM * hM * (mine.Build == 0 ? 21.5 : mine.Build == 2 ? 29 : 25) : boss ? R(76, 92) : R(68, 86);
             f.B = Body.Shape(hM, wKg, 0.5, i * 17.3 + _rng.NextDouble() * 50);
             f.Leg = (float)f.B.Leg;
             f.HipBase = (THIGH + SHIN) * f.Leg + (HIP_Y - THIGH - SHIN);
-            float h = boss ? R(0.97f, 1.02f) : R(0.97f, 1.05f);
+            float h = mine != null ? 1 : boss ? R(0.97f, 1.02f) : R(0.97f, 1.05f);
             f.Scale = h * BASE_HEIGHT / (f.HipBase + 0.04f + 0.6f * (float)f.B.TorsoL + ((float)f.B.NeckLen - 1) * 0.08f + HEAD_TOP);
             if (boss)
             {
@@ -157,6 +162,7 @@ public sealed class BenchView
                 f.Sit = 0;
                 f.X = f.SpotX = cx;
                 f.Z = f.SpotZ = AreaZ;
+                f.Temper = mine?.Temper ?? (CoachTemper)_rng.Next(3);
                 f.Idle = _rng.Next(Idles.Length);
                 f.Until = R(3, 8);
             }
@@ -168,7 +174,7 @@ public sealed class BenchView
                 f.Style = _rng.Next(Seats.Length);
                 f.Until = R(3, 25);
             }
-            Dress(i, f, team == 0 ? home : away, ka, kb);
+            Dress(i, f, team == 0 ? home : away, ka, kb, mine);
             // Settle straight into the first pose.
             Shape(f, 0, false);
             Array.Copy(f.Tgt, f.Cur, ShapeN);
@@ -189,7 +195,7 @@ public sealed class BenchView
 
     /// <summary>A sub in his side's kit (the keeper in his), with his number on the back; a
     /// manager in a dark suit, a camel coat, a puffer or the club tracksuit.</summary>
-    void Dress(int id, Fig f, Kit kit, Vector4[][] ka, Vector4[][] kb)
+    void Dress(int id, Fig f, Kit kit, Vector4[][] ka, Vector4[][] kb, Coach coach)
     {
         int skin = TeamData.SkinTones[_rng.Next(TeamData.SkinTones.Length)];
         int hair = TeamData.HairColors[_rng.Next(TeamData.HairColors.Length)];
@@ -197,23 +203,31 @@ public sealed class BenchView
         int shirt, trim, sleeve, cuff, hands, shorts, shortsTrim, legs, socks, sockTrim, boot, sole, number, pattern, numCol;
         if (f.Boss)
         {
-            int style = _rng.Next(4);
-            hair = new[] { 0x8f8f8f, 0xd6d3cc, 0x1b1410, 0x4a3324, 0x2e1f15 }[_rng.Next(5)];
-            f.Hair = _rng.Next(2);
-            (shirt, trim) = style switch
+            // The designer's coach (home), else a random one; dressed as Outfit.For has it.
+            var style = coach?.Style ?? (CoachStyle)_rng.Next(4);
+            var o = Outfit.For(style, kit.Shirt, f.Team == 1);
+            if (coach != null)
             {
-                0 => (_rng.Next(2) == 0 ? 0x22252e : 0x1c2433, 0xe9e9e4), // suit, the shirt collar
-                1 => (0x8a6a48, 0x3a2c20),                                // camel coat
-                2 => (0x15161a, 0x2c2e36),                                // puffer
-                _ => (kit.Shirt, kit.Shirt2 == kit.Shirt ? 0xffffff : kit.Shirt2), // tracksuit
-            };
-            sleeve = cuff = shirt;
+                skin = coach.Skin;
+                hair = coach.Hair;
+                f.Hair = coach.Hair < 0 ? -1 : coach.HairStyle switch { 2 => 2, 3 => 3, _ => 1 };
+            }
+            else
+            {
+                hair = new[] { 0x8f8f8f, 0xd6d3cc, 0x1b1410, 0x4a3324, 0x2e1f15 }[_rng.Next(5)];
+                f.Hair = _rng.Next(5) == 0 ? -1 : 1;
+            }
+            shirt = o.Coat;
+            trim = o.Trim;
+            sleeve = o.Coat;
+            cuff = o.Cuff;
             hands = skin;
-            legs = shorts = shortsTrim = socks = sockTrim = style == 3 ? 0x1e2230 : style == 1 ? 0x22252e : shirt;
-            boot = style == 3 ? 0xf0efe9 : 0x111111;
-            sole = style == 3 ? 0x1b1b1d : 0x0a0a0a;
+            legs = shorts = socks = o.Trousers;
+            shortsTrim = sockTrim = o.Stripe;
+            boot = o.Shoes;
+            sole = o.Sole;
             number = -1;
-            pattern = 0;
+            pattern = o.Pattern;
             numCol = trim;
         }
         else
@@ -358,8 +372,27 @@ public sealed class BenchView
                 bool ours = f.Team == scored;
                 if (f.Boss)
                 {
-                    if (ours) Act(f, _rng.Next(2) == 0 ? React.Fist : React.Cheer, R(0.1f, 0.5f), R(3, 5));
-                    else Act(f, _rng.Next(2) == 0 ? React.What : React.Face, R(0.4f, 1), R(3, 5));
+                    float sgn = f.Team == 0 ? -1 : 1;
+                    if (ours)
+                        switch (f.Temper)
+                        {
+                            case CoachTemper.Cool: Act(f, React.Fist, R(0.3f, 0.8f), R(1.5f, 2.5f)); f.V = 1; break; // one fist, no jump
+                            case CoachTemper.Fiery: Act(f, _rng.Next(2) == 0 ? React.Fist : React.Cheer, R(0.1f, 0.4f), R(4, 6)); f.V = 0; break;
+                            default:
+                                // The showman's sprint down the touchline, arms up.
+                                Act(f, React.Cheer, R(0.1f, 0.3f), R(5, 7));
+                                f.SpotX = sgn * DugX + sgn * R(8, 12);
+                                f.SpotZ = AreaZ + 0.6f;
+                                f.Until = _t + R(7, 9);
+                                break;
+                        }
+                    else
+                        switch (f.Temper)
+                        {
+                            case CoachTemper.Cool: Act(f, React.Slump, R(0.5f, 1), R(2, 3)); break;
+                            case CoachTemper.Fiery: Act(f, React.What, R(0.2f, 0.6f), R(4, 6)); break;
+                            default: Act(f, React.Face, R(0.3f, 0.8f), R(3, 5)); break;
+                        }
                 }
                 else if (ours)
                 {
@@ -431,10 +464,19 @@ public sealed class BenchView
     void DecideBoss(Fig f)
     {
         float hx = (f.Team == 0 ? -1 : 1) * DugX;
-        f.Idle = _rng.Next(Idles.Length);
-        f.SpotX = hx + Clamp(_ballX * 0.08f, -3, 3) + R(-0.8f, 0.8f);
-        f.SpotZ = AreaZ + R(-0.3f, 0.4f);
-        f.Until = _t + R(4, 10);
+        // A cool head folds his arms and watches; a fiery one shouts and points; a showman waves
+        // them on. Each moves about the area as restless as he is.
+        float[][] pick = f.Temper switch
+        {
+            CoachTemper.Cool => new[] { Folded, Folded, Folded, Pockets, Pockets, Chin, Chin, Behind, Hips },
+            CoachTemper.Fiery => new[] { Shout, Shout, Point, Point, Hips, Folded, Beckon, Watch },
+            _ => new[] { Beckon, Beckon, Point, Shout, Hips, Folded, Pockets, Clap },
+        };
+        f.Idle = Array.IndexOf(Idles, pick[_rng.Next(pick.Length)]);
+        float roam = f.Temper == CoachTemper.Cool ? 0.4f : f.Temper == CoachTemper.Fiery ? 1.2f : 1;
+        f.SpotX = hx + Clamp(_ballX * 0.08f, -3, 3) + R(-0.8f, 0.8f) * roam;
+        f.SpotZ = AreaZ + R(-0.3f, 0.4f) * roam;
+        f.Until = _t + (f.Temper == CoachTemper.Cool ? R(7, 14) : R(3, 8));
     }
 
     void Move(Fig f, float dt, bool reacting)
@@ -672,7 +714,7 @@ public sealed class BenchView
         Hd = ChainT(Hd, 0, 0.02f * torsoL + (neckLen - 1) * 0.08f - top, 0);
         Put(Part.Head, id, Hd);
         if (f.Hair == 1) Put(Part.HairShort, id, Hd, 0.985f, 0.95f, 0.985f);
-        else Put(HairOfStyle[f.Hair], id, Hd);
+        else if (f.Hair >= 0) Put(HairOfStyle[f.Hair], id, Hd);
 
         // Arms: the pose's, over a natural swing with the stride.
         float armLen = (float)b.ArmLen, armW = (float)b.Arm, shoulder = (float)b.Shoulder, aw = c[ArmW];
