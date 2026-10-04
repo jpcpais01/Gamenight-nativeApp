@@ -78,7 +78,14 @@ public sealed partial class PauseMenu : Control
         _pixels.Pressed += NextPixels;
         card.AddChild(_pixels);
         _fps = Ghost("");
-        _fps.Pressed += () => { MatchSettings.ShowFps = !MatchSettings.ShowFps; Changed(); };
+        // Off, on, then on with the breakdown of where the time goes.
+        _fps.Pressed += () =>
+        {
+            if (!MatchSettings.ShowFps) MatchSettings.ShowFps = true;
+            else if (!MatchSettings.Profile) MatchSettings.Profile = true;
+            else MatchSettings.ShowFps = MatchSettings.Profile = false;
+            Changed();
+        };
         _sound = Ghost("");
         _sound.Pressed += () => { MatchSettings.Sound = !MatchSettings.Sound; Changed(); };
         card.AddChild(Row(_fps, _sound));
@@ -157,7 +164,7 @@ public sealed partial class PauseMenu : Control
         int h = MatchSettings.Pixels > 0 ? MatchSettings.Pixels : CurrentHeight();
         int scale = Math.Max(1, (int)MathF.Round(Render.PixelView.ScreenPixels().Y / (float)h));
         _pixels.Text = $"PIXELS: {h} · {scale}X";
-        _fps.Text = "FPS COUNTER: " + (MatchSettings.ShowFps ? "ON" : "OFF");
+        _fps.Text = "FPS COUNTER: " + (!MatchSettings.ShowFps ? "OFF" : MatchSettings.Profile ? "DETAIL" : "ON");
         _sound.Text = "SOUND: " + (MatchSettings.Sound ? "ON" : "OFF");
     }
 
