@@ -37,8 +37,6 @@ public sealed class Mixer
     /// <summary>The terraces' overall level (menus sink it).</summary>
     public readonly Param EndsGain = new(1);
     public bool CrowdOn = true;
-    /// <summary>The crowd's soundtrack, mixed into the ends and the stands each block.</summary>
-    public CrowdScore Score;
     double _crowdOffAt = double.MaxValue;
 
     readonly Compressor _master, _limiter;
@@ -194,7 +192,6 @@ public sealed class Mixer
         }
         _scale += (_scaleT - _scale) * ease;
         bool crowd = CrowdOn || t0 < _crowdOffAt;
-        if (crowd) Score?.Render(_e0, _e1, _wL, _wR, t0, Sr);
 
         for (int k = _voices.Count - 1; k >= 0; k--)
         {

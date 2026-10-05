@@ -36,6 +36,8 @@ public sealed class Replay
     public bool Active { get; private set; }
     /// <summary>Kicks, net and post along the tape, for the sound.</summary>
     public Action<MatchSnapshot> OnEvents;
+    /// <summary>The tape reached the frame the ball crossed the line (for the goal explosion).</summary>
+    public Action<MatchSnapshot> OnGoal;
     /// <summary>Every body jumped (the tape rewound): settle feet and secondary motion afresh.</summary>
     public Action OnRewind;
 
@@ -158,6 +160,7 @@ public sealed class Replay
         {
             var f = Slot(_fired + 1);
             if (f.KickMax > 0 || f.Net > 0 || f.Post > 0) OnEvents?.Invoke(f);
+            if (_fired + 1 == _goal) OnGoal?.Invoke(f);
         }
     }
 
