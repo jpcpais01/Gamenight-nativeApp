@@ -6,9 +6,12 @@ using GameNight.Sim;
 namespace GameNight.Menus;
 
 /// <summary>
-/// The club studio (the PWA's clubScreen.ts and coachEditor.ts), in four tabs: the kit (name,
-/// code, colours, design, record), the crest maker, the fans (tifo pictures and the stand
-/// banner) and the manager on the touchline.
+/// The club studio (the PWA's clubScreen.ts and coachEditor.ts). A rail of tabs down the left,
+/// each one a live picture of what it edits (add a tab by adding to <see cref="Tabs"/>); a lit
+/// showroom stage with the thing itself on a plinth; the editor on the right under a heading.
+/// Tabs: the kit (name, code, colours, design, record), the crest maker, the fans (tifo
+/// pictures and the stand banner), the manager on the touchline and the goal explosion
+/// (ClubScreen.Goal.cs).
 /// </summary>
 public sealed partial class ClubScreen : PxCanvas
 {
@@ -20,14 +23,16 @@ public sealed partial class ClubScreen : PxCanvas
         0xb05cff, 0xe0559b, 0xf3ede0, 0xffffff, 0xb9bdc4, 0x6b6f78, 0x2a2a2a, 0x0e0e10,
     };
 
-    static readonly string[] Tabs = { "KIT", "CREST", "FANS", "MANAGER" };
+    static readonly string[] Tabs = { "KIT", "CREST", "FANS", "MANAGER", "GOAL" };
+    /// <summary>The heading over each tab's editor.</summary>
+    static readonly string[] About = { "Name, colours and the shirt", "Build your badge piece by piece", "Tifo pictures and the stand banner", "You on the touchline", "The blast in the net when you score" };
     static readonly Color Panel = new(16 / 255f, 14 / 255f, 44 / 255f, 0.6f);
 
     readonly Menus _ui;
     readonly LineEdit _name, _code, _letters, _year, _banner, _coach;
     int _tab, _slot, _part, _cslot, _page; // tab; kit colour slot; crest part; crest colour slot
     bool _resetArmed;
-    /// <summary>The open tab: 0 kit, 1 crest, 2 fans, 3 manager.</summary>
+    /// <summary>The open tab: 0 kit, 1 crest, 2 fans, 3 manager, 4 goal explosion.</summary>
     public int Tab { get => _tab; set => _tab = value; }
 
     /// <summary>Debug: open the crest maker at a part and page.</summary>
@@ -39,9 +44,16 @@ public sealed partial class ClubScreen : PxCanvas
     }
     ClubState Club => _ui.Club;
 
+    // The stage's light this frame: a glow behind the subject and the shine over it.
+    Vector2 _glowAt;
+    float _glowR;
+    Color _glowC;
+    Rect2 _shine;
+
     public ClubScreen(Menus ui)
     {
         _ui = ui;
+        AddChild(new Fx.Light(DrawLight));
         _name = Field(24);
         _code = Field(3);
         _letters = Field(4);
@@ -50,7 +62,11 @@ public sealed partial class ClubScreen : PxCanvas
         _coach = Field(20);
         VisibilityChanged += () =>
         {
-            if (!Visible) return;
+            if (!Visible)
+            {
+                GoalPreview(false, default);
+                return;
+            }
             Refill();
             _resetArmed = false;
         };
@@ -135,33 +151,39 @@ public sealed partial class ClubScreen : PxCanvas
         e.Size = r.Size;
     }
 
+    public override void _Process(double delta)
+    {
+        base._Process(delta);
+        if (IsVisibleInTree()) GetChild<Control>(0).QueueRedraw();
+    }
+
+    void DrawLight(CanvasItem ci)
+    {
+        if (_glowR <= 0) return;
+        float pulse = 0.5f + 0.5f * Mathf.Sin((float)T * 1.3f);
+        Fx.Glow(ci, _glowAt, _glowR, _glowC, 0.1f + pulse * 0.04f);
+        if (_shine.Size.X > 0) Fx.Shine(ci, _shine, (float)(T % 4.5) / 2.4f, new Color(1, 1, 1, 0.12f), 0.28f);
+    }
+
     protected override void Paint()
     {
         float W = Size.X, H = Size.Y;
-        NightBackdrop();
-        BackButton(new Vector2(14, 12), () =>
-        {
-            Commit();
-            _ui.Go(_ui.Home);
-        });
-        Title(new Vector2(66, 44), "CLUB");
+        NightBackdrop(new[] { Px.Hex(0x0a0820), Px.Hex(0x100d30), Px.Hex(0x161242), Px.Hex(0x1b1652) });
+        _glowR = 0;
+        _shine = default;
+        Rail(H);
 
-        float sw = Mathf.Round(W * 0.42f);
-        var stage = new Rect2(14, 62, sw, H - 62 - 14);
-        float px = stage.End.X + 22, pw = W - 14 - px;
-        float tx = px;
-        for (int i = 0; i < Tabs.Length; i++)
-        {
-            int idx = i;
-            tx += Chip("tab" + i, new Vector2(tx, 16), Tabs[i], _tab == i, () =>
-            {
-                Commit();
-                GetViewport().GuiReleaseFocus();
-                _tab = idx;
-                _resetArmed = false;
-            }, 22, 32) + 8;
-        }
-        Px.Frame(this, stage, Panel, Px.Line, Px.Shadow);
+        float sx = 88, sw = Mathf.Round(Mathf.Clamp(W * 0.36f, 280, 380));
+        var stage = new Rect2(sx, 14, sw, H - 28);
+        float px = stage.End.X + 22, pw = W - 16 - px;
+        Stage(stage);
+        // Heading.
+        string title = Tabs[Math.Min(_tab, Tabs.Length - 1)];
+        Px.Text(this, Px.Big, new Vector2(px, 44), title, 36, Px.Ink, new Color(0, 0, 0, 0.55f), 3);
+        float tw = Px.Width(Px.Big, title, 36);
+        if (_tab < About.Length) Px.Text(this, Px.Small, new Vector2(px + tw + 14, 40), About[_tab].ToUpperInvariant(), 8, Px.InkDim);
+        DrawRect(new Rect2(px, 52, pw, 2), Px.Line);
+        DrawRect(new Rect2(px, 52, tw, 2), Px.Gold);
 
         Place(_name, _tab == 0);
         Place(_code, _tab == 0);
@@ -169,17 +191,128 @@ public sealed partial class ClubScreen : PxCanvas
         Place(_year, _tab == 1 && _part == 4);
         Place(_banner, _tab == 2);
         Place(_coach, _tab == 3);
+        GoalPreview(_tab == 4, stage);
         switch (_tab)
         {
             case 0: KitTab(stage, px, pw, H); break;
             case 1: CrestTab(stage, px, pw); break;
             case 2: FansTab(stage, px, pw); break;
+            case 4: GoalTab(stage, px, pw); break;
             default: ManagerTab(stage, px, pw); break;
         }
         Px.Scanlines(this, new Rect2(0, 0, W, H));
     }
 
-    /// <summary>A row of colour swatches; returns the height used.</summary>
+    /// <summary>The rail: back, then a tab for each part of the club, drawn as a live picture of it.</summary>
+    void Rail(float H)
+    {
+        const float rw = 74;
+        DrawRect(new Rect2(0, 0, rw, H), new Color(5 / 255f, 4 / 255f, 18 / 255f, 0.9f));
+        DrawRect(new Rect2(rw, 0, 2, H), Px.Line2);
+        DrawRect(new Rect2(0, 0, 3, H), Px.Hex(Club.S.Kit.Main));
+        BackButton(new Vector2(17, 12), () =>
+        {
+            Commit();
+            _ui.Go(_ui.Home);
+        });
+        float top = 62, th = Mathf.Min(66, (H - top - 8) / Tabs.Length);
+        for (int i = 0; i < Tabs.Length; i++)
+        {
+            int idx = i;
+            string key = "tab" + i;
+            bool on = _tab == i, held = Held(key);
+            var r = new Rect2(9, top + i * th, rw - 16, th - 6);
+            var rr = held ? r.Translated(new Vector2(2, 2)) : r;
+            Px.Frame(this, rr, on ? new Color(Px.Gold, 0.16f) : new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.85f), on ? Px.Gold : Px.Line2, held || on ? null : Px.ShadowSoft, 2, 3);
+            if (on) DrawRect(new Rect2(3, rr.Position.Y + 4, 3, rr.Size.Y - 8), Px.Gold);
+            TabIcon(i, new Rect2(rr.Position.X + 6, rr.Position.Y + 5, rr.Size.X - 12, rr.Size.Y - 20));
+            Px.TextC(this, Px.Small, rr.GetCenter().X, rr.End.Y - 5, Tabs[i], 7, on ? Px.Gold : Px.Ink);
+            Tap(key, r, () =>
+            {
+                Commit();
+                GetViewport().GuiReleaseFocus();
+                _tab = idx;
+                _resetArmed = false;
+            });
+        }
+    }
+
+    /// <summary>A tab's picture: the shirt, the crest, a flag, the manager.</summary>
+    void TabIcon(int tab, Rect2 r)
+    {
+        var s = Club.S;
+        var c = r.GetCenter();
+        float h = r.Size.Y;
+        switch (tab)
+        {
+            case 0: Art.Jersey(this, new Rect2(c.X - h * 0.5f, r.Position.Y, h, h * 1.3f * 0.8f), s.Kit); break;
+            case 1: CrestArt.Draw(this, new Rect2(c.X - h * 0.42f, r.Position.Y, h * 0.84f, h), s.Crest); break;
+            case 2:
+            {
+                // A flag on a pole, in the club's colours.
+                var pole = new Rect2(c.X - h * 0.45f, r.Position.Y, 2, h);
+                DrawRect(pole, Px.InkDim);
+                var f = new Rect2(pole.End.X, r.Position.Y + 1, h * 0.9f, h * 0.6f);
+                float wave = Mathf.Sin((float)T * 3) * 2;
+                DrawColoredPolygon(new[] { f.Position, new Vector2(f.End.X, f.Position.Y + wave), new Vector2(f.End.X, f.End.Y + wave), new Vector2(f.Position.X, f.End.Y) }, Px.Hex(s.Kit.Main));
+                DrawColoredPolygon(new[] { new Vector2(f.Position.X, f.Position.Y + f.Size.Y * 0.38f), new Vector2(f.End.X, f.Position.Y + f.Size.Y * 0.38f + wave), new Vector2(f.End.X, f.Position.Y + f.Size.Y * 0.62f + wave), new Vector2(f.Position.X, f.Position.Y + f.Size.Y * 0.62f) }, Px.Hex(s.Kit.Secondary));
+                break;
+            }
+            case 3: Art.Coach(this, new Rect2(c.X - h * 24 / 84f, r.Position.Y, h * 48 / 84f, h), s.Coach, s.Kit.Main); break;
+            case 4:
+            {
+                // A goal with a blast going off in the net.
+                float gw = h * 1.2f, gh = h * 0.62f;
+                var g = new Rect2(c.X - gw / 2, r.End.Y - gh - 2, gw, gh);
+                float k = (float)(T * 1.2 % 1);
+                Fx.Beams(this, g.GetCenter(), Px.Hex(0xffb020), 8, h * (0.3f + 0.4f * k), 0.12f, k, 0.8f * (1 - k));
+                DrawColoredPolygon(Px.Ellipse(g.GetCenter(), h * 0.16f * (1 + k), h * 0.16f * (1 + k), 12), new Color(Px.Hex(0xfff3a0), 1 - k));
+                DrawRect(new Rect2(g.Position.X, g.Position.Y, 2, gh), Px.Ink);
+                DrawRect(new Rect2(g.End.X - 2, g.Position.Y, 2, gh), Px.Ink);
+                DrawRect(new Rect2(g.Position.X, g.Position.Y, gw, 2), Px.Ink);
+                break;
+            }
+            default: Px.TextC(this, Px.Big, c.X, c.Y + 8, Tabs[tab].Length > 0 ? Tabs[tab][..1] : "?", 26, Px.Ink); break;
+        }
+    }
+
+    /// <summary>The showroom: a dark room, a spotlight from above, a floor running away from you.</summary>
+    void Stage(Rect2 st)
+    {
+        var tint = Px.Hex(Club.S.Kit.Main).Lerp(Colors.White, 0.35f);
+        Px.Frame(this, st, Colors.Transparent, Px.Line2, Px.Shadow);
+        var inner = st.Grow(-3);
+        Px.Bands(this, inner, new[] { Px.Hex(0x07061a), Px.Hex(0x0c0a26), Px.Hex(0x120f36), Px.Hex(0x0a0820) }, new[] { 0, 0.3f, 0.62f, 0.8f });
+        float cx = inner.GetCenter().X, fy = inner.Position.Y + inner.Size.Y * 0.78f;
+        DrawRect(new Rect2(inner.Position.X, fy, inner.Size.X, inner.End.Y - fy), new Color(0, 0, 0, 0.35f));
+        for (int i = -6; i <= 6; i++)
+            DrawLine(new Vector2(cx + i * inner.Size.X * 0.05f, fy), new Vector2(cx + i * inner.Size.X * 0.22f, inner.End.Y), new Color(tint, 0.1f * (1 - Mathf.Abs(i) / 7f)), 1);
+        for (int i = 1; i < 4; i++)
+        {
+            float k = i / 4f;
+            DrawRect(new Rect2(inner.Position.X, fy + (inner.End.Y - fy) * k * k, inner.Size.X, 1), new Color(tint, 0.08f));
+        }
+        Fx.Spot(this, new Vector2(cx, inner.Position.Y), new Vector2(cx, fy), inner.Size.X * 0.16f, inner.Size.X * 0.82f, tint, 0.07f);
+        DrawRect(new Rect2(cx - 14, inner.Position.Y, 28, 5), Px.Hex(0x2a2550));
+        DrawRect(new Rect2(cx - 10, inner.Position.Y + 5, 20, 2), Px.Hex(0xfff3c0));
+    }
+
+    /// <summary>A plaque along the bottom of the stage.</summary>
+    void Plaque(Rect2 st, string text, string tag = null)
+    {
+        var p = new Rect2(st.Position.X + 14, st.End.Y - 48, st.Size.X - 28, 36);
+        Px.Frame(this, p, new Color(0, 0, 0, 0.6f), new Color(Px.Hex(Club.S.Kit.Secondary).Lerp(Colors.White, 0.3f), 0.7f), null, 2, 0);
+        float tagW = tag == null ? 0 : Px.Width(Px.Big, tag, 18) + 16;
+        Px.TextC(this, Px.Big, p.GetCenter().X - tagW / 2, p.GetCenter().Y + 8, Px.Fit(Px.Big, text, 24, p.Size.X - tagW - 20), 24, Px.Ink);
+        if (tag != null)
+        {
+            var t = new Rect2(p.End.X - tagW - 5, p.Position.Y + 5, tagW, p.Size.Y - 10);
+            DrawRect(t, Px.Hex(Club.S.Kit.Main));
+            Px.TextC(this, Px.Big, t.GetCenter().X, t.GetCenter().Y + 6, tag, 18, Px.Hex(Club.S.Kit.Main).Luminance > 0.6f ? Px.Hex(0x14121c) : Px.Ink);
+        }
+    }
+
+    /// <summary>A grid of colour swatches; returns the height used.</summary>
     float Swatches(float x, float y, float w, int current, Action<int> pick, int perRow = 12, float max = 34)
     {
         float s = Mathf.Min(max, (w - (perRow - 1) * 6) / perRow);
@@ -187,12 +320,29 @@ public sealed partial class ClubScreen : PxCanvas
         {
             int c = Palette[i];
             var r = new Rect2(x + i % perRow * (s + 6), y + i / perRow * (s + 6), s, s);
-            if (current == c) Px.Frame(this, r.Grow(4), Colors.Transparent, Px.Gold, null, 3, 0);
+            bool on = current == c;
+            if (on) Px.Frame(this, r.Grow(4), Colors.Transparent, Px.Gold, null, 2, 0);
             DrawRect(r, Colors.Black);
             DrawRect(r.Grow(-2), Px.Hex(c));
+            DrawRect(new Rect2(r.Position + new Vector2(2, 2), new Vector2(s - 4, 3)), new Color(1, 1, 1, 0.22f));
+            DrawRect(new Rect2(r.Position.X + 2, r.End.Y - 5, s - 4, 3), new Color(0, 0, 0, 0.22f));
+            if (on) DrawRect(new Rect2(r.GetCenter() - new Vector2(3, 3), new Vector2(6, 6)), Px.Hex(c).Luminance > 0.6f ? Px.Dark : Px.Ink);
             Tap("sw" + i, r, () => pick(c));
         }
         return (Palette.Length + perRow - 1) / perRow * (s + 6);
+    }
+
+    /// <summary>One colour slot as a well: a big swatch of the colour and its name.</summary>
+    void Well(string key, Rect2 r, string label, int col, bool on, Action tap)
+    {
+        bool held = Held(key);
+        var rr = held ? r.Translated(new Vector2(2, 2)) : r;
+        Px.Frame(this, rr, on ? new Color(Px.Gold, 0.14f) : new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.85f), on ? Px.Gold : Px.Line2, held ? null : Px.ShadowSoft, 2, 3);
+        var sw = new Rect2(rr.Position + new Vector2(5, 5), new Vector2(rr.Size.Y - 10, rr.Size.Y - 10));
+        DrawRect(sw, Colors.Black);
+        DrawRect(sw.Grow(-2), Px.Hex(col));
+        Px.Text(this, Px.Big, new Vector2(sw.End.X + 8, rr.GetCenter().Y + 7), label, 20, on ? Px.Gold : Px.Ink);
+        Tap(key, r, tap);
     }
 
     /// <summary>A chip with a colour dot: one colour slot.</summary>
@@ -213,29 +363,44 @@ public sealed partial class ClubScreen : PxCanvas
     void KitTab(Rect2 stage, float px, float pw, float H)
     {
         var k = Club.S.Kit;
-        float jh = stage.Size.Y - 96, jw = jh / 1.3f;
-        var glow = new Vector2(stage.Position.X + stage.Size.X * 0.42f, stage.Position.Y + 12 + jh / 2);
-        foreach (var (rr, a) in new[] { (0.62f, 0.08f), (0.45f, 0.12f) })
-            DrawColoredPolygon(Px.Ellipse(glow, jh * rr, jh * rr, 24), new Color(Px.Hex(k.Main), a));
-        Art.Jersey(this, new Rect2(glow.X - jw / 2, stage.Position.Y + 14, jw, jh), k, Club.S.Crest);
-        CrestArt.Draw(this, new Rect2(stage.End.X - 74, stage.Position.Y + 16, 56, 70), Club.S.Crest);
-        float fy = stage.End.Y - 64;
-        Px.Text(this, Px.Small, new Vector2(stage.Position.X + 14, fy - 6), "CLUB NAME", 8, Px.InkDim);
-        Px.Text(this, Px.Small, new Vector2(stage.End.X - 92, fy - 6), "CODE", 8, Px.InkDim);
-        Place(_name, true, new Rect2(stage.Position.X + 14, fy, stage.Size.X - 130, 44));
-        Place(_code, true, new Rect2(stage.End.X - 92, fy, 78, 44));
+        // Stage: the kit on a plinth, the crest on the wall.
+        float cx = stage.GetCenter().X;
+        float pedY = stage.End.Y - 86, pedW = stage.Size.X * 0.56f;
+        Fx.Pedestal(this, new Vector2(cx, pedY), pedW, Px.Hex(k.Main).Lerp(Colors.White, 0.3f), 0.5f + 0.5f * Mathf.Sin((float)T * 1.3f));
+        float jh = Mathf.Min(pedY - stage.Position.Y - 10, stage.Size.X * 0.82f * 1.3f), jw = jh / 1.3f;
+        var jr = new Rect2(cx - jw / 2, pedY + 4 - jh * 122 / 130f, jw, jh);
+        Art.Jersey(this, jr, k, Club.S.Crest);
+        _glowAt = jr.GetCenter();
+        _glowR = jh * 0.5f;
+        _glowC = Px.Hex(k.Main).Lerp(Colors.White, 0.3f);
+        _shine = new Rect2(jr.Position + new Vector2(jw * 0.12f, jh * 0.05f), new Vector2(jw * 0.76f, jh * 0.62f));
+        CrestArt.Draw(this, new Rect2(stage.End.X - 62, stage.Position.Y + 16, 44, 55), Club.S.Crest);
+        Plaque(stage, Club.S.Name, Club.ShortName);
 
-        float y = 76;
-        Px.Text(this, Px.Big, new Vector2(px, y + 4), "COLOURS", 24, Px.Ink);
-        float cx = px + 110;
-        string[] names = { "Main", "Secondary", "Shorts" };
+        // Name and code.
+        float y = 64;
+        Head(px, y + 8, "CLUB NAME");
+        Head(px + pw - 86, y + 8, "CODE");
+        Place(_name, true, new Rect2(px, y + 14, pw - 98, 42));
+        Place(_code, true, new Rect2(px + pw - 86, y + 14, 86, 42));
+
+        // Colours: three wells, the palette, and two shortcuts.
+        y = 146;
+        Head(px, y, "COLOURS");
+        float bx = px + pw;
+        bx -= Chip("ksurprise", new Vector2(bx - Px.Width(Px.Big, "SURPRISE ME", 16) - 18, y - 16), "SURPRISE ME", false, SurpriseKit, 16, 24) + 6;
+        Chip("kswap", new Vector2(bx - Px.Width(Px.Big, "SWAP", 16) - 18, y - 16), "SWAP", false, () =>
+            Club.SetKit(new ClubKit { Pattern = k.Pattern, Main = k.Secondary, Secondary = k.Main, Shorts = k.Shorts }), 16, 24);
+        y += 12;
+        string[] names = { "MAIN", "SECOND", "SHORTS" };
         int[] cols = { k.Main, k.Secondary, k.Shorts };
+        float ww = (pw - 16) / 3;
         for (int i = 0; i < 3; i++)
         {
             int idx = i;
-            cx += Slot("slot" + i, cx, y - 16, names[i], cols[i], _slot == i, () => _slot = idx) + 8;
+            Well("slot" + i, new Rect2(px + i * (ww + 8), y, ww, 36), names[i], cols[i], _slot == i, () => _slot = idx);
         }
-        y += 22;
+        y += 44;
         y += Swatches(px, y, pw, cols[_slot], c =>
         {
             var nk = new ClubKit { Pattern = k.Pattern, Main = k.Main, Secondary = k.Secondary, Shorts = k.Shorts };
@@ -243,31 +408,32 @@ public sealed partial class ClubScreen : PxCanvas
             else if (_slot == 1) nk.Secondary = c;
             else nk.Shorts = c;
             Club.SetKit(nk);
-        }) + 18;
-        Px.Text(this, Px.Big, new Vector2(px, y), "DESIGN", 24, Px.Ink);
-        y += 10;
-        float dx = px;
-        for (int i = 0; i < TeamData.KitPatterns.Length; i++)
+        }, 12, 24) + 10;
+
+        // Design: every pattern as a little shirt in your colours.
+        Head(px, y, "DESIGN");
+        y += 6;
+        int n = TeamData.KitPatterns.Length;
+        float tw = (pw - (n - 1) * 5) / n;
+        float th = Mathf.Min(tw * 1.25f + 12, H - 56 - y);
+        for (int i = 0; i < n; i++)
         {
             int idx = i;
-            string label = TeamData.KitPatterns[i];
-            float w = Px.Width(Px.Big, label, 18) + 18;
-            if (dx + w > px + pw)
-            {
-                dx = px;
-                y += 34;
-            }
-            Chip("pat" + i, new Vector2(dx, y), label, k.Pattern == i, () =>
-                Club.SetKit(new ClubKit { Pattern = idx, Main = k.Main, Secondary = k.Secondary, Shorts = k.Shorts }));
-            dx += w + 8;
+            var r = new Rect2(px + i * (tw + 5), y, tw, th);
+            bool on = k.Pattern == i;
+            Px.Frame(this, r, on ? new Color(Px.Gold, 0.18f) : new Color(8 / 255f, 6 / 255f, 26 / 255f, 0.6f), on ? Px.Gold : Px.Line, null, 2, 0);
+            float sh = Mathf.Min(th - 14, (tw - 6) * 1.3f);
+            Art.Jersey(this, new Rect2(r.GetCenter().X - sh / 2.6f, r.Position.Y + 3, sh / 1.3f, sh), new ClubKit { Pattern = i, Main = k.Main, Secondary = k.Secondary, Shorts = k.Shorts });
+            Px.TextC(this, Px.Small, r.GetCenter().X, r.End.Y - 3, Px.Fit(Px.Small, TeamData.KitPatterns[i].ToUpperInvariant(), 6, tw - 2), 6, on ? Px.Gold : Px.InkDim);
+            Tap("pat" + i, r, () => Club.SetKit(new ClubKit { Pattern = idx, Main = k.Main, Secondary = k.Secondary, Shorts = k.Shorts }));
         }
 
         // The record, and starting over.
         var rec = Club.S.Record;
         float W = Size.X;
-        Px.Text(this, Px.Small, new Vector2(px, H - 26), $"PLAYED {rec.Played} · GOALS {rec.Gf}-{rec.Ga} · PACKS {Club.S.PacksOpened}", 8, Px.InkDim);
-        float rw = _resetArmed ? 300 : 160;
-        GhostButton("reset", new Rect2(W - 14 - rw, H - 50, rw, 36), _resetArmed ? "TAP AGAIN: LOSE EVERY PLAYER" : "NEW CLUB…", 18, () =>
+        Px.Text(this, Px.Small, new Vector2(px, H - 24), $"PLAYED {rec.Played} · GOALS {rec.Gf}-{rec.Ga} · PACKS {Club.S.PacksOpened}", 8, Px.InkDim);
+        float rw = _resetArmed ? 290 : 140;
+        GhostButton("reset", new Rect2(W - 16 - rw, H - 46, rw, 32), _resetArmed ? "TAP AGAIN: LOSE EVERY PLAYER" : "NEW CLUB…", 16, () =>
         {
             if (!_resetArmed)
             {
@@ -281,16 +447,34 @@ public sealed partial class ClubScreen : PxCanvas
         }, _resetArmed ? Px.Loss : new Color(1, 90 / 255f, 90 / 255f, 0.5f));
     }
 
+    /// <summary>A fresh kit: two colours that stand apart, shorts to go with them, any design.</summary>
+    void SurpriseKit()
+    {
+        var rng = new Random();
+        int main = Palette[rng.Next(Palette.Length)], sec;
+        do sec = Palette[rng.Next(Palette.Length)];
+        while (Mathf.Abs(Px.Hex(main).Luminance - Px.Hex(sec).Luminance) < 0.22f);
+        int shorts = rng.Next(4) switch { 0 => 0xf3ede0, 1 => 0x14123a, 2 => main, _ => sec };
+        Club.SetKit(new ClubKit { Pattern = rng.Next(TeamData.KitPatterns.Length), Main = main, Secondary = sec, Shorts = shorts });
+    }
+
     // ---------------------------------------------------------------- crest
 
     void CrestTab(Rect2 stage, float px, float pw)
     {
         var c = Club.S.Crest;
         var k = Club.S.Kit;
-        float ch = stage.Size.Y - 92;
-        var glow = new Vector2(stage.GetCenter().X, stage.Position.Y + 14 + ch / 2);
-        DrawColoredPolygon(Px.Ellipse(glow, ch * 0.5f, ch * 0.5f, 24), new Color(Px.Hex(c.Primary), 0.1f));
-        CrestArt.Draw(this, new Rect2(stage.Position.X, stage.Position.Y + 14, stage.Size.X, ch), c);
+        // Stage: the crest on a plinth, under the spotlight.
+        float cx = stage.GetCenter().X;
+        float pedY = stage.End.Y - 92;
+        Fx.Pedestal(this, new Vector2(cx, pedY), stage.Size.X * 0.5f, Px.Hex(c.Primary).Lerp(Colors.White, 0.3f), 0.5f + 0.5f * Mathf.Sin((float)T * 1.3f));
+        float ch = Mathf.Min(pedY - stage.Position.Y - 24, (stage.Size.X - 60) * 1.24f), cw = ch / 1.24f;
+        var cr = new Rect2(cx - cw / 2, pedY - ch - 2 + Mathf.Sin((float)T * 1.6f) * 2, cw, ch);
+        CrestArt.Draw(this, cr, c);
+        _glowAt = cr.GetCenter();
+        _glowR = ch * 0.6f;
+        _glowC = Px.Hex(c.Primary).Lerp(Colors.White, 0.35f);
+        _shine = cr.Grow(-cw * 0.08f);
         float bw = (stage.Size.X - 42) / 2, by = stage.End.Y - 58;
         GhostButton("kitcols", new Rect2(stage.Position.X + 14, by, bw, 42), "KIT COLOURS", 20, () => EditCrest(x =>
         {

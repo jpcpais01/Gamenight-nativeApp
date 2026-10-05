@@ -42,7 +42,7 @@ public sealed partial class LeagueScreen : PxCanvas
         DrawRect(new Rect2(W / 2 - 1.5f, 0, 3, H), line);
         Px.Scanlines(this, new Rect2(0, 0, W, H));
 
-        BackButton(new Vector2(14, 12), () => _ui.Go(_ui.Home));
+        BackButton(new Vector2(14, 12), () => _ui.Go(_ui.Map));
         Title(new Vector2(66, 44), "LEAGUE");
         Coins(W - 16, 14, Club.S.Coins);
         if (!L.Active)
@@ -102,12 +102,7 @@ public sealed partial class LeagueScreen : PxCanvas
             Px.Text(this, Px.Small, new Vector2(x + 14, y), s, 8, Px.Ink);
             y += 20;
         }
-        GoldButton("start", new Rect2(x, card.End.Y - 70, 280, 50), "DRAW THE LEAGUE  >", 30, () =>
-        {
-            L.Start();
-            _tab = 0;
-            _ui.Open(new LeagueDraw(_ui));
-        });
+        GoldButton("start", new Rect2(x, card.End.Y - 70, 280, 50), "PICK A LEAGUE  >", 30, () => _ui.Go(_ui.Map));
     }
 
     // ---------------------------------------------------------------- overview
@@ -433,7 +428,7 @@ public sealed partial class LeagueScreen : PxCanvas
         // Honours.
         y += 8;
         Px.Text(this, Px.Small, new Vector2(rec.Position.X + 12, y), "HONOURS", 8, Px.Gold);
-        Px.TextR(this, Px.Small, rec.End.X - 12, y, $"YOUR TITLES: {L.S.Titles}", 8, L.S.Titles > 0 ? Px.Gold : Px.InkDim);
+        Px.TextR(this, Px.Small, rec.End.X - 12, y, $"TITLES HERE: {L.S.Titles} · TROPHIES: {L.Trophies}", 8, L.S.Titles > 0 ? Px.Gold : Px.InkDim);
         y += 20;
         foreach (var h in Enumerable.Reverse(L.S.History).Take(3))
         {
@@ -537,7 +532,7 @@ public sealed partial class LeagueScreen : PxCanvas
     void Reward(Fixture f, int round)
     {
         var (coins, res) = Club.RecordResult(f.GoalsFor(You), f.GoalsAgainst(You));
-        int bonus = res == 'W' ? 500 : res == 'D' ? 250 : 0;
+        int bonus = res == 'W' ? L.Bonus.win : res == 'D' ? L.Bonus.draw : 0;
         Club.Earn(bonus);
         After(round, coins + bonus);
     }
@@ -572,6 +567,23 @@ public sealed partial class LeagueScreen : PxCanvas
             ui.Go(ui.League);
         }
         if (arg.StartsWith("--league-tab=")) ui.League._tab = int.Parse(arg[13..]);
+        if (arg.StartsWith("--screen=map"))
+        {
+            // `--screen=map@ita:4` starts a career in Italy with four trophies.
+            if (arg.Contains('@'))
+            {
+                var parts = arg[(arg.IndexOf('@') + 1)..].Split(':');
+                lg.Begin(parts[0].ToUpperInvariant());
+                if (parts.Length > 1) lg.C.Trophies = int.Parse(parts[1]);
+                if (!lg.Active) lg.Start(lg.Def);
+            }
+            ui.Go(ui.Map);
+        }
+        if (arg == "--map=pick")
+        {
+            lg.C = null;
+            ui.Go(ui.Map);
+        }
         if (!lg.Active) return;
         int last = Math.Max(0, lg.S.Round - 1);
         switch (arg)

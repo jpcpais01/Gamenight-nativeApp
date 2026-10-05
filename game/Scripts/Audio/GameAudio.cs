@@ -7,9 +7,8 @@ using Godot;
 namespace GameNight.Audio;
 
 /// <summary>
-/// The game's sound, all synthesised: strikes, whistle, woodwork, net, weather, menus, and the
-/// crowd's soundtrack (<see cref="CrowdScore"/>), whose voices are baked once in the background
-/// at start-up (<see cref="CrowdBank"/>) and then only mixed.
+/// The game's sound: strikes, whistle, woodwork, net, weather and menus synthesised, and the
+/// crowd from the real recordings, as the PWA has it (<see cref="CrowdTape"/>).
 ///
 /// The mix runs on its own thread a block at a time into a stream generator, so a slow frame
 /// never stutters it. Calls from the game just queue the sound; it starts on the next block.
@@ -21,14 +20,12 @@ public sealed partial class GameAudio : Node
     AudioStreamPlayer _player;
     AudioStreamGeneratorPlayback _pb;
     Mixer _mx;
-    CrowdScore _score;
+    CrowdTape _tape;
     Thread _thread;
     volatile bool _run;
     readonly ConcurrentQueue<Action> _q = new();
     readonly Godot.Vector2[] _block = new Godot.Vector2[Mixer.Block];
 
-    Voice _rain;
-    bool _raining;
     float _crowd = -1, _placeX = 1e9f, _lift;
     bool _muted, _suspended;
 
@@ -46,43 +43,17 @@ public sealed partial class GameAudio : Node
         _player.Play();
         _pb = (AudioStreamGeneratorPlayback)_player.GetStreamPlayback();
         _mx = new Mixer(sr);
-        _score = new CrowdScore(_mx);
-        _mx.Score = _score;
-        // The crowd's voices take a moment to bake: off the main thread, then the crowd fades in.
-        System.Threading.Tasks.Task.Run(() =>
-        {
-            try
-            {
-                // Baked once; after that, loaded from where the last bake was saved.
-                string path = ProjectSettings.GlobalizePath($"user://crowd-v{CrowdBank.Version}.bin");
-                CrowdBank bank = null;
-                if (System.IO.File.Exists(path))
-                    using (var f = System.IO.File.OpenRead(path)) bank = CrowdBank.Read(f);
-                if (bank == null)
-                {
-                    bank = CrowdBank.Bake();
-                    GD.Print($"Crowd baked in {bank.BakeMs:0} ms");
-                    try
-                    {
-                        using var f = System.IO.File.Create(path);
-                        bank.Write(f);
-                    }
-                    catch (Exception e)
-                    {
-                        GD.PrintErr("Crowd bank not saved: ", e.Message);
-                    }
-                }
-                Do(() => _score.Use(bank));
-            }
-            catch (Exception e)
-            {
-                GD.PrintErr("Crowd bake: ", e);
-            }
-        });
+        _tape = new CrowdTape(_mx, Load("res://Audio/crowd-bed.pcm"), Load("res://Audio/crowd-goal.pcm"));
 
         _run = true;
         _thread = new Thread(Loop) { IsBackground = true, Name = "Audio", Priority = ThreadPriority.AboveNormal };
         _thread.Start();
+    }
+
+    static Recording Load(string path)
+    {
+        var bytes = FileAccess.GetFileAsBytes(path);
+        return bytes.Length > 0 ? Recording.FromPcm(bytes, 44100) : null;
     }
 
     public override void _ExitTree()
@@ -105,6 +76,7 @@ public sealed partial class GameAudio : Node
             long start = System.Diagnostics.Stopwatch.GetTimestamp();
             try
             {
+                _tape.Tick();
                 _mx.Render(_block);
             }
             catch (Exception e)
@@ -143,47 +115,6 @@ public sealed partial class GameAudio : Node
     /// <summary>A ground with or without a crowd.</summary>
     public void SetCrowd(bool on) => Do(() => _mx.SetCrowd(on));
 
-    /// <summary>Rain on (or off) the stadium: a hiss of drops on the roofs and the turf.</summary>
-    public void SetRain(bool on)
-    {
-        if (on == _raining) return;
-        _raining = on;
-        Do(() =>
-        {
-            double t = _mx.Now;
-            _mx.Weather(on);
-            if (on)
-            {
-                _rain ??= _mx.NoiseVoice(t, double.MaxValue, 0.83f, new Param(0), Bus.Master,
-                    new Biquad(FilterType.Highpass, 1600), new Biquad(FilterType.Peaking, 4200, 1, 5));
-                _rain.Series = true;
-                _rain.Stop = double.MaxValue;
-                _rain.Gain.Target(0.11f, t, 0.6f);
-            }
-            else if (_rain != null)
-            {
-                _rain.Gain.Target(0, t, 0.6f);
-                _rain.Stop = t + 4;
-                _rain = null;
-            }
-        });
-    }
-
-    /// <summary>Thunder after a lightning flash, `delay` seconds later (how far off the strike
-    /// was): a crack when it's close, then a long low roll that swells twice and dies away.</summary>
-    public void Thunder(float delay) => Do(() =>
-    {
-        double t = _mx.Now + delay;
-        float near = Math.Clamp(1 - delay / 4, 0, 1);
-        if (near > 0.3f) _mx.Burst(t, 0.35, FilterType.Bandpass, 900, 0.7f, 0.22f * near, 0.8f);
-        var g = new Param(0.0001f).Set(0.0001f, t).Exp(0.5f, t + 0.12).Exp(0.22f, t + 0.9)
-            .Exp(0.42f, t + 1.4).Exp(0.12f, t + 2.6).Exp(0.25f, t + 3.1).Exp(0.0001f, t + 6.5);
-        _mx.NoiseVoice(t, t + 6.6, 0.35f, g, Bus.Master,
-            new Biquad(FilterType.Lowpass, 120 + 160 * near, 0.9f), new Biquad(FilterType.Peaking, 55, 1, 6));
-        // A big one right overhead: the crowd jumps, whistles, then cheers itself.
-        if (near > 0.55f) _score.Thunder(t + 0.25, near);
-    });
-
     public bool Muted
     {
         get => _muted;
@@ -213,8 +144,25 @@ public sealed partial class GameAudio : Node
     {
         if (MathF.Abs(k - _crowd) < 0.005f) return;
         _crowd = k;
-        Do(() => _score.Level = k);
+        Do(() => _tape.Level = k);
     }
+
+    float _excite = -1, _mouth;
+
+    /// <summary>
+    /// How loud the crowd is: `e` the match's excitement (0..1); `mouth` (0..1) how close the
+    /// ball is to the goal line in front of a goal, where the last metres make it surge.
+    /// </summary>
+    public void SetExcitement(float e, float mouth = 0)
+    {
+        if (MathF.Abs(e - _excite) < 0.01f && MathF.Abs(mouth - _mouth) < 0.01f) return;
+        _excite = e;
+        _mouth = mouth;
+        Do(() => _tape.Excite(e, mouth));
+    }
+
+    /// <summary>The recorded roar, held at full for `hold` seconds; `side` 1 is the away end's.</summary>
+    public void Goal(float hold, int side = 0) => Do(() => _tape.Goal(hold, side == 1 ? Bus.End1 : Bus.Crowd, side));
 
     /// <summary>Menus: the crowd sinks to a distant murmur (or silence inside a pack opening).</summary>
     public void SetAmbience(float level) => SetCrowdLevel(0.35f * level);
@@ -223,7 +171,7 @@ public sealed partial class GameAudio : Node
     public void Terraces(Terraces dir)
     {
         var cue = dir.TakeCue();
-        Do(() => _score.Cue(cue));
+        Do(() => _tape.Cue(cue));
     }
 
     public void Kick(float strength) => Do(() =>
@@ -348,12 +296,6 @@ public sealed partial class GameAudio : Node
             if (tier >= 3) _mx.Tone(t, 98, 2, Wave.Sine, 0.4f, 49);
         });
         // The best cards: a stadium erupting.
-        if (tier >= 3) Do(() =>
-        {
-            var b = _score.Take(Shot.Erupt);
-            if (b == null) return;
-            var rec = new Recording { L = b, R = b, Rate = (int)CrowdBank.Rate };
-            _mx.Add(new Voice { Kind = Voice.Src.Sample, Rec = rec, Gain = new Param(1.2f), Out = Bus.Master, Start = _mx.Now });
-        });
+        if (tier >= 3) Do(() => _tape.Goal(0, Bus.Master));
     }
 }

@@ -39,6 +39,9 @@ public partial class Main : Node
     PitchInvader _invader;
     bool _invaderShown;
     Goals _goals;
+    GoalFx _goalFx;
+    /// <summary>Each side's goal explosion (yours from the club, theirs at random).</summary>
+    readonly int[] _fxStyle = { 0, 1 };
     DeliveryView _delivery;
     TouchControls _controls;
     Hud _hud;
@@ -67,6 +70,9 @@ public partial class Main : Node
         _officials = new Officials(_view.WorldRoot);
         _invader = new PitchInvader(_view.WorldRoot) { Cue = beat => PitchInvader.Crowd(Sound.Terraces, beat) };
         _goals = new Goals(_view.WorldRoot);
+        _goalFx = new GoalFx(_view.WorldRoot);
+        // The demo behind the menus goes off quietly.
+        if (Request?.Demo != true) _goalFx.Sound = (style, cue) => GameAudio.Instance?.GoalFx(style, cue);
         _delivery = new DeliveryView(_view.WorldRoot);
         _camera = new MatchCamera(_view.Camera);
         _view.Camera.Far = _ground.ViewRange;
@@ -109,7 +115,12 @@ public partial class Main : Node
         Cutscene.OnSubtitle = _letterbox.Subtitle;
         Cutscene.OnBeat = WalkOutCrowd;
         Cutscene.OnJump = _players.Snap;
-        _replay.OnRewind = _players.Snap;
+        _replay.OnRewind = () =>
+        {
+            _players.Snap();
+            _goalFx.Clear();
+        };
+        _replay.OnGoal = Explode;
         _replay.OnEvents = f =>
         {
             if (f.Net > 0) _goals.Impact(f.BallX, f.BallY, f.BallZ, f.Net, _time);
@@ -170,6 +181,7 @@ public partial class Main : Node
         _goalLog.Clear();
         _logged = 0;
         _match = Request != null ? new Match(Request.Seed, Request.Setup) : new Match(seed: DateTime.Now.Ticks % 2147483647);
+        PickExplosions();
         if (Request?.Demo == true) _match.AutoPlay = true;
         // Names and kits are read before the match's own thread starts.
         _players.SetMatch(_match);
@@ -253,6 +265,7 @@ public partial class Main : Node
     /// <summary>The cut after a goal (or the walk-out): the match waits while it plays.</summary>
     void Direct(bool replay)
     {
+        _goalFx.Clear();
         _runner.Paused = true;
         _players.Markers = false;
         _hud.Visible = false;
@@ -265,6 +278,7 @@ public partial class Main : Node
     void EndDirected()
     {
         _replay.Finish();
+        _goalFx.Clear();
         Cutscene.Cancel();
         _players.Snap();
         _players.Markers = true;
@@ -300,7 +314,6 @@ public partial class Main : Node
         if (Request?.Demo != true && GameAudio.Instance != null)
         {
             GameAudio.Instance.Suspended = false;
-            GameAudio.Instance.SetRain(false);
             GameAudio.Instance.SetVenue(Venue.Default);
         }
     }
@@ -374,6 +387,7 @@ public partial class Main : Node
             _camera.SetAspect(_view.Aspect);
         }
         if (_cur.Goal >= 0) _camera.Bump(0.4f);
+        if (_cur.Goal >= 0 && !Directed) Explode(_cur);
         LogGoal();
         if (_cur.Post > 0) _camera.Bump(0.6f);
         float run = _pause.IsOpen ? 0 : dt;
@@ -412,9 +426,14 @@ public partial class Main : Node
         // The net takes the ball (live, or again on the replay's tape).
         if (!Directed && _cur.Net > 0) _goals.Impact(_cur.BallX, _cur.BallY, _cur.BallZ, _cur.Net, _time);
         _goals.Update(_time);
+        _goalFx.Update(run, _time, _view.Camera.GlobalPosition);
+        if (_goalFx.Shake > 0)
+        {
+            _camera.Bump(Math.Min(1, _goalFx.Shake));
+            _goalFx.Shake = 0;
+        }
         _prof.Lap(Profiler.Sys.Players);
         _ground.Update(_cur, _time, dt);
-        Weather();
         _prof.Lap(Profiler.Sys.Stadium);
         Sound.Frame(_match, _cur, Request?.Demo != true, Request?.Drill == null, Request?.Drill != null, _pause.IsOpen ? 0 : dt);
         GameAudio.Instance?.Place(_view.Camera.GlobalPosition.X, Sound.Terraces.Tension);
@@ -439,6 +458,27 @@ public partial class Main : Node
             GetTree().Quit();
             _shotPath = null;
         }
+    }
+
+    /// <summary>The ball's in: the scorers' explosion goes off in the net (live, or on the replay).</summary>
+    void Explode(MatchSnapshot f)
+    {
+        int team = f.BallX > 0 == f.Dir[0] > 0 ? 0 : 1;
+        var kit = Request?.Setup?.Teams?[team]?.Info?.Kit;
+        int shirt = kit?.Shirt ?? (team == 0 ? 0xc8393b : 0xf1ebdc), trim = kit?.Shirt2 ?? (team == 0 ? 0xf3ede0 : 0x23345e);
+        _goalFx.Fire(_fxStyle[team], f.BallX, f.BallY, f.BallZ, shirt, trim);
+    }
+
+    /// <summary>Your club's chosen explosion for your side (team 0); the other side gets another at random.</summary>
+    void PickExplosions()
+    {
+        var rng = new Random((int)(DateTime.Now.Ticks & 0x7fffffff));
+        bool mine = Request != null && Request.Demo != true && Ground.Club != null;
+        _fxStyle[0] = mine ? Math.Clamp(Ground.Club.S.GoalFx, 0, GoalFx.Count - 1) : rng.Next(GoalFx.Count);
+        _fxStyle[1] = (_fxStyle[0] + 1 + rng.Next(GoalFx.Count - 1)) % GoalFx.Count;
+        // Debug: `-- --goalfx=N` puts style N on both sides.
+        foreach (var a in OS.GetCmdlineUserArgs())
+            if (a.StartsWith("--goalfx=") && int.TryParse(a[9..], out int n)) _fxStyle[0] = _fxStyle[1] = Math.Clamp(n, 0, GoalFx.Count - 1);
     }
 
     /// <summary>A pitch invader on: the cinema bars and a caption (tap to skip), the controls
@@ -478,7 +518,6 @@ public partial class Main : Node
         _goalLog.Add(new GoalEvent { Team = p.Team, Index = p.Index, Minute = Math.Max(1, _cur.Minute) });
     }
 
-    double _thunderFor = -10;
     int _prewarm;
 
     /// <summary>The first frames of the walk-out draw the match HUD, the controls, the markers
@@ -498,20 +537,6 @@ public partial class Main : Node
             _players.Markers = !Directed;
         }
         _hud.Modulate = _controls.Modulate = new Color(1, 1, 1, done ? 1 : 0.004f);
-    }
-
-    /// <summary>The rain's hiss, and thunder after each flash (later the farther off it struck).</summary>
-    void Weather()
-    {
-        var atm = _ground.Atmosphere;
-        var audio = GameAudio.Instance;
-        if (atm == null || audio == null || Request?.Demo == true) return;
-        audio.SetRain(atm.Weather == Grounds.Weather.Rain);
-        if (atm.FlashAt > _thunderFor && atm.FlashAt <= _time)
-        {
-            _thunderFor = atm.FlashAt;
-            audio.Thunder(0.4f + (float)Random.Shared.NextDouble() * 3f);
-        }
     }
 
     /// <summary>The frame-time report into Downloads (and onto the clipboard, to paste anywhere).</summary>

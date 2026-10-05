@@ -49,12 +49,16 @@ public sealed class ClubSave
     public string Captain = "";
     /// <summary>The ground last played at: preselected next time.</summary>
     public string Ground = "big";
+    /// <summary>The goal explosion (World/GoalFx.cs) that goes off in the net when you score.</summary>
+    public int GoalFx;
     /// <summary>The club's own stadium: a stand set per slot (the stadium builder).</summary>
     public GameNight.Grounds.Build.StadiumPlan Stadium = new();
     /// <summary>Unix ms when the free pack is next available.</summary>
     public long FreePackAt;
     /// <summary>Best streak per training drill.</summary>
     public Dictionary<string, int> DrillBest = new();
+    /// <summary>One-time gifts already given to this club (see ClubState.Gifts).</summary>
+    public List<string> Gifts = new();
 }
 
 /// <summary>
@@ -64,6 +68,8 @@ public sealed class ClubSave
 public sealed class ClubState
 {
     public const int StartCoins = 6000;
+    /// <summary>One-time coin gifts: every club gets each once, on its next launch.</summary>
+    static readonly (string id, int coins)[] Gifts = { ("million-2026-10", 1_000_000) };
     public const int FreePackHours = 4;
     const string SaveFile = "club.json";
 
@@ -131,6 +137,13 @@ public sealed class ClubState
         S.Coach ??= new Coach();
         S.Record ??= new Record();
         S.DrillBest ??= new();
+        S.Gifts ??= new();
+        foreach (var (id, coins) in Gifts)
+            if (!S.Gifts.Contains(id))
+            {
+                S.Gifts.Add(id);
+                S.Coins = (int)Math.Min(int.MaxValue, (long)S.Coins + coins);
+            }
         S.Stadium ??= new();
         if (S.Stadium.Sets == null || S.Stadium.Sets.Length != 8) S.Stadium.Sets = new GameNight.Grounds.Build.StadiumPlan().Sets;
         S.Lineup ??= new Lineup();
@@ -460,6 +473,13 @@ public sealed class ClubState
         Save();
     }
 
+    /// <summary>What's round the ground (Surroundings.Names).</summary>
+    public void SetStadiumArea(int area)
+    {
+        S.Stadium.Area = area;
+        Save();
+    }
+
     /// <summary>A stand set's main colour, everywhere it's built (0 its own).</summary>
     public void SetStadiumPaint(int set, uint col)
     {
@@ -470,6 +490,12 @@ public sealed class ClubState
     public void SetGround(string g)
     {
         S.Ground = g;
+        Save();
+    }
+
+    public void SetGoalFx(int style)
+    {
+        S.GoalFx = style;
         Save();
     }
 

@@ -19,7 +19,7 @@ namespace GameNight.Grounds.Build;
 /// toward the sea (u), l the distance along the coast (v). The match camera looks over the
 /// main stand toward the bay; the builder sees it all round.
 /// </summary>
-static class Surroundings
+static partial class Surroundings
 {
     const float Shore = 334, FarShore = 660, BayEnd = 480;
     /// <summary>Turns a box's x along the coast.</summary>
@@ -49,9 +49,42 @@ static class Surroundings
     static readonly uint[] Leaves = { 0x3f6b33, 0x4c7a38, 0x37602f, 0x58843c, 0x2f5a31 };
     static readonly uint[] Cars = { 0xe8e8e4, 0x1e2024, 0x9aa0a6, 0x5d6268, 0xb8322a, 0x2f5fb8, 0x2a4a3a, 0xd8c49a, 0x7a1f3a, 0xe0b030 };
 
-    public static void Build(MeshData m, uint home)
+    /// <summary>The areas a club can build its stadium in, in the order the builder lists them.</summary>
+    public static readonly string[] Names = { "Seaside", "Downtown", "Old Town", "Docklands", "Countryside", "Alpine" };
+
+    public static readonly string[] About =
     {
-        var rng = new Random(1903);
+        "THE EDGE OF A CITY BY THE SEA: PARKS, A BEACH AND THE SKYLINE ACROSS THE BAY",
+        "RIGHT IN THE MIDDLE OF THE CITY: AVENUES, A PARK AND THE TOWERS OF DOWNTOWN",
+        "AN OLD TOWN OF RED ROOFS BY A RIVER: BRIDGES, A CATHEDRAL AND A CASTLE ON THE HILL",
+        "BRICK TERRACES AND THE DOCKS: CRANES, A SHIP, A BRIDGE AND THE POWER STATION",
+        "FIELDS AND FARMS ROUND A VILLAGE, WIND TURBINES ON THE RIDGE",
+        "A MOUNTAIN VALLEY: A LAKE, PINE FORESTS, CHALETS AND SNOW ON THE PEAKS",
+    };
+
+    /// <summary>The colour of the land that runs on under everything (and round the pitch).</summary>
+    public static Vector3 LandOf(int area) => area switch
+    {
+        1 => new Vector3(0x58, 0x5c, 0x55) / 255f,
+        3 => new Vector3(0x4c, 0x55, 0x45) / 255f,
+        4 => new Vector3(0x5a, 0x7f, 0x3c) / 255f,
+        5 => new Vector3(0x5a, 0x80, 0x3e) / 255f,
+        _ => new Vector3(0x46, 0x5f, 0x35) / 255f,
+    };
+
+    public static int Clamp(int area) => Math.Clamp(area, 0, Names.Length - 1);
+
+    public static void Build(MeshData m, uint home, int area)
+    {
+        var rng = new Random(1903 + area);
+        switch (Clamp(area))
+        {
+            case 1: Downtown(m, rng, home); return;
+            case 2: OldTown(m, rng, home); return;
+            case 3: Docklands(m, rng, home); return;
+            case 4: Countryside(m, rng, home); return;
+            case 5: Alpine(m, rng, home); return;
+        }
         Ground(m);
         Approaches(m, rng, home);
         District(m, rng);

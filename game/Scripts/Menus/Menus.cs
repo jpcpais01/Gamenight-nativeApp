@@ -20,6 +20,7 @@ public sealed partial class Menus : Control
     /// <summary>The league (game/Scripts/League): its state, saved beside the club, and its hub.</summary>
     public readonly global::GameNight.League.LeagueState Season;
     public readonly global::GameNight.League.LeagueScreen League;
+    public readonly global::GameNight.League.MapScreen Map;
     readonly Control _modals;
     readonly ToastLayer _toast;
     Control _current;
@@ -40,6 +41,7 @@ public sealed partial class Menus : Control
         Stadium = Add(new StadiumScreen(this));
         Season = new global::GameNight.League.LeagueState(OS.GetUserDataDir(), club);
         League = Add(new global::GameNight.League.LeagueScreen(this));
+        Map = Add(new global::GameNight.League.MapScreen(this));
         _modals = new Control { MouseFilter = MouseFilterEnum.Ignore };
         _modals.SetAnchorsPreset(LayoutPreset.FullRect);
         AddChild(_modals);
@@ -67,6 +69,7 @@ public sealed partial class Menus : Control
         if (screen is PxCanvas c) c.ResetScroll();
         if (screen is SquadScreen s) s.Opened();
         if (screen is global::GameNight.League.LeagueScreen l) l.Opened();
+        if (screen is global::GameNight.League.MapScreen m) m.Opened();
         Audio.GameAudio.Instance?.SetAmbience(screen == Home ? 1 : 0.4f);
         App?.BackdropChanged();
     }
@@ -113,7 +116,7 @@ public sealed partial class Menus : Control
         }
         if (_current != Home)
         {
-            Go(Home);
+            Go(_current == League ? Map : Home);
             return true;
         }
         return false;

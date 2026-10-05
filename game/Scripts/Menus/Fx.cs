@@ -264,7 +264,15 @@ public static partial class Fx
         };
         var box = new[] { r.Position, new Vector2(r.End.X, r.Position.Y), r.End, new Vector2(r.Position.X, r.End.Y) };
         foreach (var poly in Geometry2D.IntersectPolygons(band, box))
-            if (poly.Length >= 3) ci.DrawColoredPolygon(poly, c);
+            if (poly.Length >= 3 && Area(poly) > 0.5f) ci.DrawColoredPolygon(poly, c);
+    }
+
+    /// <summary>A polygon's area (slivers left by clipping can't be triangulated).</summary>
+    static float Area(Vector2[] p)
+    {
+        float a = 0;
+        for (int i = 0, j = p.Length - 1; i < p.Length; j = i++) a += p[j].X * p[i].Y - p[i].X * p[j].Y;
+        return Mathf.Abs(a) / 2;
     }
 
     /// <summary>A holographic rainbow sheen drifting over r.</summary>

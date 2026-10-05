@@ -25,6 +25,9 @@ public sealed class StadiumPlan
         Sets[(int)s] = set;
     }
 
+    /// <summary>What's round the ground (an index into Surroundings.Names).</summary>
+    public int Area;
+
     /// <summary>The main colour chosen per set (0 its own, <see cref="Kit.ClubPaint"/> the club's).</summary>
     public uint[] Paint;
 
