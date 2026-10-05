@@ -38,15 +38,20 @@ vec3 world_fog(vec3 c, float dist, float base) {
 }
 
 // The near stand (behind the match camera) is drawn, but cut away wherever it would stand
-// between the camera and the pitch: true where the line from the camera through this point
-// comes down onto the pitch (or just round it) beyond it.
+// between the camera and the pitch: true where the line from the camera through it, seen
+// from above and carried on past it, crosses the pitch and its surrounds, and for anything
+// close by a camera up in the stand. (Seen from above, so the stand by a high camera, whose
+// line of sight runs on over the pitch to the far stand, goes too; turned to look along the
+// line, as for a goal kick, it stays.)
 bool world_near_hides(vec3 p, vec3 cam) {
-	vec3 d = p - cam;
-	if (d.y > -0.001) return false;
-	float t = cam.y / -d.y;
-	if (t <= 1.0) return false;
-	vec3 g = cam + d * t;
-	return abs(g.x) < 60.0 && abs(g.z) < 40.0;
+	vec2 q = p.xz, d = p.xz - cam.xz;
+	if (dot(d, d) < 24.0 * 24.0) return true;
+	d = normalize(d);
+	d = vec2(abs(d.x) < 1e-5 ? 1e-5 : d.x, abs(d.y) < 1e-5 ? 1e-5 : d.y);
+	vec2 b = vec2(57.0, 37.5);
+	vec2 t1 = (-b - q) / d, t2 = (b - q) / d;
+	vec2 lo = min(t1, t2), hi = max(t1, t2);
+	return min(hi.x, hi.y) >= max(max(lo.x, lo.y), 0.0);
 }
 
 float world_hash(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 15731.743); }
