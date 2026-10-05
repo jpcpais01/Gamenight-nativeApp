@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.58", "New app icon: a pixel football under the floodlights, as a proper Android adaptive icon (and a themed one). New loading screen: the floodlights clunk on, the ball drops onto the centre spot and bounces to rest, and GAMENIGHT slams in over a scoreboard loading bar."),
         ("0.57", "Cleaner through balls: the stick now picks the team-mate making the run, not just where he stands; long through balls are struck firm instead of dying in front of defenders; and a ball aimed past a nearby defender is zipped past him."),
         ("0.56", "Without PRESS your defender now chases and presses exactly as with it, flat out included, just getting going 10% slower. PRESS still adds the tackle. Running hard costs stamina either way."),
         ("0.55", "Red cards: a second yellow sends the player off, and a wild late slide from behind can be a straight red. He walks off over the touchline and his side plays on a man short. Keepers are never sent off."),
