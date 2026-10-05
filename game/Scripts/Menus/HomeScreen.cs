@@ -4,6 +4,7 @@ using System.Linq;
 using Godot;
 using GameNight.Club;
 using GameNight.Sim;
+using Lg = GameNight.League;
 
 namespace GameNight.Menus;
 
@@ -300,15 +301,89 @@ public sealed partial class HomeScreen : PxCanvas
         {
             new("squad", "SQUAD", Px.Cyan, $"{Club.TeamRating()} OVR · {Club.Formation.Name}", () => _ui.Go(_ui.Squad), SquadArt),
             new("store", "STORE", Px.Gold, free > 0 ? $"FREE PACK {Px.Clock(free)}" : "FREE PACK READY", () => _ui.Go(_ui.Store), StoreArt, free > 0 ? null : "FREE"),
-            new("league", "LEAGUE", Px.Neon, !lg.Active ? "START A SEASON" : lg.SeasonOver ? "SEASON OVER" : $"MATCHDAY {lg.S.Round + 1}" + (lg.S.Round > 0 ? " · " + global::GameNight.League.LeagueState.Ordinal(lg.Place(0)) : ""),
-                () => _ui.Go(_ui.League), TrophyArt, lg.Active ? null : "NEW!"),
+            new("leagues", "LEAGUES", Px.Neon, "", () => _ui.Go(_ui.Map), null),
             new("train", "TRAINING", Px.Win, "SKILL DRILLS", () => _ui.App.PickDrill(), TrainArt),
             new("stadium", "STADIUM", Px.Hex(0xb98cff), "BUILD YOURS", () => _ui.Go(_ui.Stadium), StadiumArt),
         };
+        // The leagues take a double-width tile: a window onto the map.
         float gap = 10;
-        float tw = (r.Size.X - gap * (tiles.Count - 1)) / tiles.Count;
-        for (int i = 0; i < tiles.Count; i++)
-            DockTile(new Rect2(r.Position.X + i * (tw + gap), r.Position.Y, tw, r.Size.Y), tiles[i]);
+        int units = tiles.Count + 1;
+        float tw = (r.Size.X - gap * (tiles.Count - 1)) / units;
+        float x = r.Position.X;
+        foreach (var t in tiles)
+        {
+            float w = t.Key == "leagues" ? tw * 2 : tw;
+            var tr = new Rect2(x, r.Position.Y, w, r.Size.Y);
+            if (t.Art == null) LeaguesTile(tr);
+            else DockTile(tr, t);
+            x += w + gap;
+        }
+    }
+
+    /// <summary>The leagues: a window onto the map of Europe with your league's pin in it, where you
+    /// stand and your trophies. Opens the map.</summary>
+    void LeaguesTile(Rect2 r)
+    {
+        var lg = _ui.Season;
+        bool held = Held("leagues");
+        var rr = held ? r.Translated(new Vector2(3, 3)) : r;
+        Px.Frame(this, rr, Px.Hex(0x120c2e), new Color(Px.Neon, 0.75f), held ? null : Px.Shadow);
+        var inner = rr.Grow(-3);
+        // The map fills the right of the tile, your league's pin in it.
+        var tex = Lg.EuropeMap.Texture(Size);
+        var def = lg.Def;
+        var pin = Lg.EuropeMap.Project(def.Lon, def.Lat);
+        const int S = Lg.EuropeMap.Scale;
+        var win = new Rect2(inner.Position.X + inner.Size.X * 0.3f, inner.Position.Y, inner.Size.X * 0.7f, inner.Size.Y);
+        var src = new Rect2(((pin - win.Size * new Vector2(0.5f, 0.62f)) / S).Floor(), (win.Size / S).Floor());
+        var origin = src.Position;
+        DrawRect(win, Px.Hex(0x173f68));
+        var clip = src.Intersection(new Rect2(0, 0, tex.GetWidth(), tex.GetHeight()));
+        DrawTextureRectRegion(tex, new Rect2(win.Position + (clip.Position - origin) * S, clip.Size * S), clip);
+        for (int i = 0; i < 6; i++)
+            DrawRect(new Rect2(win.Position.X + i * 10, win.Position.Y, 10, win.Size.Y), new Color(0x12 / 255f, 0x0c / 255f, 0x2e / 255f, 0.9f - i * 0.16f));
+        DrawRect(new Rect2(inner.Position.X, inner.End.Y - 40, inner.Size.X, 40), new Color(0x12 / 255f, 0x0c / 255f, 0x2e / 255f, 0.55f));
+        var p = win.Position + pin - origin * S;
+        float ring = 7 + (float)(T * 10 % 10);
+        DrawArc(p + new Vector2(0, -17), ring, 0, Mathf.Tau, 18, new Color(Px.Neon, 1 - (ring - 7) / 10), 2);
+        DrawColoredPolygon(Px.Ellipse(p, 6, 2, 10), new Color(0, 0, 0, 0.45f));
+        DrawRect(new Rect2(p.X - 1, p.Y - 9, 2, 9), Px.Hex(0x1a1406));
+        if (lg.HasCareer) Lg.LeagueArt.Badge(this, new Rect2(p.X - 8, p.Y - 28, 16, 20), Club.S.Crest);
+        else
+        {
+            var tc = Px.Hex(Lg.Ladder.TierColors[def.Tier - 1]);
+            Px.Frame(this, new Rect2(p.X - 7, p.Y - 23, 14, 14), tc, tc.Darkened(0.55f), null, 2, 2);
+        }
+        DrawRect(new Rect2(inner.Position, new Vector2(inner.Size.X, 3)), Px.Neon);
+        Px.Text(this, Px.Small, inner.Position + new Vector2(9, 17), "THE LEAGUES OF EUROPE", 7, Px.Cyan, new Color(0, 0, 0, 0.7f), 1);
+
+        string where = !lg.HasCareer ? "PICK YOUR HOME COUNTRY"
+            : !lg.Active ? "PICK A LEAGUE ON THE MAP"
+            : lg.SeasonOver ? $"{def.Name.ToUpperInvariant()} · SEASON OVER"
+            : $"{def.Name.ToUpperInvariant()} · MD {lg.S.Round + 1}" + (lg.S.Round > 0 ? $" · {Lg.LeagueState.Ordinal(lg.Place(0))}" : "");
+        Px.Text(this, Px.Big, new Vector2(inner.Position.X + 9, inner.End.Y - 17), "LEAGUES", 22, Px.Neon, new Color(0x5a / 255f, 0x0a / 255f, 0x30 / 255f), 2);
+        Px.Text(this, Px.Small, new Vector2(inner.Position.X + 9, inner.End.Y - 5), Px.Fit(Px.Small, where, 7, inner.Size.X - 18), 7, Px.Ink, new Color(0, 0, 0, 0.7f), 1);
+
+        // Trophies, or NEW! before the first season.
+        if (lg.HasCareer)
+        {
+            string t = lg.Trophies.ToString();
+            var tr = new Rect2(inner.End.X - Px.Width(Px.Big, t, 18) - 30, inner.Position.Y + 8, Px.Width(Px.Big, t, 18) + 24, 22);
+            Px.Frame(this, tr, new Color(0.16f, 0.11f, 0.02f, 0.9f), Px.Hex(0xb37400), null, 2, 3);
+            var cp = tr.Position + new Vector2(6, 4);
+            DrawRect(new Rect2(cp.X, cp.Y, 10, 7), Px.Gold);
+            DrawRect(new Rect2(cp.X + 3, cp.Y + 7, 4, 4), Px.Gold);
+            DrawRect(new Rect2(cp.X + 1, cp.Y + 11, 8, 2), Px.Gold);
+            Px.Text(this, Px.Big, tr.Position + new Vector2(20, 17), t, 18, Px.Hex(0xffe066));
+        }
+        else
+        {
+            bool on = (T % 1) < 0.6;
+            var b = new Rect2(rr.End.X - 44, rr.Position.Y - 7, 48, 16);
+            Px.Frame(this, b, on ? Px.Neon : Px.Neon.Darkened(0.25f), Px.Hex(0x1a1406, 0.8f), null, 2, 0);
+            Px.TextC(this, Px.Small, b.GetCenter().X, b.GetCenter().Y + 4, "NEW!", 8, Px.Dark);
+        }
+        Tap("leagues", r, () => _ui.Go(_ui.Map));
     }
 
     void DockTile(Rect2 r, Tile t)
@@ -359,12 +434,6 @@ public sealed partial class HomeScreen : PxCanvas
         var c = a.GetCenter();
         Art.Pack(this, new Rect2(c.X - pw * 0.95f, a.Position.Y + 4 - bob * 0.6f, pw * 0.9f, ph * 0.9f), Packs.All[4]);
         Art.Pack(this, new Rect2(c.X - pw * 0.3f, a.Position.Y - bob, pw, ph), Packs.All[3]);
-    }
-
-    void TrophyArt(Rect2 a)
-    {
-        float th = a.Size.Y, tw = th * 100 / 130f;
-        global::GameNight.League.LeagueArt.Trophy(this, new Rect2(a.GetCenter().X - tw / 2, a.Position.Y, tw, th), (float)(T * 0.4 % 1.6));
     }
 
     void TrainArt(Rect2 a)

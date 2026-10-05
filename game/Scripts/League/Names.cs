@@ -98,4 +98,28 @@ public static class Names
         string g = latin ? (r.Next(2) == 0 ? "Estádio {T}" : "Stadio {S}") : Pick(r, GroundStyle);
         return g.Replace("{T}", town).Replace("{S}", Pick(r, n.Last));
     }
+
+    // ---------------------------------------------------------------- by home country
+
+    /// <summary>A club from this country: a town in its sound, a name in its style.</summary>
+    public static (string name, string town) Club(Random r, HashSet<string> taken, Country c)
+    {
+        for (int tries = 0; ; tries++)
+        {
+            string town = Pick(r, c.TownA) + Pick(r, c.TownB);
+            string name = r.Next(9) == 0 ? $"{town} {1880 + r.Next(45)}" : Pick(r, c.Clubs).Replace("{T}", town);
+            if (name.Length > 20 && tries < 20) continue;
+            if (taken.Add(town) || tries > 40) return (name, town);
+        }
+    }
+
+    /// <summary>A manager, usually a local.</summary>
+    public static string Person(Random r, Country c)
+    {
+        var n = r.Next(10) < 7 ? c.Nation : Pick(r, Cards.Nations);
+        return $"{Pick(r, n.First)} {Pick(r, n.Last)}";
+    }
+
+    public static string Ground(Random r, string town, Country c) =>
+        Pick(r, c.Grounds).Replace("{T}", town).Replace("{S}", Pick(r, c.Nation.Last));
 }

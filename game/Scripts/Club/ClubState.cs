@@ -49,6 +49,8 @@ public sealed class ClubSave
     public string Captain = "";
     /// <summary>The ground last played at: preselected next time.</summary>
     public string Ground = "big";
+    /// <summary>The goal explosion (World/GoalFx.cs) that goes off in the net when you score.</summary>
+    public int GoalFx;
     /// <summary>The club's own stadium: a stand set per slot (the stadium builder).</summary>
     public GameNight.Grounds.Build.StadiumPlan Stadium = new();
     /// <summary>Unix ms when the free pack is next available.</summary>
@@ -477,6 +479,12 @@ public sealed class ClubState
     public void SetGround(string g)
     {
         S.Ground = g;
+        Save();
+    }
+
+    public void SetGoalFx(int style)
+    {
+        S.GoalFx = style;
         Save();
     }
 
