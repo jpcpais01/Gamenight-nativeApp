@@ -67,8 +67,10 @@ void fragment() {
 	} else if (look == LOOK_CURTAIN) {
 		vec2 g = vec2(uv.x / 2.4, uv.y / 3.2);
 		float mull = max(step(0.94, abs(fract(g.x) - 0.5) * 2.0), step(0.9, abs(fract(g.y) - 0.5) * 2.0));
-		float on = step(0.72, world_hash(floor(g)));
-		emis = vec3(1.0, 0.62, 0.3) * on * gn_flood * 0.35 * (1.0 - mull);
+		// The concourses behind the glass: an even glow floor by floor, a dark stretch here and
+		// there (a patchwork of lit and unlit panes reads as camouflage from outside).
+		float on = step(0.22, world_hash(vec2(floor(g.x / 8.0), floor(g.y))));
+		emis = vec3(1.0, 0.78, 0.5) * (0.03 + 0.13 * on) * gn_flood * (1.0 - mull);
 		alb = mix(alb, vec3(0.36, 0.38, 0.4), mull);
 	} else if (look == LOOK_FASCIA) {
 		alb = texture(gn_atlas, px(vec2(fract(uv.x / 48.0) * 512.0, 512.0 + (1.0 - clamp(uv.y / 2.2, 0.0, 1.0)) * 63.0))).rgb;

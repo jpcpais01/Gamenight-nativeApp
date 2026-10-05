@@ -25,6 +25,7 @@ public sealed class Harbour : StandSet
     const uint Navy = 0x23345e, Rust = 0x8a4b2e, Deck = 0x2a2f36;
     static readonly uint[] Boxes = { 0xc0392b, 0x2f7fb8, 0xe0a030, 0x2e8b57, 0xd35400, 0x8e44ad, 0xbdc3c7, 0x1f6f8b, 0xb03a2e, 0xf1c40f };
     public override string Name => "Harbour";
+    public override Outside Outside => new(0x5d4a3e, Look.Plain, 0, Stairs.Zigzag, 0x4a5058);
     public override string About => "Dockside: stacked shipping containers, cranes for floodlights";
     public override uint Swatch => 0x2f7fb8;
     public override uint[] Mains => new uint[] { Navy, 0x1d2a3a, Rust };
@@ -123,6 +124,7 @@ public sealed class Pagoda : StandSet
 {
     const uint Lacquer = 0xb8322a, Tile = 0x34433f, Paper = 0xe7dcc0, Timber = 0x6e2a22, Lantern = 0xff8a3a;
     public override string Name => "Pagoda";
+    public override Outside Outside => new(0x3a2e2a, Look.Plain, 0, Stairs.Tower, 0x9b2d20);
     public override string About => "Temple: swept tiled roofs, red pillars, glowing lanterns";
     public override uint Swatch => 0xd0453a;
     public override uint[] Mains => new uint[] { Lacquer, Timber };
@@ -225,6 +227,7 @@ public sealed class Deco : StandSet
 {
     const uint Cream = 0xe8dcc0, Gold = 0xd4a63a, Green = 0x2d5e4f;
     public override string Name => "Deco";
+    public override Outside Outside => new(0xd8c8a8, Look.Arcade, 4004, Stairs.Tower, 0xe2d6bc);
     public override string About => "1930s grandeur: cream steps, gold fins, a clock tower";
     public override uint Swatch => 0xe8d6a8;
     public override uint[] Mains => new uint[] { Cream };
@@ -330,6 +333,7 @@ public sealed class Crater : StandSet
 {
     const uint Rock = 0x3a3533, Rock2 = 0x4d4642, Steps = 0x5a524d, Lava = 0xff6a1a, Fire = 0xffb347;
     public override string Name => "Crater";
+    public override Outside Outside => new(0x3a3533, Look.Plain, 0, Stairs.None, 0);
     public override string About => "A volcano's bowl: black rock, lava seams, fire-topped spires";
     public override uint Swatch => 0xe0602a;
     public override uint[] Mains => new uint[] { Rock, Rock2, Steps };
@@ -388,6 +392,7 @@ public sealed class Orbital : StandSet
 {
     const uint White = 0xe6eaee, Under = 0xd8dde3, Night = 0x1a2230;
     public override string Name => "Orbital";
+    public override Outside Outside => new(0xd6dbe0, Look.Plain, 0, Stairs.Drum, 0xe6eaee);
     public override string About => "From the future: a floating halo roof, needle towers";
     public override uint Swatch => 0x8fe8ff;
     public override uint[] Mains => new uint[] { White, Under };

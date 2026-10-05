@@ -13,6 +13,7 @@ public sealed class Arena : StandSet
 {
     const uint White = 0xffffff, RoofCol = 0x30353d, Panels = 0xaab6c0, Facade = 0x2c333d;
     public override string Name => "Arena";
+    public override Outside Outside => new(0x3a414b, Look.Plain, 0, Stairs.Drum, 0xe6e8ea);
     public override string About => "Modern bowl: glass boxes, a sweeping roof, LED ribbons";
     public override uint Swatch => 0x9fc6e8;
     public override uint[] Mains => new uint[] { RoofCol, Facade, Panels };
@@ -112,6 +113,7 @@ public sealed class Terrace : StandSet
 {
     const uint RoofCol = 0x3a4048, Brick = 0x8c4f3c, Steps = 0x76787d;
     public override string Name => "Terrace";
+    public override Outside Outside => new(0x8c4f3c, Look.Brick, 0, Stairs.Zigzag, 0x3a4048);
     public override string About => "Old English: a packed standing terrace, pillars, brick";
     public override uint Swatch => 0xc0683f;
     public override uint[] Mains => new uint[] { RoofCol, Brick };
@@ -208,6 +210,7 @@ public sealed class Curva : StandSet
 {
     const uint Travertine = 0xe4dac4, Ochre = 0xc98a52, Steel = 0x55595f;
     public override string Name => "Curva";
+    public override Outside Outside => new(0xb98a4a, Look.Arcade, 4004, Stairs.Drum, 0xb5ae9f);
     public override string About => "Italian concrete: two open tiers, arches, spiral towers";
     public override uint Swatch => 0xe0a85e;
     public override uint[] Mains => new uint[] { Ochre, Travertine };
@@ -324,6 +327,7 @@ public sealed class TheWall : StandSet
 {
     const uint RoofCol = 0x2f343c, RoofTop = 0x5a6068, Panels = 0xb4bec6, Clad = 0x4b5159;
     public override string Name => "The Wall";
+    public override Outside Outside => new(Kit.DarkConcrete, Look.Plain, 0, Stairs.Zigzag, 0x2a2c33);
     public override string About => "One giant, steep standing tier under pylons and a box roof";
     public override uint Swatch => 0xffd447;
     public override uint[] Mains => new uint[] { Clad, RoofCol, RoofTop, Panels };
@@ -393,6 +397,7 @@ public sealed class Citadel : StandSet
 {
     const uint Stone = 0x9a958a, StoneTop = 0xb5b0a3, Base = 0x7f7a70;
     public override string Name => "Citadel";
+    public override Outside Outside => new(0x6e655a, Look.Brick, 0, Stairs.Tower, 0x7d7466);
     public override string About => "A fortress: stone walls, battlements, banners, round keeps";
     public override uint Swatch => 0x9a958a;
     public override uint[] Mains => new uint[] { Stone, StoneTop, Base };

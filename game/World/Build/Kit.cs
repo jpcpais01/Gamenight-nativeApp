@@ -217,6 +217,9 @@ public abstract class StandSet
 
     /// <summary>The details a sweep can't make: pillars, girders, lamps, towers, flags.</summary>
     public virtual void Dress(Piece p, BuiltGround g) { }
+
+    /// <summary>Its outside at ground level: the base storey and the way up (see Exterior).</summary>
+    public virtual Outside Outside => new(Kit.DarkConcrete, Look.Plain, 0, Stairs.Zigzag, Kit.Steel);
 }
 
 /// <summary>A stand or corner as built: its stretch of front edge, its sections, its set.</summary>

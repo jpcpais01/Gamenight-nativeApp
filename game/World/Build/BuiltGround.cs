@@ -225,6 +225,7 @@ public sealed class BuiltGround : Ground
             Painted(p.Set);
             Sweep(p.Mesh(this), p);
             p.Set.Dress(p, this);
+            Exterior.Dress(p, this);
         }
         Painted(null);
 

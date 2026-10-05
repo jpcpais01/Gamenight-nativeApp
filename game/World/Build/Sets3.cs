@@ -12,6 +12,7 @@ public sealed class Membrane : StandSet
     const uint Fabric = 0xefebe0, Back = 0x8d949b, Mast = 0xdfe3e6;
     const float Bay = 18;
     public override string Name => "Membrane";
+    public override Outside Outside => new(0x8d949b, Look.Plain, 0, Stairs.Zigzag, 0xdfe3e6);
     public override string About => "Tensile fabric peaks pulled up by white masts";
     public override uint Swatch => 0xf2efe6;
     public override uint[] Mains => new uint[] { Fabric, Back };
@@ -112,6 +113,7 @@ public sealed class Brutalist : StandSet
 {
     const uint Raw = 0x8e8c86, Dark = 0x6c6a65, Stain = 0x77756f;
     public override string Name => "Brutalist";
+    public override Outside Outside => new(0x6c6a65, Look.Plain, 0, Stairs.Tower, 0x8e8c86);
     public override string About => "Raw concrete: a deep cantilever roof on giant raker frames";
     public override uint Swatch => 0x9a978f;
     public override uint[] Mains => new uint[] { Raw, Dark, Stain };
@@ -133,7 +135,7 @@ public sealed class Brutalist : StandSet
             .To(new(ue, uh), g.Seat, Look.Tier, 1, 6)
             .To(new(ue, T - 1.6f), Stain)
             .To(new(x.Back, T + 0.5f), Raw)
-            .To(new(x.Back, 0), Raw, Look.Curtain, flip: true);
+            .To(new(x.Back, 0), Raw, Look.Tower, 2, flip: true);
         // The roof: a deep slab, coffered underneath, a tall fascia.
         x.Sheet(new(x.Back, T - 1.2f), new(x.Edge, T - 2.8f), Raw, Look.Coffer)
             .Sheet(new(x.Edge, T - 2.8f), new(x.Edge, T + 0.5f), Raw)
@@ -207,6 +209,7 @@ public sealed class Barrio : StandSet
     const uint Blue = 0x2b5fa8, Gold = 0xf2c230, Boxes = 0x1e2630;
     static readonly uint[] Flats = { 0xd98c5f, 0xe2c28f, 0x9fb8a0, 0xc96f6f, 0xe8e0cf };
     public override string Name => "Barrio";
+    public override Outside Outside => new(0x1f4f8f, Look.Plain, 0, Stairs.Zigzag, 0xf2c230);
     public override string About => "Three sheer stacked tiers and boxes, a mural outside";
     public override uint Swatch => Blue;
     public override uint[] Mains => new uint[] { Blue };
@@ -233,7 +236,7 @@ public sealed class Barrio : StandSet
         }
         x.To(new(o, T + 1), g.WallCol, Look.Wall)
             .To(new(o + 0.8f, T + 1), Kit.Concrete)
-            .To(new(o + 0.8f, 0), Blue, Look.Plain, flip: true);
+            .To(new(o + 0.8f, 0), Blue, Look.Tower, 2, flip: true);
         x.Top = T; x.Ue = o; x.Back = o + 0.8f; x.BackH = T + 1; x.Edge = o;
     }
 
@@ -284,6 +287,7 @@ public sealed class Timber : StandSet
 {
     const uint Wood = 0xb07a48, Wood2 = 0x8a5a34, Sedum = 0x6f8a3c, Leaf = 0x4c7a38;
     public override string Name => "Timber";
+    public override Outside Outside => new(0x6e4a2c, Look.Plain, 0, Stairs.Zigzag, 0x8a5a34);
     public override string About => "Eco stand: timber arches, wooden slats, a planted roof";
     public override uint Swatch => 0xc08a50;
     public override uint[] Mains => new uint[] { Wood, Wood2 };
@@ -412,6 +416,7 @@ public sealed class Lumen : StandSet
 {
     const uint Skin = 0xe8eef2, Core = 0x3a3f46;
     public override string Name => "Lumen";
+    public override Outside Outside => new(0x3a3f46, Look.Plain, 0, Stairs.None, 0);
     public override string About => "A skin of cushions that glows in your colours at night";
     public override uint Swatch => 0xcfe3f2;
     public override uint[] Mains => new uint[] { Skin, Core };
