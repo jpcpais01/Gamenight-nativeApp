@@ -75,6 +75,8 @@ public abstract class Ground
     /// <summary>An away day: the match's side 0 is the visitors here (see Create).</summary>
     bool _flip;
     BenchView _bench;
+    Birds _birds;
+    float _phones;
     protected readonly ClubArt Art = new();
     /// <summary>The giant hanging tifo, at grounds that have one.</summary>
     protected GiantTifo Giant;
@@ -271,6 +273,7 @@ public abstract class Ground
         Giant?.Attach(Root, Art, ClubName, HomeColor, Art.Motto?.text ?? "ONE CLUB · ONE NIGHT");
         FanBanners.Build(Root, Art.FanTifo, HomeColor);
         if (_hasBench) _bench = new BenchView(Root, _kits[0], _kits[1], Club?.S.Coach, press: Crowd.Fans > 0);
+        _birds = new Birds(Root);
         if (HasScreen) Root.AddChild(_screen = new ScreenView(ClubName, HomeShort, AwayShort, HomeColor, AwayColor, Art));
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--hang") >= 0) { _debugHang = true; _drop = 1; }
         GD.Print($"Ground {GetType().Name}: {Static.Count / 3} triangles, {Crowd.Fans} fans, {Flags.Count} flags; built in {tBuild} ms, total {clock.ElapsedMilliseconds} ms");
@@ -319,6 +322,13 @@ public abstract class Ground
         _screen?.Show(s.Score[_flip ? 1 : 0], s.Score[_flip ? 0 : 1], s.Minute, since < 8 ? _goalTeam : -1, (int)(since * 3) % 2 == 0);
         RenderingServer.GlobalShaderParameterSet("gn_excite", s.Excitement);
         _bench?.Update(s, dt);
+        _birds?.Update(s, dt, Atmosphere.Weather != Weather.Rain && Atmosphere.Night < 0.55f ? 1 : 0);
+        // After dark: phones held up all round the ground as the teams come out, and again at
+        // the final whistle.
+        bool walkout = s.Phase == Phase.Kickoff && s.Minute == 0 && s.Half <= 1;
+        float phones = Atmosphere.Night * (walkout ? 1 : s.Phase == Phase.Fulltime ? 0.6f : 0);
+        _phones += (phones - _phones) * (1 - MathF.Exp(-dt * (phones > _phones ? 0.8f : 0.4f)));
+        RenderingServer.GlobalShaderParameterSet("gn_phones", _phones);
         if (Crowd.Fans > 0) _mood.Update(s, terraces, dt);
         _fx?.Air(s, dt, Atmosphere.Cold, Atmosphere.Rain, _steamSpots);
         RenderingServer.GlobalShaderParameterSet("gn_chant", terraces == null ? Vector4.Zero : _flip ? new Vector4(terraces.Away, terraces.Home, terraces.Beat, terraces.Arms) : new Vector4(terraces.Home, terraces.Away, terraces.Beat, terraces.Arms));

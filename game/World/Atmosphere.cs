@@ -193,6 +193,8 @@ public sealed class Atmosphere
     public float Cold => Weather == Weather.Rain ? 1 : Weather == Weather.Sunny ? 0 : _night;
     public float Rain => Weather == Weather.Rain ? 1 : 0;
     float _night;
+    /// <summary>How dark it is (0 day .. 1 night).</summary>
+    public float Night => _night;
 
     void Globals(Color sun, float energy, Color amb, Color gnd, float flood, Color fog, float night, Vector2 fogRange, float haze)
     {
