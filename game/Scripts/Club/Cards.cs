@@ -249,7 +249,9 @@ public static class Cards
     /// <summary>A card playing in a slot: technique suffers out of position, the body doesn't.</summary>
     public static SimPlayer ToSim(Card c, Position slot)
     {
-        var s = c.Stats;
+        // Playstyles lift their stats for real.
+        var s = new Stats();
+        foreach (var k in StatKeys) s[k] = Playstyles.Boosted(c, k);
         double f = FitFactor(c.Position, slot);
         double Tech(double v) => Unit(v) * (f == 1 ? 1 : 0.7 + 0.3 * f);
         double h = c.Height / 100.0;
