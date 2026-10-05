@@ -424,7 +424,7 @@ public sealed partial class AI
             rz /= rn;
         }
         // How far ahead: the hold, at most. A passer with his head up plays it shorter, onto the
-        // runner, when a defender would get to that space first or would cut the ball out.
+        // runner, when a defender would get to that space first.
         double x, z, tr, D, kx, kz, v0;
         for (double lead = 3 + 11 * M.Clamp(power, 0, 1); ; lead -= 3)
         {
