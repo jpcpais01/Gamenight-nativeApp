@@ -462,6 +462,13 @@ public sealed class ClubState
         Save();
     }
 
+    /// <summary>What's round the ground (Surroundings.Names).</summary>
+    public void SetStadiumArea(int area)
+    {
+        S.Stadium.Area = area;
+        Save();
+    }
+
     /// <summary>A stand set's main colour, everywhere it's built (0 its own).</summary>
     public void SetStadiumPaint(int set, uint col)
     {

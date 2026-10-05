@@ -19,6 +19,7 @@ uniform sampler2D sprites : filter_nearest;
 // The crowd's mood (World/CrowdMood.cs): who's rising, who just went close, a ball gone out.
 global uniform vec4 gn_mood;
 global uniform vec4 gn_gasp;
+global uniform float gn_phones;
 global uniform vec4 gn_ballout;
 // From the terraces' sound, per end (clapping, jeering, hands on heads, fists up).
 global uniform vec4 gn_react_home;
@@ -158,6 +159,9 @@ void vertex() {
 	} else if (step(0.994, h(s + floor(t * 0.4 + h(s, 0.9) * 10.0), 7.0)) > 0.5) {
 		pose = 11.0;
 	}
+	// After dark as the teams come out (and at the final whistle): phones held up, torch on.
+	float phone = step(h(s, 5.3) * 1.25, gn_phones) * step(0.12, gn_phones) * (1.0 - cardOn);
+	if (phone > 0.5) pose = 10.0;
 	if (cardOn > 0.5) pose = 9.0;
 	// Who he is: one of the 16 people (the kids are rare).
 	vrow = h(s, 2.4) < 0.06 ? 14.0 + step(0.5, h(s, 2.5)) : floor(h(s, 1.9) * 13.99);
@@ -189,8 +193,9 @@ void vertex() {
 	float cx = UV.x * w;
 	float cy = UV.y * 2.25 * tall;
 	q = vec2(UV.x + 0.5, UV.y);
-	// In the near stand: out of the picture wherever he'd be between the camera and the pitch.
-	if (COLOR.r > 0.9 && world_near_hides(root + vec3(0.0, 2.0, 0.0), CAMERA_POSITION_WORLD)) { cx = 0.0; cy = 0.0; root = vec3(0.0, -50.0, 0.0); }
+	// In the near stand, or working the near touchline: out of the picture wherever he'd be
+	// between the camera and the pitch.
+	if ((COLOR.r > 0.9 || staff > 0.5 && root.z > 30.0) && world_near_hides(vec3(root.x, root.y + 2.0, max(root.z, 38.5)), CAMERA_POSITION_WORLD)) { cx = 0.0; cy = 0.0; root = vec3(0.0, -50.0, 0.0); }
 	VERTEX = root + right * (cx + sin(t * 1.3 + ph) * 0.02) + vec3(0.0, cy - (1.0 - stand) * (0.44 + staff * 0.38) + jump, 0.0) + face * 0.05;
 	dist = length((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz);
 
@@ -250,7 +255,7 @@ void vertex() {
 	// Camera flashes popping round the ground on the big moments: a chance, a goal.
 	float moment = max(max(fresh, smoothstep(0.75, 1.0, gn_excite)), gasp * (1.0 - step(1.0, gAge)));
 	float flashes = staff > 0.5 ? (role > 0.5 && role < 1.5 ? 0.02 + 0.3 * moment : 0.0) : 0.004 * moment;
-	torch = max(torch * (1.0 - staff), step(1.0 - flashes, h(s + floor(t * 9.0 + h(s, 0.6) * 10.0), 6.0)) * 1.4);
+	torch = max(max(torch, phone * (0.75 + 0.25 * sin(t * 2.0 + ph))) * (1.0 - staff), step(1.0 - flashes, h(s + floor(t * 9.0 + h(s, 0.6) * 10.0), 6.0)) * 1.4);
 	misc = vec4(pose, vrow, pat, torch);
 	colA = uvec4(packUnorm4x8(vec4(shirt, 0.0)), packUnorm4x8(vec4(shirt2, 0.0)), packUnorm4x8(vec4(jacket, 0.0)), packUnorm4x8(vec4(hat, 0.0)));
 	colB = uvec4(packUnorm4x8(vec4(skin, 0.0)), packUnorm4x8(vec4(hair, 0.0)), packUnorm4x8(vec4(legs, 0.0)), packUnorm4x8(vec4(club, 0.0)));

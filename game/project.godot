@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="GameNight"
-config/version="0.37.0"
+config/version="0.41.0"
 run/main_scene="res://App.tscn"
 config/features=PackedStringArray("4.7", "C#", "Mobile")
 boot_splash/bg_color=Color(0.054902, 0.0627451, 0.0901961, 1)
@@ -133,6 +133,10 @@ gn_react_away={
 gn_mood={
 "type": "vec4",
 "value": Vector4(0, 0, 1, 0)
+}
+gn_phones={
+"type": "float",
+"value": 0.0
 }
 gn_gasp={
 "type": "vec4",
