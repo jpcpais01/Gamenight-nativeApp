@@ -26,16 +26,20 @@ public sealed class Paper
 /// </summary>
 public static class Gazette
 {
-    static readonly HashSet<string> Prefixes = new(StringComparer.OrdinalIgnoreCase)
-        { "Real", "Sporting", "Atlético", "Dynamo", "Inter", "Olympique", "Racing", "Union", "Lokomotiv", "Académica", "Deportivo", "Vitória", "Stella", "Fortuna", "AC", "FC", "The" };
+    /// <summary>The words before the town in every club name style ("Real", "Sporting de", "SV"...).</summary>
+    static readonly HashSet<string> Prefixes = new(new[] { "Real", "Sporting", "Atlético", "Dynamo", "Inter", "Olympique", "Racing", "Union", "Lokomotiv", "Académica", "Deportivo", "Vitória", "Stella", "Fortuna", "AC", "FC", "The",
+            "Estádio", "Estadio", "Stadio", "Stade", "Stadion", "Campo", "Parc", "Sportpark", "Gradski", "Municipal", "Comunale", "Miejski", "Idrottsparken", "Nuevo", "Old", "do", "de", "la", "an", "der" }
+        .Concat(Ladder.Countries.SelectMany(c => c.Clubs).Where(p => !p.StartsWith("{T}")).SelectMany(p => p[..p.IndexOf("{T}")].Split(' ', StringSplitOptions.RemoveEmptyEntries))),
+        StringComparer.OrdinalIgnoreCase);
 
     /// <summary>What a headline calls a club: its town, not its suffix ("Ashford", not "United").</summary>
     public static string Word(string name)
     {
         var w = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (w.Length == 0) return name;
-        if (w.Length > 1 && Prefixes.Contains(w[0])) return w[1];
-        return w[0];
+        foreach (var x in w.Take(w.Length - 1))
+            if (!Prefixes.Contains(x)) return x;
+        return w[^1];
     }
 
     static string Last(string name) => name.Contains(' ') ? name[(name.LastIndexOf(' ') + 1)..] : name;

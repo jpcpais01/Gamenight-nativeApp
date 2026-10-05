@@ -618,14 +618,18 @@ public sealed partial class SeasonFinale : Sheet
     readonly int _pos, _prize;
     readonly bool _paidNow, _star;
     readonly List<Row> _table;
+    /// <summary>Leagues this title has just opened up.</summary>
+    readonly List<LeagueDef> _unlocked;
     double _nextRain;
 
     public SeasonFinale(Menus.Menus ui) : base(ui)
     {
         _table = L.Table();
         _pos = L.Place(You, _table);
-        _prize = LeagueState.Prize[_pos - 1];
+        _prize = L.PrizeFor(_pos);
+        int before = L.Trophies;
         int paid = L.PayPrize();
+        _unlocked = Ladder.Leagues.Where(d => d.Need > before && d.Need <= L.Trophies).ToList();
         _paidNow = paid > 0;
         if (_paidNow)
         {
@@ -698,6 +702,12 @@ public sealed partial class SeasonFinale : Sheet
             CrestArt.Draw(this, new Rect2(x + 200, y - 10, 34, 42), Ui.Club.S.Crest);
             y += 30;
         }
+        if (_unlocked.Count > 0)
+        {
+            var u = _unlocked[0];
+            Px.Text(this, Px.Small, new Vector2(x, y + 10), Px.Fit(Px.Small, $"UNLOCKED ON THE MAP: {string.Join(", ", _unlocked.Select(d => d.Name.ToUpperInvariant()))}", 8, W - x - 16), 8, Px.Hex(Ladder.TierColors[u.Tier - 1]));
+            y += 24;
+        }
         // Prize money, counting up.
         float k = Mathf.Clamp(((float)T - 0.6f) / 1.4f, 0, 1);
         int shown = (int)Mathf.Round(_prize * (1 - Mathf.Pow(1 - k, 3)));
@@ -712,7 +722,11 @@ public sealed partial class SeasonFinale : Sheet
             Ui.Toast(news.Count >= 6 ? $"Up: {Gazette.Word(news[1].Replace(" promoted", ""))}, {Gazette.Word(news[3].Replace(" promoted", ""))}, {Gazette.Word(news[5].Replace(" promoted", ""))}" : $"Season {L.S.Season} begins");
             Ui.Open(new LeagueDraw(Ui));
         });
-        GhostButton("later", new Rect2(W - 16 - 260 - 14 - 110, H - 56, 110, 42), "LATER", 20, () => Ui.Close(this));
+        GhostButton("map", new Rect2(W - 16 - 260 - 14 - 130, H - 56, 130, 42), "EUROPE MAP", 20, () =>
+        {
+            Ui.Close(this);
+            Ui.Go(Ui.Map);
+        }, _unlocked.Count > 0 ? Px.Gold : null);
     }
 }
 

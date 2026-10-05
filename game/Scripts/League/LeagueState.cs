@@ -67,6 +67,8 @@ public sealed class LeagueSave
     public int V = 1;
     public int Season = 1;
     public string Name = "", Paper = "";
+    /// <summary>Which league on the map (Ladder.Leagues); empty in saves from before the map.</summary>
+    public string LeagueId = "";
     public int Seed;
     public List<LClub> Clubs = new();
     public List<Fixture> Fixtures = new();
@@ -94,24 +96,80 @@ public sealed class LeagueState
 {
     public const int Clubs = 16, Rounds = 30, PerRound = 8;
     public const int You = 0;
-    const string SaveFile = "league.json";
+    const string SaveFile = "league.json", CareerFile = "career.json";
     static readonly JsonSerializerOptions Json = new() { IncludeFields = true };
 
     public static readonly int[] Prize = { 30000, 20000, 15000, 12000, 10000, 8000, 7000, 6000, 5000, 4500, 4000, 3500, 3000, 2500, 2000, 1500 };
     public static readonly string[] Styles = { "Balanced", "All-out attack", "Defensive", "Counter-attack" };
 
     public LeagueSave S;
-    readonly string _path;
+    /// <summary>Your career on the map; null until you pick a home country.</summary>
+    public CareerSave C;
+    readonly string _path, _careerPath;
     readonly ClubState _club;
 
     public LeagueState(string dir, ClubState club)
     {
         _club = club;
         _path = Path.Combine(dir, SaveFile);
+        _careerPath = Path.Combine(dir, CareerFile);
         S = Load();
+        C = Ladder.Load(_careerPath);
     }
 
     public bool Active => S != null;
+
+    // ---------------------------------------------------------------- the career
+
+    public bool HasCareer => C != null;
+
+    /// <summary>The league being played (or last played); your home country's local league otherwise.</summary>
+    public LeagueDef Def => Ladder.ById(S?.LeagueId ?? "") ?? Ladder.EntryOf(C?.Country ?? "ENG");
+
+    public Country Home => Ladder.CountryOf(C?.Country ?? "ENG");
+
+    public int Trophies => C?.Trophies ?? 0;
+
+    public bool Unlocked(LeagueDef d) => C != null && C.Trophies >= d.Need;
+
+    public bool Playing(LeagueDef d) => S != null && S.LeagueId == d.Id;
+
+    public int TitlesIn(LeagueDef d) => C != null && C.Titles.TryGetValue(d.Id, out var n) ? n : 0;
+
+    public int BestIn(LeagueDef d) => C != null && C.Best.TryGetValue(d.Id, out var n) ? n : 0;
+
+    /// <summary>Start a career in this country. A league already under way (from before the map)
+    /// becomes the country's local league, and the titles won in it count as trophies.</summary>
+    public void Begin(string country)
+    {
+        C = new CareerSave { Country = country };
+        if (S != null && Ladder.ById(S.LeagueId) == null)
+        {
+            var entry = Ladder.EntryOf(country);
+            S.LeagueId = entry.Id;
+            S.Name = entry.Name;
+            C.Trophies = S.Titles;
+            if (S.Titles > 0) C.Titles[entry.Id] = S.Titles;
+            C.Seasons = S.History.Count;
+            Save();
+        }
+        SaveCareer();
+    }
+
+    void SaveCareer() => Ladder.Save(_careerPath, C);
+
+    /// <summary>Leave the current league (its season is thrown away) and start in another.</summary>
+    public void Join(LeagueDef d)
+    {
+        S = null;
+        Start(d);
+    }
+
+    /// <summary>The prize for finishing here, scaled to the league's standing.</summary>
+    public int PrizeFor(int pos) => (int)Math.Round(Prize[Math.Clamp(pos, 1, Clubs) - 1] * Def.PrizeScale / 100) * 100;
+
+    /// <summary>What a win and a draw are worth in this league.</summary>
+    public (int win, int draw) Bonus => ((int)Math.Round(500 * Def.PrizeScale / 50) * 50, (int)Math.Round(250 * Def.PrizeScale / 50) * 50);
     public bool SeasonOver => S != null && S.Round >= Rounds;
 
     LeagueSave Load()
@@ -204,27 +262,34 @@ public sealed class LeagueState
 
     // ---------------------------------------------------------------- a new league
 
-    public void Start()
+    /// <summary>A new league (this one again if none is given): fifteen clubs from its countries
+    /// at its level, a few giants, a crowded middle and some minnows.</summary>
+    public void Start(LeagueDef def = null)
     {
+        def ??= Def;
         var seed = (int)(ClubState.Now & 0x7fffffff);
         var r = new Random(seed);
         S = new LeagueSave
         {
             Seed = seed,
-            Name = Names.Leagues[r.Next(Names.Leagues.Length)],
+            LeagueId = def.Id,
+            Name = def.Name,
             Paper = Names.Papers[r.Next(Names.Papers.Length)],
         };
         var towns = new HashSet<string>();
         var shorts = new HashSet<string> { _club.ShortName };
         S.Clubs.Add(new LClub { Name = "", Venue = "custom", Founded = int.TryParse(_club.S.Crest.Year, out var y) ? y : 1899 });
-        // Levels around yours: a few giants, a crowded middle and some minnows.
-        int you = _club.TeamRating();
         double[] spread = { 9, 7.5, 6, 5, 4, 3, 2, 1, 0, -1, -2, -3, -4.5, -6, -7.5 };
+        int i = 0;
         foreach (double off in spread.OrderBy(_ => r.Next()))
-            S.Clubs.Add(NewClub(r, towns, shorts, Math.Clamp(you + off + r.NextDouble() * 2 - 1, 48, 92)));
+            S.Clubs.Add(NewClub(r, towns, shorts, Math.Clamp(def.Level + off + r.NextDouble() * 2 - 1, 46, 93), CountryFor(def, i++, r)));
         S.Fixtures = Schedule(r);
         Save();
     }
+
+    /// <summary>Clubs come from the league's countries in turn, so a regional league is a real mix.</summary>
+    static Country CountryFor(LeagueDef def, int i, Random r) =>
+        Ladder.CountryOf(def.Countries.Length == 1 ? def.Countries[0] : i < def.Countries.Length * 2 ? def.Countries[i % def.Countries.Length] : def.Countries[r.Next(def.Countries.Length)]);
 
     static int Pal(Random r) => Club.Crest.Palette[r.Next(Club.Crest.Palette.Length)];
 
@@ -233,12 +298,13 @@ public sealed class LeagueState
     static double ColorDist(int a, int b) =>
         Math.Sqrt(Math.Pow(((a >> 16) & 255) - ((b >> 16) & 255), 2) + Math.Pow(((a >> 8) & 255) - ((b >> 8) & 255), 2) + Math.Pow((a & 255) - (b & 255), 2));
 
-    LClub NewClub(Random r, HashSet<string> towns, HashSet<string> shorts, double level)
+    LClub NewClub(Random r, HashSet<string> towns, HashSet<string> shorts, double level, Country co)
     {
-        var (name, town, latin) = Names.Club(r, towns);
-        var c = new LClub { Name = name, Town = town, Founded = 1870 + r.Next(60), Manager = Names.Person(r) };
+        var (name, town) = Names.Club(r, towns, co);
+        bool latin = co.Latin;
+        var c = new LClub { Name = name, Town = town, Founded = 1870 + r.Next(60), Manager = Names.Person(r, co) };
         c.Short = Names.Short(town, shorts);
-        c.Ground = Names.Ground(r, town, latin);
+        c.Ground = Names.Ground(r, town, co);
         // Colours first, then a crest in them, so shirt and badge belong together.
         c.Main = Pal(r);
         int tries = 0;
@@ -602,12 +668,24 @@ public sealed class LeagueState
         int pos = Place(You);
         S.PrizePaid = true;
         if (pos == 1) S.Titles++;
+        if (C != null)
+        {
+            var id = Def.Id;
+            if (pos == 1)
+            {
+                C.Trophies++;
+                C.Titles[id] = TitlesIn(Def) + 1;
+            }
+            if (BestIn(Def) == 0 || pos < BestIn(Def)) C.Best[id] = pos;
+            C.Seasons++;
+            SaveCareer();
+        }
         Save();
-        return Prize[pos - 1];
+        return PrizeFor(pos);
     }
 
     /// <summary>Into the next season: the bottom three (yours excepted) go down and three new
-    /// clubs come up; everyone else signs a few players, drifting toward your level.</summary>
+    /// clubs come up; everyone else signs a few players, held near the league's level.</summary>
     public List<string> NextSeason()
     {
         var news = new List<string>();
@@ -620,7 +698,8 @@ public sealed class LeagueState
             TopScorer = top.name ?? "", TopGoals = top.goals,
         });
         var r = new Random(S.Seed + S.Season * 7777);
-        int you = _club.TeamRating();
+        var def = Def;
+        double level = def.Level;
         var down = table.Where(x => x.Club != You).TakeLast(3).Select(x => x.Club).ToList();
         var towns = new HashSet<string>(S.Clubs.Skip(1).Select(c => c.Town));
         var shorts = new HashSet<string>(S.Clubs.Skip(1).Select(c => c.Short)) { _club.ShortName };
@@ -629,8 +708,7 @@ public sealed class LeagueState
         {
             news.Add($"{S.Clubs[d].Name} relegated");
             towns.Remove(S.Clubs[d].Town);
-            double level = Math.Clamp(you - 3 + Gauss(r) * 2, 48, 90);
-            var n = NewClub(r, towns, shorts, level);
+            var n = NewClub(r, towns, shorts, Math.Clamp(level - 2 + Gauss(r) * 2.5, 46, 93), CountryFor(def, 99, r));
             n.Promoted = true;
             S.Clubs[d] = n;
             news.Add($"{n.Name} promoted");
@@ -640,8 +718,8 @@ public sealed class LeagueState
             var c = S.Clubs[i];
             if (c.Promoted) continue;
             int rating = RatingOf(c);
-            // Pulled a third of the way toward your level, plus a little luck.
-            double target = rating + (you - rating) * 0.33 + Gauss(r) * 1.5;
+            // Pulled a little toward the league's level, plus some luck, so the pecking order shifts.
+            double target = rating + (level - rating) * 0.2 + Gauss(r) * 2.2;
             var rng = new Rng(r.Next());
             var f = Formations.ById(c.Formation);
             for (int k = 0; k < 3; k++)
