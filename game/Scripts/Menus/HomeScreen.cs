@@ -507,7 +507,6 @@ public sealed partial class HomeScreen : PxCanvas
         if (_crest.Size.X <= 0) return;
         float pulse = 0.5f + 0.5f * Mathf.Sin((float)T * 1.4f);
         Fx.Glow(ci, _crest.GetCenter(), _crest.Size.Y * 0.62f, Px.Hex(Club.S.Kit.Secondary).Lerp(Colors.White, 0.4f), 0.12f + pulse * 0.05f);
-        Fx.Shine(ci, _crest, (float)(T % 5.0) / 2.2f, new Color(1, 1, 1, 0.16f), 0.3f);
         Fx.Shine(ci, _ticket, (float)((T + 1.5) % 6.0) / 3.2f, new Color(1, 1, 1, 0.07f), 0.18f);
         Fx.Shine(ci, _play, (float)((T + 0.4) % 2.6) / 1.4f, new Color(1, 1, 1, 0.22f));
         if (_storeReady) Fx.Glow(ci, _store.GetCenter(), _store.Size.X * 0.55f, Px.Gold, 0.06f + pulse * 0.06f);
