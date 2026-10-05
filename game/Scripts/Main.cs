@@ -106,6 +106,8 @@ public partial class Main : Node
             else EndDirected();
         };
         Cutscene.OnCaption = _letterbox.Caption;
+        Cutscene.OnSubtitle = _letterbox.Subtitle;
+        Cutscene.OnBeat = WalkOutCrowd;
         Cutscene.OnJump = _players.Snap;
         _replay.OnRewind = _players.Snap;
         _replay.OnEvents = f =>
@@ -201,6 +203,48 @@ public partial class Main : Node
         if (on) _controls.ReleaseAll();
         _controls.SetProcessInput(!on);
         _controls.Visible = !on && !Directed && !_invaderShown;
+    }
+
+    /// <summary>The ground through the walk-out (end 0 is the home end).</summary>
+    void WalkOutCrowd(Cutscene.Beat beat)
+    {
+        if (Request?.Ground == "bare") return;
+        var t = Sound.Terraces;
+        switch (beat)
+        {
+            case Cutscene.Beat.Emerge:
+                // Out of the tunnel: the noise breaks over them and the clapping doesn't stop.
+                t.Cue(React.Cheer, 0, 0, 1);
+                t.Cue(React.Cheer, 1, 0.25, 0.8f);
+                t.Cue(React.Rally, 0, 0.6, 0.9f);
+                t.Cue(React.Applause, -1, 0.3, 0.9f, 14);
+                break;
+            case Cutscene.Beat.HomeLine:
+                t.Cue(React.Announce, -1, 0, 0.8f);
+                t.Cue(React.Applause, 0, 0, 0.7f, 6);
+                break;
+            case Cutscene.Beat.HomeName:
+                t.Cue(React.Cheer, 0, 0.15, 0.55f);
+                break;
+            case Cutscene.Beat.AwayLine:
+                t.Cue(React.Announce, -1, 0, 0.7f);
+                t.Cue(React.Jeer, 0, 0.4, 0.45f, 5);
+                t.Cue(React.Applause, 1, 0.2, 0.6f, 5);
+                break;
+            case Cutscene.Beat.AwayName:
+                t.Cue(React.Whistler, 0, 0.1, 0.8f);
+                t.Cue(React.Cheer, 1, 0.15, 0.35f);
+                break;
+            case Cutscene.Beat.Captains:
+                t.Cue(React.Applause, -1, 0, 0.6f, 4);
+                break;
+            case Cutscene.Beat.Ready:
+                // Up for the start: both ends in full voice.
+                t.Cue(React.Rally, 0, 0, 1);
+                t.Cue(React.Rally, 1, 0.8, 0.7f);
+                t.Cue(React.Applause, -1, 0, 0.8f, 6);
+                break;
+        }
     }
 
     /// <summary>A replay or the walk-out on screen: the match waits.</summary>
