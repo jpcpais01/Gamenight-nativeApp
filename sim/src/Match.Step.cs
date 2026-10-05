@@ -496,9 +496,10 @@ public sealed partial class Match
     /// The active player without the ball, one idea: he knows where it can be won and goes
     /// there himself. A loose ball or a pass in flight he meets, arriving as it does; an
     /// opponent on the ball he closes down and presses tight, goal-side, squeezing in and
-    /// pouncing on a heavy touch. All of that is automatic. PRESS / SPRINT adds the last step
-    /// and the legs: flat out, and a foot in to take the ball the moment it shows. The stick
-    /// is always yours: pointed roughly at his run it bends it, pointed away it takes over.
+    /// pouncing on a heavy touch. All of that is automatic and the same with or without
+    /// PRESS / SPRINT, flat out included; without it he gets going 10% slower, and only on it
+    /// does he put a foot in to take the ball. The stick is always yours: pointed roughly at
+    /// his run it bends it, pointed away it takes over.
     /// </summary>
     void GoForBall(Player c, InputState input, double m)
     {
@@ -534,8 +535,8 @@ public sealed partial class Match
                 tz = (Ball.Pos.Z - c.Pos.Z) / Math.Max(0.01, d);
                 v = 0;
             }
-            // Flat out to close the gap; once tight, as quick as he needs to stay with him.
-            speed = Math.Min(v, press || onBall || d > 3 ? c.TopSpeed : PlayerK.JogSpeed + 2.2);
+            // As quick as he needs to close the gap and stay with him.
+            speed = Math.Min(v, c.TopSpeed);
             face = true;
             burst = onBall;
             // Square-on while he can keep up that way; a carrier running at him faster than he
@@ -569,17 +570,10 @@ public sealed partial class Match
             if (dd < 0.25) return;
             tx = dx / dd;
             tz = dz / dd;
-            // Pace: there as the ball is, never dawdling, never slower than a ball he's on; flat
-            // out when pressing. And no faster than he can still pull up from, so he arrives
-            // on it rather than past it (running on with it when it's rolling his way).
+            // Flat out, but no faster than he can still pull up from, so he arrives on it
+            // rather than past it (running on with it when it's rolling his way).
             var ip = AI.Intercept[c.Id];
-            double bs = JsMath.Hypot(Ball.Vel.X, Ball.Vel.Z);
-            // A race for it (one of them gets there within 0.8 s of him) is run flat out too.
-            double theirs = 99;
-            foreach (var q in Teams[1 - c.Team].Players)
-                if (AI.Intercept[q.Id].T >= 0) theirs = Math.Min(theirs, AI.Intercept[q.Id].T);
-            bool race = ip.T < 0 || theirs < ip.T + 0.8;
-            speed = press || race ? c.TopSpeed : Math.Max(AI.MeetPace(c), d > 1.5 ? PlayerK.JogSpeed : bs + 1);
+            speed = c.TopSpeed;
             double along = Math.Max(0, d < 3 ? Ball.Vel.X * tx + Ball.Vel.Z * tz : ip.VX * tx + ip.VZ * tz);
             speed = Math.Min(speed, Math.Sqrt(along * along + 2 * PlayerK.Brake * dd) + 0.6);
             burst = d < 2.5;
@@ -609,6 +603,7 @@ public sealed partial class Match
         if (want < 0.5) return;
         // Running hard costs legs, button or not (as it does the computer's players).
         if (c.WantSpeed > PlayerK.JogSpeed + 0.5) c.Sprinting = true;
+        if (!press) c.AccelScale = 0.9;
         c.Burst = burst;
         if (face && d < 6)
         {

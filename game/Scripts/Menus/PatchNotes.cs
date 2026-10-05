@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.56", "Without PRESS your defender now chases and presses exactly as with it, flat out included, just getting going 10% slower. PRESS still adds the tackle. Running hard costs stamina either way."),
         ("0.55", "Red cards: a second yellow sends the player off, and a wild late slide from behind can be a straight red. He walks off over the touchline and his side plays on a man short. Keepers are never sent off."),
         ("0.54", "Gameplay fixes: a late penalty is always taken before the whistle; keepers may catch headers and deflections off their own defenders; your keeper can't carry the ball out of his box and plays it after six seconds; strikers leave keepers with the ball alone; no tackling dead balls."),
         ("0.53", "New cards in the FUT style: a shaped card per tier, rating and position over flag and club crest, a name plate and six stats, with bronze lines, silver streaks, gold lattice, neon Legends and rayed Icons. New Ultimate pack and five special packs: Strikeforce, Iron Wall, Safe Hands, One Nation and Signature."),

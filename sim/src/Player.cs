@@ -142,6 +142,8 @@ public sealed class Player
     public double TouchCooldown;
     public double Stamina = 1;
     public bool Sprinting;
+    /// <summary>This step only: his acceleration scaled (the human going for the ball without PRESS). Reset by Move.</summary>
+    public double AccelScale = 1;
     /// <summary>Seconds since this player last touched the ball.</summary>
     public double SinceTouch = 99;
     /// <summary>Height (m) of the ball when he last cushioned it (0 for a ground touch, a strike or a header).</summary>
@@ -243,6 +245,8 @@ public sealed class Player
     /// <summary>Physical movement with momentum: separate limits for speeding up, braking and turning.</summary>
     public void Move(double dt)
     {
+        double accelScale = AccelScale;
+        AccelScale = 1;
         PrevPos.Copy(Pos);
         PrevFacing = Facing;
         TouchCooldown = Math.Max(0, TouchCooldown - dt);
@@ -358,7 +362,7 @@ public sealed class Player
                     tz *= cap / tsp;
                 }
             }
-            double accel = AccelRate * (Burst ? 1.7 : 1);
+            double accel = AccelRate * accelScale * (Burst ? 1.7 : 1);
             double dvx = tx - vx;
             double dvz = tz - vz;
             if (sp < 0.6)
