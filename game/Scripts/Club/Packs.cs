@@ -17,6 +17,13 @@ public sealed class PackDef
     /// <summary>Pack art: main, dark, light.</summary>
     public int[] Colors = Array.Empty<int>();
     public string Emblem = "*";
+    /// <summary>The big mark on the pack's badge.</summary>
+    public string Mark = "GN";
+    /// <summary>Special packs: only these positions, all from one nation, every card a playstyle
+    /// carrier rated at least MinOvr.</summary>
+    public Position[] Positions;
+    public bool OneNation, Styled, Special;
+    public int MinOvr;
 }
 
 /// <summary>The store's packs (the PWA's src/meta/packs.ts).</summary>
@@ -29,6 +36,17 @@ public static class Packs
         new PackDef { Id = "silver", Name = "Silver Pack", Tagline = "5 players · 1 Rare+", Price = 2000, Cards = 5, Odds = new double[] { 45, 43, 10.5, 1.3, 0.2 }, Guarantee = Rarity.Rare, Colors = new[] { 0xaab7c7, 0x3d4a5c, 0xf2f6fb }, Emblem = "SILVER" },
         new PackDef { Id = "gold", Name = "Gold Pack", Tagline = "6 players · 1 Epic+", Price = 5000, Cards = 6, Odds = new double[] { 20, 50, 25, 4.4, 0.6 }, Guarantee = Rarity.Epic, Colors = new[] { 0xf4c542, 0x7a5410, 0xfff1b8 }, Emblem = "GOLD" },
         new PackDef { Id = "legend", Name = "Legend Pack", Tagline = "3 players · 1 Legend+", Price = 12000, Cards = 3, Odds = new double[] { 0, 35, 45, 17, 3 }, Guarantee = Rarity.Legendary, Colors = new[] { 0xb05cff, 0x2a0f55, 0xf0d6ff }, Emblem = "LEGEND" },
+        new PackDef { Id = "ultimate", Name = "Ultimate Pack", Tagline = "4 players · 1 Icon · all Epic+", Price = 60000, Cards = 4, Odds = new double[] { 0, 0, 45, 38, 17 }, Guarantee = Rarity.Icon, Colors = new[] { 0x4a3d1c, 0x0d0a04, 0xffe680 }, Emblem = "ULTIMATE", Mark = "U" },
+
+        // Special packs: a twist each.
+        new PackDef { Id = "strike", Name = "Strikeforce", Tagline = "5 attackers · 1 Epic+", Price = 9000, Cards = 5, Odds = new double[] { 10, 50, 32, 7, 1 }, Guarantee = Rarity.Epic, Colors = new[] { 0xe0482f, 0x4a0d0a, 0xffc2a8 }, Emblem = "STRIKERS", Mark = "ATK", Special = true,
+            Positions = new[] { Position.ST, Position.ST, Position.LW, Position.RW, Position.CAM } },
+        new PackDef { Id = "wall", Name = "Iron Wall", Tagline = "5 defenders · 1 Epic+", Price = 9000, Cards = 5, Odds = new double[] { 10, 50, 32, 7, 1 }, Guarantee = Rarity.Epic, Colors = new[] { 0x3d6fb8, 0x0c1c3a, 0xbcd6ff }, Emblem = "DEFENDERS", Mark = "DEF", Special = true,
+            Positions = new[] { Position.CB, Position.CB, Position.LB, Position.RB, Position.CDM } },
+        new PackDef { Id = "gloves", Name = "Safe Hands", Tagline = "3 keepers · 1 Legend+", Price = 15000, Cards = 3, Odds = new double[] { 0, 40, 42, 15, 3 }, Guarantee = Rarity.Legendary, Colors = new[] { 0x2fb35f, 0x0a3018, 0xc8ffd8 }, Emblem = "KEEPERS", Mark = "GK", Special = true,
+            Positions = new[] { Position.GK } },
+        new PackDef { Id = "nation", Name = "One Nation", Tagline = "5 players · one country · 1 Legend+", Price = 25000, Cards = 5, Odds = new double[] { 0, 45, 40, 12, 3 }, Guarantee = Rarity.Legendary, Colors = new[] { 0xf2f2f2, 0x2a2a3a, 0xffffff }, Emblem = "NATION", Mark = "1", Special = true, OneNation = true },
+        new PackDef { Id = "styled", Name = "Signature", Tagline = "3 players · 85+ · all with playstyles", Price = 40000, Cards = 3, Odds = new double[] { 0, 0, 0, 78, 22 }, Colors = new[] { 0xff4fa3, 0x3a0828, 0xffd0ea }, Emblem = "SIGNATURE", Mark = "PS", Special = true, Styled = true, MinOvr = 85 },
     };
 
     static Rarity Roll(Rng rng, double[] odds)
@@ -58,7 +76,20 @@ public static class Packs
             rarities[0] = (Rarity)r;
         }
         var cards = new List<Card>();
-        foreach (var r in rarities) cards.Add(Cards.Generate(rng, r));
+        int? nation = def.OneNation ? (int)(rng.Next() * Cards.Nations.Length) : null;
+        foreach (var r in rarities)
+        {
+            Position? pos = def.Positions != null ? def.Positions[(int)(rng.Next() * def.Positions.Length)] : null;
+            Card c = null;
+            // A Signature card re-rolls until it carries a playstyle (each card has its own roll).
+            for (int tries = 0; tries < 60; tries++)
+            {
+                int? ovr = def.MinOvr > 0 && r == Rarity.Legendary ? Cards.JsRound(def.MinOvr + (88 - def.MinOvr) * Math.Pow(rng.Next(), 1.6)) : null;
+                c = Cards.Generate(rng, r, pos, ovr, nation);
+                if (!def.Styled || Playstyles.Of(c).Count > 0) break;
+            }
+            cards.Add(c);
+        }
         cards.Sort((a, b) => a.Rarity != b.Rarity ? a.Rarity.CompareTo(b.Rarity) : a.Overall.CompareTo(b.Overall));
         return cards;
     }

@@ -547,6 +547,8 @@ public sealed partial class PackOpening : PxCanvas
     static void Foil(CanvasItem ci, Rect2 r, int tier, float t)
     {
         if (tier <= 0) return;
+        // Keep the sheen on the card's face, clear of its shaped top and pointed foot.
+        r = new Rect2(r.Position + new Vector2(r.Size.X * 0.04f, r.Size.Y * 0.1f), new Vector2(r.Size.X * 0.92f, r.Size.Y * 0.76f));
         float period = tier >= 3 ? 1.8f : 2.6f;
         Fx.Shine(ci, r, t % period / (period * 0.6f), new Color(1, 1, 1, 0.16f + tier * 0.05f));
         if (tier >= 3) Fx.Shine(ci, r, (t + period / 2) % period / (period * 0.6f), new Color(Col(tier), 0.22f), 0.12f);
@@ -733,7 +735,7 @@ public sealed partial class PackOpening : PxCanvas
             float lift = Mathf.Sin(k * Mathf.Pi) * 0.12f;
             Transform(this, r, 0, new Vector2(Mathf.Max(0.02f, sx) * (1 + lift), 1 + lift));
             if (k < 0.5f) Art.CardBack(this, r, c.Rarity);
-            else Art.Card(this, r, c, _kit, 0.6f);
+            else Art.Card(this, r, c, _kit, 0.6f, _ui.Club.S.Crest);
             DrawSetTransformMatrix(_base);
             return;
         }
@@ -743,7 +745,7 @@ public sealed partial class PackOpening : PxCanvas
         float s = 1 + (float)_punch * 0.12f;
         DrawColoredPolygon(Px.Ellipse(PedestalTop(), r.Size.X * 0.42f - bob, 8, 20), new Color(0, 0, 0, 0.4f));
         Transform(this, r.Translated(new Vector2(0, bob)), rot, new Vector2(s, s));
-        Art.Card(this, r, c, _kit, Tier >= 1 ? 0.7f + 0.3f * Mathf.Sin((float)T * 3) : 0.3f);
+        Art.Card(this, r, c, _kit, Tier >= 1 ? 0.7f + 0.3f * Mathf.Sin((float)T * 3) : 0.3f, _ui.Club.S.Crest);
         DrawSetTransformMatrix(_base);
         Caption(c, r);
     }
@@ -816,7 +818,7 @@ public sealed partial class PackOpening : PxCanvas
             float fk = face ? Mathf.Min(1, ((float)_t - (float)FlipAt(i)) / 0.2f) : 0;
             float sx = face ? Mathf.Abs(Mathf.Cos((0.5f + fk * 0.5f) * Mathf.Pi)) : 1;
             Transform(this, dr, (i - (n - 1) / 2f) * 0.035f * (1 - fk * 0.5f), new Vector2(Mathf.Max(0.05f, sx), 1));
-            if (face) Art.Card(this, dr, c, _kit, best ? 0.8f : 0);
+            if (face) Art.Card(this, dr, c, _kit, best ? 0.8f : 0, _ui.Club.S.Crest);
             else Art.CardBack(this, dr, c.Rarity);
             DrawSetTransformMatrix(_base);
             if (face) Tap("card" + i, r, () => _ui.OpenPlayer(c));

@@ -363,13 +363,14 @@ public static class Cards
     }
 
     /// <summary>A new player of the given rarity (and position, random if omitted).</summary>
-    public static Card Generate(Rng rng, Rarity rarity, Position? position = null, int? targetOvr = null)
+    public static Card Generate(Rng rng, Rarity rarity, Position? position = null, int? targetOvr = null, int? nationOf = null)
     {
         var pos = position ?? RandomPosition(rng);
         var (lo, hi) = RarityOvr[(int)rarity];
         // Skewed toward the bottom of the range: high rolls are the exciting ones.
         int target = targetOvr ?? JsRound(lo + (hi - lo) * Math.Pow(rng.Next(), 1.6));
         int nationIndex = (int)(rng.Next() * Nations.Length);
+        if (nationOf is int fixedNation) nationIndex = fixedNation;
         var nation = Nations[nationIndex];
 
         // Body first: height drives jumping / strength / agility.

@@ -22,7 +22,7 @@ public sealed partial class PlayerSheet : Modal
         var club = Ui.Club;
         float ch = b.Size.Y - 40, cw = ch / 1.4f;
         var card = new Rect2(b.Position + new Vector2(20, 20), new Vector2(cw, ch));
-        Art.Card(this, card, c, club.Info().Kit, 0.5f);
+        Art.Card(this, card, c, club.Info().Kit, 0.5f, club.S.Crest);
 
         float x = card.End.X + 22, y = b.Position.Y + 48;
         float w = b.End.X - x - 20;

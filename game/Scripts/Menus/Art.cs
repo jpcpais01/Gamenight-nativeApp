@@ -77,45 +77,175 @@ public static class Art
     public static Color RarityColor(Rarity r) => Px.Hex(Cards.RarityColor[(int)r]);
 
     /// <summary>Ink that reads on the card face.</summary>
-    static Color CardInk(Rarity r) => r == Rarity.Legendary ? Px.Hex(0x1e0a33) : Px.Hex(0x2b1708);
+    static Color CardInk(Rarity r) => r switch
+    {
+        Rarity.Common => Px.Hex(0x2e1806),
+        Rarity.Rare => Px.Hex(0x1b2230),
+        Rarity.Epic => Px.Hex(0x3a2604),
+        Rarity.Legendary => Px.Hex(0xf6ecff),
+        _ => Px.Hex(0x2a2410),
+    };
 
-    /// <summary>A full player card (FUT style); `r` should be about 10 x 14.</summary>
-    public static void Card(CanvasItem ci, Rect2 r, Card c, Kit kit, float glow = 0)
+    /// <summary>Each tier's finish: face bands top to bottom, the trim, and the accent.</summary>
+    static readonly int[][] Face =
+    {
+        new[] { 0xf0bb85, 0xd99559, 0xb8733c, 0x8f5427, 0x6e3d18 },
+        new[] { 0xffffff, 0xe3e9f1, 0xc5cfdb, 0xa2adbd, 0x7f8a9c },
+        new[] { 0xfff6b8, 0xffe066, 0xf2bd2c, 0xd09418, 0xa8700c },
+        new[] { 0x5a2a94, 0x3d1a6e, 0x2a0f52, 0x1c0838, 0x12052a },
+        new[] { 0xffffff, 0xfffbea, 0xf6eccb, 0xe8d8a2, 0xd9c27a },
+    };
+    static readonly int[] Trim = { 0x5a3112, 0x5b6676, 0x8a5a06, 0xc27bff, 0xc9a23a };
+    static readonly int[] Accent = { 0xffd7a8, 0xffffff, 0xfff3a0, 0xe0b0ff, 0x7ff6ff };
+
+    /// <summary>The card's silhouette (unit coordinates, 10 x 14 card): plainer for the common
+    /// tiers, crowned for the great ones.</summary>
+    static readonly float[][] Shapes =
+    {
+        new[] { 0.07f, 0, 0.93f, 0, 1, 0.045f, 1, 0.9f, 0.5f, 1, 0, 0.9f, 0, 0.045f },
+        new[] { 0, 0.06f, 0.2f, 0.02f, 0.5f, 0, 0.8f, 0.02f, 1, 0.06f, 1, 0.88f, 0.5f, 1, 0, 0.88f },
+        new[] { 0, 0.075f, 0.1f, 0.03f, 0.36f, 0.03f, 0.5f, 0, 0.64f, 0.03f, 0.9f, 0.03f, 1, 0.075f, 1, 0.87f, 0.5f, 1, 0, 0.87f },
+        new[] { 0, 0.095f, 0.12f, 0.02f, 0.28f, 0.065f, 0.5f, 0, 0.72f, 0.065f, 0.88f, 0.02f, 1, 0.095f, 1, 0.86f, 0.62f, 0.965f, 0.5f, 1, 0.38f, 0.965f, 0, 0.86f },
+        new[] { 0, 0.11f, 0.08f, 0.03f, 0.22f, 0.06f, 0.36f, 0, 0.5f, 0.045f, 0.64f, 0, 0.78f, 0.06f, 0.92f, 0.03f, 1, 0.11f, 1, 0.86f, 0.5f, 1, 0, 0.86f },
+    };
+
+    static Vector2[] Shape(Rect2 r, int tier)
+    {
+        var n = Shapes[Math.Clamp(tier, 0, 4)];
+        var pts = new Vector2[n.Length / 2];
+        for (int i = 0; i < pts.Length; i++) pts[i] = r.Position + new Vector2(n[i * 2], n[i * 2 + 1]) * r.Size;
+        return pts;
+    }
+
+    static float Area(Vector2[] p)
+    {
+        float a = 0;
+        for (int i = 0, j = p.Length - 1; i < p.Length; j = i++) a += p[j].X * p[i].Y - p[i].X * p[j].Y;
+        return Mathf.Abs(a) / 2;
+    }
+
+    /// <summary>Fill the part of poly that lies inside the card's shape.</summary>
+    static void Clip(CanvasItem ci, Vector2[] poly, Vector2[] shape, Color c)
+    {
+        foreach (var part in Geometry2D.IntersectPolygons(poly, shape))
+            if (part.Length >= 3 && Area(part) > 0.5f) ci.DrawColoredPolygon(part, c);
+    }
+
+    static Vector2[] Quad(float x0, float y0, float x1, float y1) => new[] { new Vector2(x0, y0), new Vector2(x1, y0), new Vector2(x1, y1), new Vector2(x0, y1) };
+
+    /// <summary>A full player card in the FUT manner; `r` should be about 10 x 14. Rating and
+    /// position top left over the nation and club badges, the portrait, the name plate, six
+    /// stats, playstyle icons down the right, and a finish (silhouette, colours, texture) per tier.</summary>
+    public static void Card(CanvasItem ci, Rect2 r, Card c, Kit kit, float glow = 0, Crest crest = null)
     {
         float u = r.Size.X / 10f;
+        int tier = (int)c.Rarity;
+        var face = Face[tier];
+        var trim = Px.Hex(Trim[tier]);
+        var acc = Px.Hex(Accent[tier]);
         var col = RarityColor(c.Rarity);
+        var outer = Shape(r, tier);
         if (glow > 0)
-            for (int i = 3; i >= 1; i--) ci.DrawRect(r.Grow(u * 0.5f * i * glow), new Color(col, 0.12f * glow));
-        Px.Frame(ci, r, Colors.Transparent, col.Darkened(0.55f), new Color(0, 0, 0, 0.5f), Math.Max(2, (int)(u * 0.3f)), Math.Max(3, (int)(u * 0.5f)));
-        var inner = r.Grow(-Math.Max(2, (int)(u * 0.3f)));
-        Px.Bands(ci, inner, new[] { col.Lightened(0.45f), col.Lightened(0.15f), col, col.Darkened(0.18f), col.Darkened(0.32f) }, new[] { 0, 0.12f, 0.3f, 0.62f, 0.85f });
-        // Icons get a little sparkle grid.
-        if (c.Rarity == Rarity.Icon)
-            for (int i = 0; i < 6; i++) ci.DrawRect(new Rect2(inner.Position + new Vector2((i * 37 % 9 + 0.5f) * u, (i * 23 % 13 + 0.5f) * u), new Vector2(u * 0.3f, u * 0.3f)), new Color(1, 1, 1, 0.5f));
+            for (int i = 3; i >= 1; i--) ci.DrawColoredPolygon(Shape(r.Grow(u * 0.45f * i * glow), tier), new Color(col, 0.12f * glow));
+        ci.DrawColoredPolygon(Shape(r.Translated(new Vector2(u * 0.35f, u * 0.45f)), tier), new Color(0, 0, 0, 0.5f));
+        ci.DrawColoredPolygon(outer, trim.Darkened(0.35f));
+        float bw = Mathf.Max(2, u * 0.32f);
+        var ir = r.Grow(-bw);
+        var shape = Shape(ir, tier);
+        ci.DrawColoredPolygon(shape, Px.Hex(face[2]));
+        // The face: hard bands, top to bottom.
+        float[] stops = { 0, 0.14f, 0.36f, 0.64f, 0.84f, 1.01f };
+        for (int i = 0; i < 5; i++)
+            Clip(ci, Quad(ir.Position.X - 1, ir.Position.Y + ir.Size.Y * stops[i], ir.End.X + 1, ir.Position.Y + ir.Size.Y * stops[i + 1]), shape, Px.Hex(face[i]));
+        var p = ir.Position;
+        Vector2 U(float x, float y) => p + new Vector2(x, y) * u;
+
+        // The tier's texture.
+        switch (tier)
+        {
+            case 0:
+                for (float y = 1; y < 14; y += 0.55f) Clip(ci, Quad(p.X, p.Y + y * u, ir.End.X, p.Y + y * u + Mathf.Max(1, u * 0.08f)), shape, new Color(0, 0, 0, 0.07f));
+                break;
+            case 1:
+                for (int i = 0; i < 4; i++)
+                {
+                    float x = 1 + i * 3.1f;
+                    Clip(ci, new[] { U(x, 0), U(x + 0.9f, 0), U(x - 3.2f, 14), U(x - 4.1f, 14) }, shape, new Color(1, 1, 1, 0.16f));
+                }
+                break;
+            case 2:
+                for (float d = -14; d < 10; d += 1.2f)
+                {
+                    Clip(ci, new[] { U(d, 0), U(d + 0.12f, 0), U(d + 14.12f, 14), U(d + 14, 14) }, shape, new Color(1, 1, 1, 0.1f));
+                    Clip(ci, new[] { U(d + 14, 0), U(d + 14.12f, 0), U(d + 0.12f, 14), U(d, 14) }, shape, new Color(0.5f, 0.3f, 0, 0.08f));
+                }
+                break;
+            case 3:
+                // Neon geometry over the dark.
+                foreach (var (x0, y0, x1, y1) in new[] { (0f, 9.5f, 6f, 3f), (10f, 9.5f, 4f, 3f), (0f, 12f, 10f, 5f), (10f, 12f, 0f, 5f) })
+                {
+                    var a = U(x0, y0);
+                    var b = U(x1, y1);
+                    var n = (b - a).Normalized().Orthogonal() * Mathf.Max(1, u * 0.09f);
+                    Clip(ci, new[] { a - n, b - n, b + n, a + n }, shape, new Color(acc, 0.35f));
+                }
+                Clip(ci, Px.Ellipse(U(6.5f, 4.5f), u * 4, u * 4, 24), shape, new Color(acc, 0.1f));
+                break;
+            default:
+                // Rays from behind the portrait.
+                for (int i = 0; i < 14; i++)
+                {
+                    float a0 = i * Mathf.Tau / 14, a1 = a0 + Mathf.Tau / 28;
+                    var o = U(6.4f, 4.6f);
+                    Clip(ci, new[] { o, o + new Vector2(Mathf.Cos(a0), Mathf.Sin(a0)) * u * 16, o + new Vector2(Mathf.Cos(a1), Mathf.Sin(a1)) * u * 16 }, shape, new Color(1, 0.92f, 0.6f, 0.22f));
+                }
+                for (int i = 0; i < 7; i++)
+                    ci.DrawRect(new Rect2(U((i * 37 % 9) + 0.5f, (i * 23 % 11) + 1.2f), new Vector2(u * 0.25f, u * 0.25f)), new Color(acc, 0.7f));
+                break;
+        }
+        // The inner trim line, following the silhouette.
+        var line = Shape(ir.Grow(-u * 0.35f), tier);
+        var closed = new Vector2[line.Length + 1];
+        Array.Copy(line, closed, line.Length);
+        closed[^1] = line[0];
+        ci.DrawPolyline(closed, new Color(tier == 3 ? acc : trim, tier >= 2 ? 0.85f : 0.45f), Mathf.Max(1, u * 0.12f));
+
         var ink = CardInk(c.Rarity);
-        var p = inner.Position;
-        int ovrSize = (int)(u * 3.4f);
-        Px.TextC(ci, Px.Big, p.X + u * 1.7f, p.Y + u * 3.0f, c.Overall.ToString(), ovrSize, ink);
-        Px.TextC(ci, Px.Big, p.X + u * 1.7f, p.Y + u * 4.4f, c.Position.ToString(), (int)(u * 1.5f), ink);
-        Px.Flag(ci, new Rect2(p + new Vector2(u * 0.9f, u * 5.0f), new Vector2(u * 1.6f, u * 1.1f)), Cards.Nations[c.Nation]);
-        Avatar(ci, new Rect2(p + new Vector2(u * 3.2f, u * 0.7f), new Vector2(u * 6.2f, u * 6.2f)), c, kit);
-        // Playstyle badges down the right edge.
+        // The portrait, on a soft halo.
+        ci.DrawColoredPolygon(Px.Ellipse(U(6.5f, 5.1f), u * 2.9f, u * 2.9f, 22), new Color(acc, tier == 3 ? 0.14f : 0.22f));
+        Avatar(ci, new Rect2(U(3.6f, 1.85f), new Vector2(u * 6.1f, u * 6.1f)), c, kit);
+        // Rating, position, nation and club down the left.
+        Px.TextC(ci, Px.Big, p.X + u * 2.0f, p.Y + u * 3.7f, c.Overall.ToString(), (int)(u * 3.2f), ink);
+        Px.TextC(ci, Px.Big, p.X + u * 2.0f, p.Y + u * 5.0f, c.Position.ToString(), (int)(u * 1.4f), ink);
+        ci.DrawRect(new Rect2(U(1.3f, 5.4f), new Vector2(u * 1.4f, Mathf.Max(1, u * 0.1f))), new Color(ink, 0.45f));
+        var fr = new Rect2(U(1.25f, 5.75f), new Vector2(u * 1.5f, u * 1.0f));
+        ci.DrawRect(fr.Grow(Mathf.Max(1, u * 0.08f)), new Color(0, 0, 0, 0.35f));
+        Px.Flag(ci, fr, Cards.Nations[c.Nation]);
+        if (crest != null) CrestArt.Draw(ci, new Rect2(U(1.35f, 7.0f), new Vector2(u * 1.3f, u * 1.6f)), crest);
+        // Playstyles down the right edge.
         var ps = Playstyles.Of(c);
         for (int i = 0; i < ps.Count; i++)
-            Playstyle(ci, p + new Vector2(inner.Size.X - u * 1.1f, u * 1.3f + i * u * 2.05f), Mathf.Max(5, u * 0.95f), ps[i]);
-        ci.DrawRect(new Rect2(p.X + u * 0.6f, p.Y + u * 6.9f, inner.Size.X - u * 1.2f, Mathf.Max(1, u * 0.12f)), new Color(ink, 0.35f));
-        Px.TextC(ci, Px.Big, inner.GetCenter().X, p.Y + u * 8.5f, Px.Fit(Px.Big, c.LastName.ToUpperInvariant(), (int)(u * 1.8f), inner.Size.X - u), (int)(u * 1.8f), ink);
+            Playstyle(ci, U(8.75f, 2.6f + i * 1.95f), Mathf.Max(5, u * 0.9f), ps[i]);
+        // The name plate.
+        var plate = new Rect2(U(0.3f, 7.95f), new Vector2(ir.Size.X - u * 0.6f, u * 1.4f));
+        ci.DrawRect(plate, tier == 3 ? new Color(0, 0, 0, 0.35f) : new Color(ink, 0.12f));
+        ci.DrawRect(new Rect2(plate.Position, new Vector2(plate.Size.X, Mathf.Max(1, u * 0.1f))), new Color(tier == 3 ? acc : trim, 0.7f));
+        ci.DrawRect(new Rect2(plate.Position.X, plate.End.Y, plate.Size.X, Mathf.Max(1, u * 0.1f)), new Color(tier == 3 ? acc : trim, 0.7f));
+        int ns = (int)(u * 1.5f);
+        Px.TextC(ci, Px.Big, plate.GetCenter().X, plate.GetCenter().Y + ns * 0.36f, Px.Fit(Px.Big, c.LastName.ToUpperInvariant(), ns, plate.Size.X - u * 0.6f), ns, ink);
+        // Six stats, two columns of three, split by a rule.
         var fs = Cards.FaceStats(c);
+        int vs = (int)(u * 1.2f), ls = (int)(u * 0.9f);
         for (int i = 0; i < 6; i++)
         {
-            float x = p.X + u * (0.5f + (i % 3) * 3.1f);
-            float y = p.Y + u * (10.2f + (i / 3) * 1.7f);
+            float x = p.X + u * (i < 3 ? 1.35f : 5.55f);
+            float y = p.Y + u * (10.35f + (i % 3) * 0.98f);
             string v = fs[i].Item2.ToString();
-            int ns = (int)(u * 1.4f);
-            Px.Text(ci, Px.Big, new Vector2(x, y), v, ns, ink);
-            Px.Text(ci, Px.Big, new Vector2(x + Px.Width(Px.Big, v, ns) + u * 0.2f, y), fs[i].Item1, (int)(u * 0.95f), new Color(ink, 0.75f));
+            Px.Text(ci, Px.Big, new Vector2(x, y), v, vs, ink);
+            Px.Text(ci, Px.Big, new Vector2(x + u * 1.75f, y), fs[i].Item1, ls, new Color(ink, 0.75f));
         }
-        if (u >= 6) Px.TextC(ci, Px.Small, inner.GetCenter().X, inner.End.Y - u * 0.45f, Cards.Label(c.Rarity).ToUpperInvariant(), Math.Max(8, (int)(u * 0.75f)), new Color(ink, 0.7f));
+        ci.DrawRect(new Rect2(U(4.95f, 9.6f), new Vector2(Mathf.Max(1, u * 0.1f), u * 2.75f)), new Color(ink, 0.3f));
+        if (u >= 6) Px.TextC(ci, Px.Small, ir.GetCenter().X, p.Y + u * 12.95f, Cards.Label(c.Rarity).ToUpperInvariant(), Math.Max(7, (int)(u * 0.6f)), new Color(ink, 0.7f));
     }
 
     /// <summary>Face-down card back.</summary>
@@ -483,7 +613,27 @@ public static class Art
         var badge = new Rect2(inner.GetCenter() - new Vector2(u * 2.6f, u * 3.2f), new Vector2(u * 5.2f, u * 4.4f));
         ci.DrawRect(badge, new Color(c2, 0.85f));
         Px.Ring(ci, badge, c3, Math.Max(1, (int)(u * 0.25f)));
-        Px.TextC(ci, Px.Big, badge.GetCenter().X, badge.GetCenter().Y + u * 1.3f, "GN", (int)(u * 3.4f), c3);
+        int ms = (int)(u * 3.4f);
+        while (ms > 6 && Px.Width(Px.Big, p.Mark, ms) > badge.Size.X - u * 0.6f) ms--;
+        Px.TextC(ci, Px.Big, badge.GetCenter().X, badge.GetCenter().Y + ms * 0.38f, p.Mark, ms, c3);
+        if (p.Id == "ultimate")
+        {
+            // Gold filigree: a second ring and corner studs.
+            Px.Ring(ci, inner.Grow(-u * 0.5f), new Color(c3, 0.8f), Math.Max(1, (int)(u * 0.18f)));
+            foreach (var cp in new[] { inner.Position, new Vector2(inner.End.X, inner.Position.Y), inner.End, new Vector2(inner.Position.X, inner.End.Y) })
+                ci.DrawRect(new Rect2(cp - Vector2.One * u * 0.9f + (inner.GetCenter() - cp).Normalized() * u * 1.2f, Vector2.One * u * 0.6f), c3);
+        }
+        if (p.Special)
+        {
+            // A sash across the top corner.
+            var a = inner.Position + new Vector2(inner.Size.X * 0.42f, 0);
+            var b = inner.Position + new Vector2(inner.Size.X, inner.Size.X * 0.58f);
+            var n = (b - a).Normalized().Orthogonal() * u * 0.75f;
+            var sash = new[] { a - n, b - n, b + n, a + n };
+            var box = new[] { inner.Position, new Vector2(inner.End.X, inner.Position.Y), inner.End, new Vector2(inner.Position.X, inner.End.Y) };
+            foreach (var part in Geometry2D.IntersectPolygons(sash, box))
+                if (part.Length >= 3 && Area(part) > 0.5f) ci.DrawColoredPolygon(part, Px.Neon);
+        }
         int es = (int)(u * 1.9f);
         while (es > 6 && Px.Width(Px.Big, p.Emblem, es) > inner.Size.X - u * 0.8f) es--;
         Px.TextC(ci, Px.Big, inner.GetCenter().X, inner.Position.Y + inner.Size.Y * 0.8f, p.Emblem, es, c2.Darkened(0.3f));
