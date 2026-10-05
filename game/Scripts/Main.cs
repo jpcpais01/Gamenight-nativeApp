@@ -32,6 +32,8 @@ public partial class Main : Node
     Ground _ground;
     /// <summary>The match's sound and the terraces' director (the stadium can read Sound.Terraces).</summary>
     public readonly MatchSound Sound = new();
+    /// <summary>The goal replay's moment while one is showing (the pitchside people play it back too), else null.</summary>
+    public MatchSnapshot ReplayView => _replay.Active ? _replay.B : null;
     MatchCamera _camera;
     Profiler _prof;
     PlayersView _players;

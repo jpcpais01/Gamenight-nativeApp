@@ -321,7 +321,8 @@ public abstract class Ground
         RenderingServer.GlobalShaderParameterSet("gn_goal", since < 20 ? new Vector2(_goalTeam, (float)since) : new Vector2(-1, 100));
         _screen?.Show(s.Score[_flip ? 1 : 0], s.Score[_flip ? 0 : 1], s.Minute, since < 8 ? _goalTeam : -1, (int)(since * 3) % 2 == 0);
         RenderingServer.GlobalShaderParameterSet("gn_excite", s.Excitement);
-        _bench?.Update(s, dt);
+        // The photographers follow the replay's tape while one shows, the live game otherwise.
+        _bench?.Update(s, dt, _main?.ReplayView);
         _birds?.Update(s, dt, Atmosphere.Weather != Weather.Rain && Atmosphere.Night < 0.55f ? 1 : 0);
         // After dark: phones held up all round the ground as the teams come out, and again at
         // the final whistle.

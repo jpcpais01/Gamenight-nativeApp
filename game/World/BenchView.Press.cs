@@ -69,6 +69,7 @@ public sealed partial class BenchView
     MultiMesh _cam, _prop, _flash;
     float[] _camBuf, _propBuf, _flashBuf;
     int _pScore0 = -1, _pScore1 = -1, _goalEnd;
+    bool _pReplaying;
     readonly bool _snapDebug = Array.IndexOf(OS.GetCmdlineUserArgs(), "--snap") >= 0;
 
     void PressInit(Node3D root, Vector4[][] ka, Vector4[][] kb)
@@ -286,8 +287,28 @@ public sealed partial class BenchView
 
     // ------------------------------------------------------------------ per frame
 
-    void PressUpdate(MatchSnapshot s, float dt)
+    void PressUpdate(MatchSnapshot s, float dt, bool replaying)
     {
+        // Into or out of a replay is a cut: everyone back in his place, kneeling or sat,
+        // and the score read afresh from the tape (or the live game).
+        if (replaying != _pReplaying)
+        {
+            _pReplaying = replaying;
+            _pScore0 = _pScore1 = -1;
+            _goalEnd = 0;
+            for (int n = 0; n < PressCount; n++)
+            {
+                var p = _p[n];
+                var f = _f[Count + n];
+                f.X = p.SpotX = p.HomeX;
+                f.Z = p.SpotZ = p.HomeZ;
+                f.Speed = 0;
+                f.Facing = p.End > 0 ? PI : 0;
+                p.Down = 1;
+                p.OnCase = p.Sits;
+                p.BurstEnd = -1;
+            }
+        }
         if (s != null) PressEvents(s);
         for (int n = 0; n < PressCount; n++)
         {

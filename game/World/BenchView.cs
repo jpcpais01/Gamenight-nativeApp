@@ -193,7 +193,7 @@ public sealed partial class BenchView
             mats[k].SetShaderParameter("kb", kb[k]);
         }
         for (int i = 0; i < Count; i++) Pose(i, _f[i], 0);
-        if (press) PressUpdate(null, 0);
+        if (press) PressUpdate(null, 0, false);
         Upload();
     }
 
@@ -335,7 +335,7 @@ public sealed partial class BenchView
 
     // ------------------------------------------------------------------ per frame
 
-    public void Update(MatchSnapshot s, float dt)
+    public void Update(MatchSnapshot s, float dt, MatchSnapshot replay = null)
     {
         if (dt <= 0) return;
         dt = MathF.Min(dt, 1 / 30f);
@@ -363,7 +363,7 @@ public sealed partial class BenchView
             Shape(f, dt, reacting);
             Pose(i, f, dt);
         }
-        if (_n > Count) PressUpdate(s, dt);
+        if (_n > Count) PressUpdate(replay ?? s, dt, replay != null);
         Upload();
     }
 
