@@ -154,6 +154,13 @@ public sealed partial class StadiumScreen : PxCanvas
         _changedAt = T;
     }
 
+    void Around(int step)
+    {
+        int n = Surroundings.Names.Length;
+        _ui.Club.SetStadiumArea((Surroundings.Clamp(Plan.Area) + step + n) % n);
+        _changedAt = T;
+    }
+
     void All(int set)
     {
         foreach (Slot s in Enum.GetValues<Slot>()) _ui.Club.S.Stadium.Set(s, set);
@@ -222,8 +229,20 @@ public sealed partial class StadiumScreen : PxCanvas
         cx -= w2 + 10;
         float w1 = Px.Width(Px.Big, "SAME ALL ROUND", 18) + 18;
         Chip("same", new Vector2(cx - w1, 22), "SAME ALL ROUND", false, () => All(Plan.Get(Selected)));
+
+        // Under them: what's round the ground, stepped through either way.
+        int area = Surroundings.Clamp(Plan.Area);
+        string an = "AROUND: " + Surroundings.Names[area].ToUpperInvariant();
+        float aw = Px.Width(Px.Big, an, 18) + 18, arrow = Px.Width(Px.Big, ">", 18) + 18;
+        float ax = W - 16 - arrow;
+        Chip("area+", new Vector2(ax, 66), ">", false, () => Around(1));
+        ax -= aw + 6;
+        Chip("area", new Vector2(ax, 66), an, true, () => Around(1));
+        ax -= arrow + 6;
+        Chip("area-", new Vector2(ax, 66), "<", false, () => Around(-1));
+        Px.TextR(this, Px.Small, W - 16, 108, Surroundings.About[area], 8, Px.Ink, new Color(0, 0, 0, 0.6f), 1);
         if (_building || _changedAt >= 0)
-            Px.TextR(this, Px.Big, W - 20, 82, (T % 0.6) < 0.3 ? "BUILDING..." : "BUILDING", 22, Px.Gold, new Color(0, 0, 0, 0.6f), 2);
+            Px.TextR(this, Px.Big, W - 16, 140, (T % 0.6) < 0.3 ? "BUILDING..." : "BUILDING", 22, Px.Gold, new Color(0, 0, 0, 0.6f), 2);
 
         const string hint = "DRAG TO TURN  ·  TWO FINGERS TO MOVE AND ZOOM";
         float hw = Px.Width(Px.Small, hint, 8) + 16;

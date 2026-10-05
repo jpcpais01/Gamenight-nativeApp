@@ -56,7 +56,20 @@ public sealed partial class PlayerSheet : Modal
                 bx += tw + 8;
             }
         }
-        // Stats in two columns.
+        // Playstyles: badge, name, what it adds.
+        var styles = Playstyles.Of(c);
+        if (styles.Count > 0)
+        {
+            bx = x;
+            y += 30;
+            foreach (var ps in styles)
+            {
+                Art.Playstyle(this, new Vector2(bx + 11, y - 6), 11, ps);
+                Px.Text(this, Px.Big, new Vector2(bx + 27, y), ps.Name, 18, Px.Hex(ps.Color));
+                bx += 27 + Px.Width(Px.Big, ps.Name, 18) + 16;
+            }
+        }
+        // Stats in two columns (playstyle boosts in the playstyle's colour, on top).
         y += 22;
         var groups = new (string, Stat[])[]
         {
@@ -73,6 +86,7 @@ public sealed partial class PlayerSheet : Modal
             foreach (var k in groups[g].Item2)
             {
                 int v = c.Stats[k];
+                int boosted = Playstyles.Boosted(c, k);
                 var col = v >= 85 ? Px.Win : v >= 70 ? Px.Gold : v >= 55 ? Px.Hex(0xffb36b) : Px.Loss;
                 Px.Text(this, Px.Small, new Vector2(gx, gy), Cards.StatLabel[k].ToUpperInvariant(), 8, Px.InkDim);
                 float barX = gx + 98, barW = colW - 98 - 28;
@@ -80,7 +94,13 @@ public sealed partial class PlayerSheet : Modal
                 // Segmented bar.
                 float fill = barW * v / 99f;
                 for (float sx = 0; sx < fill; sx += 8) DrawRect(new Rect2(barX + sx, gy - 7, Mathf.Min(6, fill - sx), 8), col);
-                Px.TextR(this, Px.Big, gx + colW, gy + 2, v.ToString(), 18, Px.Ink);
+                if (boosted > v)
+                {
+                    float full = barW * boosted / 99f;
+                    for (float sx = 0; sx < full; sx += 8)
+                        if (sx + 6 > fill) DrawRect(new Rect2(barX + Mathf.Max(sx, fill), gy - 7, Mathf.Min(6, full - sx) - Mathf.Max(0, fill - sx), 8), Px.Cyan);
+                }
+                Px.TextR(this, Px.Big, gx + colW, gy + 2, boosted.ToString(), 18, boosted > v ? Px.Cyan : Px.Ink);
                 gy += rowH;
             }
         }

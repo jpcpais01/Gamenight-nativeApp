@@ -258,7 +258,7 @@ public sealed partial class PackOpening : PxCanvas
     void NextWalk()
     {
         _walkStep++;
-        int steps = Tier >= 3 ? 3 : 2;
+        int steps = (Tier >= 3 ? 3 : 2) + (Playstyles.Of(Cur).Count > 0 ? 1 : 0);
         if (_walkStep >= steps) To(Phase.Enter);
         else
         {
@@ -654,8 +654,24 @@ public sealed partial class PackOpening : PxCanvas
         Fx.Spot(this, new Vector2(m.X, -10), PedestalTop(), 50, 220, col, 0.18f);
         Fx.Beams(this, m, col, 12, Size.Length(), 0.05f, (float)T * 0.4f, 0.1f);
         Fx.Glow(this, m, 150, col, 0.18f);
+        // The playstyles step comes last (after the rating for the best cards).
+        int styleStep = Tier >= 3 ? 3 : 2;
         string[] labels = { "NATION", "POSITION", "RATING" };
-        Px.TextC(this, Px.Small, m.X, 58, labels[Math.Min(_walkStep, 2)], 10, Px.InkDim);
+        Px.TextC(this, Px.Small, m.X, 58, _walkStep >= styleStep ? "PLAYSTYLE" : labels[Math.Min(_walkStep, 2)], 10, Px.InkDim);
+        if (_walkStep >= styleStep)
+        {
+            var ps = Playstyles.Of(c);
+            float gap = 190, x0 = m.X - (ps.Count - 1) * gap / 2;
+            for (int i = 0; i < ps.Count; i++)
+            {
+                var at = new Vector2(x0 + i * gap, m.Y - 6);
+                Fx.Glow(this, at, 70 * s, Px.Hex(ps[i].Color), 0.25f);
+                Art.Playstyle(this, at, 46 * s, ps[i]);
+                Px.TextC(this, Px.Big, at.X, at.Y + 82 * s, ps[i].Name.ToUpperInvariant(), (int)(30 * s), Px.Hex(ps[i].Color), new Color(0, 0, 0, 0.7f), 3);
+                Px.TextC(this, Px.Small, at.X, at.Y + 104 * s, Playstyles.Describe(ps[i]).ToUpperInvariant(), 8, Px.Ink);
+            }
+            return;
+        }
         if (_walkStep == 0)
         {
             var n = Cards.Nations[c.Nation];
@@ -750,6 +766,15 @@ public sealed partial class PackOpening : PxCanvas
             Px.Frame(this, new Rect2(x, y - 20, w, 28), new Color(col, 0.25f), col, null, 2);
             Px.Text(this, Px.Big, new Vector2(x + 8, y), tr, 20, Px.Ink);
             x += w + 8;
+        }
+        // Playstyles, each with what it adds.
+        float px0 = r.End.X + 44 + off;
+        foreach (var ps in Playstyles.Of(c))
+        {
+            y += 38;
+            Art.Playstyle(this, new Vector2(px0 + 14, y - 6), 13, ps);
+            Px.Text(this, Px.Big, new Vector2(px0 + 34, y), ps.Name, 22, Px.Hex(ps.Color));
+            Px.Text(this, Px.Small, new Vector2(px0 + 40 + Px.Width(Px.Big, ps.Name, 22), y - 1), Playstyles.Describe(ps).ToUpperInvariant(), 8, Px.InkDim);
         }
         if (T % 1 < 0.7)
             Px.TextC(this, Px.Big, Size.X / 2, Size.Y - 12, _i < _cards.Count - 1 ? "TAP FOR NEXT" : "TAP TO FINISH", 22, Px.Ink, new Color(0, 0, 0, 0.6f), 2);

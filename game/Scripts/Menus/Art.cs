@@ -99,6 +99,10 @@ public static class Art
         Px.TextC(ci, Px.Big, p.X + u * 1.7f, p.Y + u * 4.4f, c.Position.ToString(), (int)(u * 1.5f), ink);
         Px.Flag(ci, new Rect2(p + new Vector2(u * 0.9f, u * 5.0f), new Vector2(u * 1.6f, u * 1.1f)), Cards.Nations[c.Nation]);
         Avatar(ci, new Rect2(p + new Vector2(u * 3.2f, u * 0.7f), new Vector2(u * 6.2f, u * 6.2f)), c, kit);
+        // Playstyle badges down the right edge.
+        var ps = Playstyles.Of(c);
+        for (int i = 0; i < ps.Count; i++)
+            Playstyle(ci, p + new Vector2(inner.Size.X - u * 1.05f, u * 1.25f + i * u * 1.95f), u * 0.88f, ps[i], u >= 7);
         ci.DrawRect(new Rect2(p.X + u * 0.6f, p.Y + u * 6.9f, inner.Size.X - u * 1.2f, Mathf.Max(1, u * 0.12f)), new Color(ink, 0.35f));
         Px.TextC(ci, Px.Big, inner.GetCenter().X, p.Y + u * 8.5f, Px.Fit(Px.Big, c.LastName.ToUpperInvariant(), (int)(u * 1.8f), inner.Size.X - u), (int)(u * 1.8f), ink);
         var fs = Cards.FaceStats(c);
@@ -115,6 +119,27 @@ public static class Art
     }
 
     /// <summary>Face-down card back.</summary>
+    /// <summary>A playstyle badge: a hexagon in its colour, with its two letters when there's room.</summary>
+    public static void Playstyle(CanvasItem ci, Vector2 c, float r, Playstyle p, bool letters = true)
+    {
+        Vector2[] Hex(float rr)
+        {
+            var pts = new Vector2[6];
+            for (int i = 0; i < 6; i++)
+            {
+                float a = Mathf.Pi / 6 + i * Mathf.Pi / 3;
+                pts[i] = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * rr;
+            }
+            return pts;
+        }
+        var col = Px.Hex(p.Color);
+        ci.DrawColoredPolygon(Hex(r + Mathf.Max(1, r * 0.14f)), new Color(0, 0, 0, 0.75f));
+        ci.DrawColoredPolygon(Hex(r), col);
+        ci.DrawColoredPolygon(Hex(r * 0.78f), Px.Hex(0x14121c));
+        if (letters) Px.TextC(ci, Px.Big, c.X, c.Y + r * 0.42f, p.Code, Math.Max(8, (int)(r * 1.15f)), col);
+        else ci.DrawColoredPolygon(Hex(r * 0.36f), col);
+    }
+
     public static void CardBack(CanvasItem ci, Rect2 r, Rarity rarity)
     {
         float u = r.Size.X / 10f;
