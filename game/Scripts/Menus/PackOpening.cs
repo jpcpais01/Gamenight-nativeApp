@@ -399,7 +399,33 @@ public sealed partial class PackOpening : PxCanvas
     Rect2 CardRect()
     {
         float h = Mathf.Min(Size.Y * 0.7f, 320), w = h / 1.4f;
-        return new Rect2(new Vector2(Size.X * 0.34f - w / 2, Size.Y * 0.47f - h / 2).Round(), new Vector2(w, h).Round());
+        // Dead centre while it arrives and flips; once shown it glides left so the card and its
+        // caption sit centred together, on any screen width.
+        float cx = Size.X / 2;
+        if (_phase == Phase.Shown)
+        {
+            float block = w + 44 + CaptionWidth(_cards[_i]);
+            float left = Mathf.Max(20, (Size.X - block) / 2) + w / 2;
+            float k = Mathf.Min(1, (float)_t / 0.3f);
+            cx = Mathf.Lerp(cx, left, 1 - (1 - k) * (1 - k));
+        }
+        return new Rect2(new Vector2(cx - w / 2, Size.Y * 0.47f - h / 2).Round(), new Vector2(w, h).Round());
+    }
+
+    /// <summary>How wide the shown card's caption runs (see Caption).</summary>
+    float CaptionWidth(Card c)
+    {
+        float max = Size.X * 0.5f;
+        float w = Px.Width(Px.Big, Cards.Label(c.Rarity).ToUpperInvariant() + (c.Position == Pos.GK ? " · GOALKEEPER" : ""), 20) + 20;
+        w = Mathf.Max(w, Mathf.Min(max, Px.Width(Px.Big, c.Name, 46)));
+        var n = Cards.Nations[c.Nation];
+        w = Mathf.Max(w, 32 + Px.Width(Px.Small, $"{n.Code} · {c.Height} CM · {c.Weight} KG · {Cards.BodyName(c).ToUpperInvariant()}", 9));
+        float tw = 0;
+        foreach (var tr in Cards.Traits(c)) tw += Px.Width(Px.Big, tr, 20) + 24;
+        w = Mathf.Max(w, tw - 8);
+        foreach (var ps in Playstyles.Of(c))
+            w = Mathf.Max(w, 40 + Px.Width(Px.Big, ps.Name, 22) + Px.Width(Px.Small, Playstyles.Describe(ps).ToUpperInvariant(), 8));
+        return Mathf.Min(w, max);
     }
 
     Rect2 SummaryRect(int i)
