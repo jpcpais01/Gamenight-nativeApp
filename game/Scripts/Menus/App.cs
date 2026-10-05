@@ -71,7 +71,15 @@ public sealed partial class App : Node
                 // --phase=name@seconds[@pack]: a held moment of a pack opening.
                 var a = arg[8..].Split('@');
                 var pk = Packs.All[a.Length > 2 ? int.Parse(a[2]) : 4];
-                var po = new PackOpening(_menus, pk, Packs.Open(pk, 11));
+                // The first seed whose best card has two playstyles, to show them off.
+                int sd = 11;
+                for (int q = 1; q < 3000; q++)
+                    if (Playstyles.Of(Packs.Open(pk, q)[^1]).Count >= 2)
+                    {
+                        sd = q;
+                        break;
+                    }
+                var po = new PackOpening(_menus, pk, Packs.Open(pk, sd));
                 _menus.Open(po);
                 po.Hold(a[0], double.Parse(a[1], System.Globalization.CultureInfo.InvariantCulture));
             }
