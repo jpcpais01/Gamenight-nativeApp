@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.40", "Choose what surrounds your stadium in the builder: the seaside city, Downtown among the towers, an Old Town of red roofs by a river with a castle, the Docklands with cranes and terraces, Countryside fields and farms, or an Alpine valley with a lake and snowy peaks."),
         ("0.39", "Playstyles: cards rated 85 or more may carry up to three of 20 special styles (Tank, Rapid, Maestro, Poacher, Cat and more). Each lifts a group of stats for real in matches, shows as a badge on the card, in the player sheet and in the pack walkout."),
         ("0.38", "A real build-up before kick-off: the teams wait in the tunnel and walk out into a roar, the camera tracking beside the captains; the announcer reads both line-ups name by name, cheered and whistled; then everyone jogs to their marks as the camera rises straight into play."),
         ("0.37", "Teams play like teams: pass and move one-twos, full-backs overlapping while the winger cuts in, strikers coming short as a partner spins in behind, fast counters, first-time lay-offs, pressing traps, the back line squeezing up, and sides chasing or seeing out games late."),

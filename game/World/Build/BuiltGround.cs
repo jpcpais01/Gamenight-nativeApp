@@ -29,8 +29,9 @@ public sealed class BuiltGround : Ground
         // Debug: `-- --plan=0,1,2,3,4,0,1,2` (a set per slot, in Slot order).
         foreach (var arg in OS.GetCmdlineUserArgs())
         {
-            if (arg.StartsWith("--plan=")) _plan = new StadiumPlan { Sets = Array.ConvertAll(arg[7..].Split(','), int.Parse), Paint = _plan.Paint };
+            if (arg.StartsWith("--plan=")) _plan = new StadiumPlan { Sets = Array.ConvertAll(arg[7..].Split(','), int.Parse), Paint = _plan.Paint, Area = _plan.Area };
             // `--paint=0,b8322a,...` (a main colour per set, 0 its own, 1 the club's).
+            if (arg.StartsWith("--area=")) _plan.Area = int.Parse(arg[7..]);
             if (arg.StartsWith("--paint=")) _plan.Paint = Array.ConvertAll(arg[8..].Split(','), h => Convert.ToUInt32(h, 16));
         }
     }
@@ -66,9 +67,11 @@ public sealed class BuiltGround : Ground
     protected override void Setup()
     {
         // The builder's camera stands well back: thin the haze for it.
-        FogRange = _preview ? new(320, 1500) : new(180, 1200);
-        // The city round it and the bay: green land, a long view.
-        Land = new Vector3(0x46, 0x5f, 0x35) / 255f;
+        // The mountains and the open country carry on further before the haze takes them.
+        bool far = _plan.Area is 4 or 5;
+        FogRange = _preview ? new(320, far ? 1700 : 1500) : far ? new(240, 1600) : new(180, 1200);
+        // What's round it (Surroundings): its land, a long view.
+        Land = Surroundings.LandOf(_plan.Area);
         ViewRange = 1800;
         // Room for the biggest sets' backs and towers in the sun's height map.
         BakeArea = new Rect2(-150, -140, 300, 280);
@@ -233,7 +236,7 @@ public sealed class BuiltGround : Ground
             if (h >= 25) Giant = new GiantTifo(main.Path[main.Mid], at.X, at.Y, h / 38);
         }
 
-        Surroundings.Build(m, HomeColor);
+        Surroundings.Build(m, HomeColor, _plan.Area);
         Pitchside.Tunnel(m, -Kit.BZ, Kit.DarkConcrete);
         Pitchside.AdBoards(m);
         Pitchside.CornerFlags(m);
