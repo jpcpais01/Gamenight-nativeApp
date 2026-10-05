@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.61", "No crowd noise behind the menus any more: the home screen and every other menu are quiet apart from their own button sounds. The crowd comes in when a real match starts."),
         ("0.60", "The club crest on the home page no longer has the sweeping reflection across it."),
         ("0.59", "Pack openings are centred: each card arrives and flips in the middle of the screen, then slides over so the card and its details sit centred together, on any phone width."),
         ("0.58", "New app icon: a pixel football under the floodlights, as a proper Android adaptive icon (and a themed one). New loading screen: the floodlights clunk on, the ball drops onto the centre spot and bounces to rest, and GAMENIGHT slams in over a scoreboard loading bar."),

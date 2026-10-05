@@ -164,8 +164,8 @@ public sealed partial class GameAudio : Node
     /// <summary>The recorded roar, held at full for `hold` seconds; `side` 1 is the away end's.</summary>
     public void Goal(float hold, int side = 0) => Do(() => _tape.Goal(hold, side == 1 ? Bus.End1 : Bus.Crowd, side));
 
-    /// <summary>Menus: the crowd sinks to a distant murmur (or silence inside a pack opening).</summary>
-    public void SetAmbience(float level) => SetCrowdLevel(0.35f * level);
+    /// <summary>Menus: no crowd at all behind them (João's call); a real match brings it back.</summary>
+    public void SetAmbience(float level) => SetCrowdLevel(0);
 
     /// <summary>Follow the terraces' director (call every frame it runs).</summary>
     public void Terraces(Terraces dir)
