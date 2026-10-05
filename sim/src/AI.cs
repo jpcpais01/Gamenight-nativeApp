@@ -372,8 +372,9 @@ public sealed partial class AI
         foreach (var o in team.Players)
         {
             if (o == p || o.Role == Role.GK) continue;
-            double dx = o.Pos.X + dir * 5 - b.X;
-            double dz = o.Pos.Z - b.Z;
+            // Where he's heading: a man already on the move is judged by his run.
+            double dx = o.Pos.X + o.Vel.X * 0.6 + dir * 3 - b.X;
+            double dz = o.Pos.Z + o.Vel.Z * 0.6 - b.Z;
             double d = JsMath.Hypot(dx, dz);
             if (d < 4 || d > 48) continue;
             double align = (dx * aimX + dz * aimZ) / d;
@@ -423,30 +424,54 @@ public sealed partial class AI
             rz /= rn;
         }
         // How far ahead: the hold, at most. A passer with his head up plays it shorter, onto the
-        // runner, when a defender would get to that space first.
-        double x, z, tr;
+        // runner, when a defender would get to that space first or would cut the ball out.
+        double x, z, tr, D, kx, kz, v0;
         for (double lead = 3 + 11 * M.Clamp(power, 0, 1); ; lead -= 3)
         {
             x = M.Clamp(q.Pos.X + q.Vel.X * 0.2 + rx * lead, -Pitch.HalfL + 3, Pitch.HalfL - 3);
             z = M.Clamp(q.Pos.Z + q.Vel.Z * 0.2 + rz * lead, -Pitch.HalfW + 2, Pitch.HalfW - 2);
             tr = RunTime(q, x, z, PlanReactRun, PlayerK.Reach * 0.8);
-            if (lead <= 4) break;
+            D = Math.Max(0.5, M.Dist2D(b.X, b.Z, x, z));
+            kx = (x - b.X) / D;
+            kz = (z - b.Z) / D;
+            // Pace: there just before him, but never a dying ball: at least ~8 m/s on average,
+            // so a far runner gets a firm one he runs onto rather than a soft one the defence reads.
+            v0 = 19;
+            if (Kick.RollingPass(D, Math.Max(0.4, Math.Min(tr - 0.15, D / 8 + 0.3)), out var rp)) v0 = rp.V0;
             double tOpp = 1e9;
             foreach (var o in m.Teams[1 - p.Team].Players) tOpp = Math.Min(tOpp, RunTime(o, x, z, PlanReactOpp, PlayerK.Reach * 0.8));
-            if (tOpp > tr + 0.1) break;
+            // A man near its line on the ground: zip it past him (firmer, he meets it further on).
+            if (!lofted)
+                for (int k = 0; k < 3 && Cuts(p, b, kx, kz, D, v0); k++) v0 = Math.Min(19, v0 + 3);
+            if (lead <= 4 || tOpp > tr + 0.1) break;
         }
-        double D = Math.Max(0.5, M.Dist2D(b.X, b.Z, x, z));
-        double kx = (x - b.X) / D;
-        double kz = (z - b.Z) / D;
-        var tp = new ThroughPlan { Receiver = q, X = x, Z = z, Time = tr, Dx = kx, Dz = kz, LandX = x, LandZ = z, V0 = 19 };
+        var tp = new ThroughPlan { Receiver = q, X = x, Z = z, Time = tr, Dx = kx, Dz = kz, LandX = x, LandZ = z, V0 = v0 };
         if (lofted)
         {
             // Dropping a little short, to bounce on into his path.
             tp.LandX = b.X + kx * D * 0.88;
             tp.LandZ = b.Z + kz * D * 0.88;
         }
-        else if (Kick.RollingPass(D, Math.Max(0.4, tr - 0.15), out var rp)) tp.V0 = rp.V0;
         return tp;
+    }
+
+    /// <summary>
+    /// Whether a defender near its line gets a foot to a ground ball struck at `v0` toward a spot
+    /// `D` metres off along (kx, kz): he can step across before it's past him (it travels at
+    /// about three quarters of its strike pace).
+    /// </summary>
+    bool Cuts(Player p, V3 b, double kx, double kz, double D, double v0)
+    {
+        foreach (var o in m.Teams[1 - p.Team].Players)
+        {
+            double ox = o.Pos.X - b.X;
+            double oz = o.Pos.Z - b.Z;
+            double along = ox * kx + oz * kz;
+            if (along < 1 || along > D) continue;
+            double perp = Math.Abs(ox * kz - oz * kx);
+            if (perp < 0.85 + Math.Max(0, along / (0.75 * v0) - PlanReactOpp) * 3) return true;
+        }
+        return false;
     }
 
     /// <summary>
