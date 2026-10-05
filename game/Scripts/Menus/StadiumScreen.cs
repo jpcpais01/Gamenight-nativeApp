@@ -206,6 +206,12 @@ public sealed partial class StadiumScreen : PxCanvas
             // Just the stadium: a hint for a moment, then nothing.
             float a = Mathf.Clamp(2.5f - (float)(T - _bareAt), 0, 1);
             if (a > 0) Px.TextC(this, Px.Small, W / 2, H - 20, "TAP TO BRING BACK THE MENU", 8, new Color(1, 1, 1, a), new Color(0, 0, 0, 0.6f * a), 1);
+            // SURPRISE ME stays, to keep rolling stadiums with the view clear (a tap on it
+            // isn't the tap that brings the menu back).
+            float sw = Px.Width(Px.Big, "SURPRISE ME", 18) + 18;
+            Chip("surprise", new Vector2(W - 16 - sw, 16), "SURPRISE ME", false, Surprise);
+            if (_building || _changedAt >= 0)
+                Px.TextR(this, Px.Big, W - 16, 74, (T % 0.6) < 0.3 ? "BUILDING..." : "BUILDING", 22, Px.Gold, new Color(0, 0, 0, 0.6f), 2);
             return;
         }
         // The stadium shows through; shade the panels' side so they read.

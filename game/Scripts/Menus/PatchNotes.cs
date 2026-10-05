@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.52", "Stadium builder: SURPRISE ME stays on screen when you tap to hide the menus, so you can keep rolling new stadiums with the view clear."),
         ("0.51", "Every stand set now has a finished outside: a base storey in its own material with a band in your club colour, lit gates with canopies, and its own ramp drums, steel stairs or stair towers. Glass facades glow evenly at night instead of looking patchy."),
         ("0.50", "Playstyle icons: each of the 20 playstyles has its own little picture (a shield for Tank, a bolt for Rapid, an eye for Maestro, a cat for Cat...) in its badge on the card, on your squad's pitch and in the squad list."),
         ("0.49", "Mystery walkouts: after the clues your new star walks out of the players' tunnel through the smoke as a silhouette, then the lights slam on and there he is in his kit, celebrating as his name lands. No more goal roar when packs reveal."),
