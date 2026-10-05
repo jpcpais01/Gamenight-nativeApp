@@ -168,10 +168,32 @@ public sealed partial class StadiumScreen : PxCanvas
         _changedAt = T;
     }
 
+    /// <summary>A random stadium that still looks designed: mirrored end to end (both ends, and
+    /// the corners on each side, alike), one set or two, in one colour or two.</summary>
     void Surprise()
     {
         var rng = new Random();
-        foreach (Slot s in Enum.GetValues<Slot>()) Plan.Set(s, rng.Next(Kit.Sets.Length));
+        int n = Kit.Sets.Length;
+        int a = rng.Next(n), b = (a + 1 + rng.Next(n - 1)) % n;
+        // Which places take the second set: none, the ends and all corners, just the ends, or
+        // just the main stand as the showpiece.
+        var second = rng.Next(4) switch
+        {
+            0 => Array.Empty<Slot>(),
+            1 => new[] { Slot.Home, Slot.Away, Slot.HomeFar, Slot.AwayFar, Slot.HomeNear, Slot.AwayNear },
+            2 => new[] { Slot.Home, Slot.Away },
+            _ => new[] { Slot.Main },
+        };
+        foreach (Slot s in Enum.GetValues<Slot>()) Plan.Set(s, Array.IndexOf(second, s) >= 0 ? b : a);
+
+        // Colours: the club's, or one other, on everything; or, with two sets, the club's and
+        // a plain white, black or grey on the other.
+        uint Any() => Kit.Paints[2 + rng.Next(Kit.Paints.Length - 2)];
+        uint first = rng.NextDouble() < 0.6 ? Kit.ClubPaint : Any();
+        uint other = second.Length == 0 || rng.NextDouble() < 0.5 ? first
+            : first == Kit.ClubPaint ? new[] { 0xeceae4u, 0x2a2c33u, 0x8c8f95u }[rng.Next(3)] : Kit.ClubPaint;
+        Plan.SetPaint(a, first);
+        if (second.Length > 0) Plan.SetPaint(b, other);
         _ui.Club.SetStadium(Selected, Plan.Get(Selected));
         _changedAt = T;
     }

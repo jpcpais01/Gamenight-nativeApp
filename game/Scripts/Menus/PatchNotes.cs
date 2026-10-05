@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.44", "SURPRISE ME in the stadium builder now builds stadiums that look designed: both ends and the corners mirror each other, one stand set or two, in one colour or two (often your club's)."),
         ("0.43", "LEAGUES, rebuilt: a new button opens a pixel relief map of Europe with 17 leagues. Pick your home country and start in its local league; league titles are trophies that unlock the regional associations, then the premiers, then the star-filled Golden League. Bigger leagues pay more."),
         ("0.42", "Goal explosions: when you score, the net goes up Rocket League style. Pick yours from ten in the club studio's new GOAL tab, with a live preview: Supernova, Fireworks, Thunderstrike, Volcano, Black Hole, Frostbite, Party Cannon, Arcade, Phoenix or Meteor. Replays show it again."),
         ("0.41", "The crowd is your real recordings again, as in the browser game: a seamless, ever-shifting stadium bed that rises with the danger and surges near the goal line, the full goal roar held through the celebration, penalties at full cry, with drums, claps and whistles on top."),
