@@ -8,7 +8,7 @@ namespace GameNight.Menus;
 /// <summary>
 /// The club studio (the PWA's clubScreen.ts and coachEditor.ts), in four tabs: the kit (name,
 /// code, colours, design, record), the crest maker, the fans (tifo pictures and the stand
-/// banner) and the manager on the touchline.
+/// banner), the manager on the touchline and the goal explosion (ClubScreen.Goal.cs).
 /// </summary>
 public sealed partial class ClubScreen : PxCanvas
 {
@@ -20,14 +20,14 @@ public sealed partial class ClubScreen : PxCanvas
         0xb05cff, 0xe0559b, 0xf3ede0, 0xffffff, 0xb9bdc4, 0x6b6f78, 0x2a2a2a, 0x0e0e10,
     };
 
-    static readonly string[] Tabs = { "KIT", "CREST", "FANS", "MANAGER" };
+    static readonly string[] Tabs = { "KIT", "CREST", "FANS", "MANAGER", "GOAL" };
     static readonly Color Panel = new(16 / 255f, 14 / 255f, 44 / 255f, 0.6f);
 
     readonly Menus _ui;
     readonly LineEdit _name, _code, _letters, _year, _banner, _coach;
     int _tab, _slot, _part, _cslot, _page; // tab; kit colour slot; crest part; crest colour slot
     bool _resetArmed;
-    /// <summary>The open tab: 0 kit, 1 crest, 2 fans, 3 manager.</summary>
+    /// <summary>The open tab: 0 kit, 1 crest, 2 fans, 3 manager, 4 goal explosion.</summary>
     public int Tab { get => _tab; set => _tab = value; }
 
     /// <summary>Debug: open the crest maker at a part and page.</summary>
@@ -50,7 +50,11 @@ public sealed partial class ClubScreen : PxCanvas
         _coach = Field(20);
         VisibilityChanged += () =>
         {
-            if (!Visible) return;
+            if (!Visible)
+            {
+                GoalPreview(false, default);
+                return;
+            }
             Refill();
             _resetArmed = false;
         };
@@ -169,11 +173,13 @@ public sealed partial class ClubScreen : PxCanvas
         Place(_year, _tab == 1 && _part == 4);
         Place(_banner, _tab == 2);
         Place(_coach, _tab == 3);
+        GoalPreview(_tab == 4, stage);
         switch (_tab)
         {
             case 0: KitTab(stage, px, pw, H); break;
             case 1: CrestTab(stage, px, pw); break;
             case 2: FansTab(stage, px, pw); break;
+            case 4: GoalTab(stage, px, pw); break;
             default: ManagerTab(stage, px, pw); break;
         }
         Px.Scanlines(this, new Rect2(0, 0, W, H));
