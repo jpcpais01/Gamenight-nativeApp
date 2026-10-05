@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.42", "Goal explosions: when you score, the net goes up Rocket League style. Pick yours from ten in the club studio's new GOAL tab, with a live preview: Supernova, Fireworks, Thunderstrike, Volcano, Black Hole, Frostbite, Party Cannon, Arcade, Phoenix or Meteor. Replays show it again."),
         ("0.41", "The crowd is your real recordings again, as in the browser game: a seamless, ever-shifting stadium bed that rises with the danger and surges near the goal line, the full goal roar held through the celebration, penalties at full cry, with drums, claps and whistles on top."),
         ("0.40", "Choose what surrounds your stadium in the builder: the seaside city, Downtown among the towers, an Old Town of red roofs by a river with a castle, the Docklands with cranes and terraces, Countryside fields and farms, or an Alpine valley with a lake and snowy peaks."),
         ("0.39", "Playstyles: cards rated 85 or more may carry up to three of 20 special styles (Tank, Rapid, Maestro, Poacher, Cat and more). Each lifts a group of stats for real in matches, shows as a badge on the card, in the player sheet and in the pack walkout."),
