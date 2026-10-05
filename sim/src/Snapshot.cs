@@ -31,7 +31,7 @@ public sealed class MatchSnapshot
     public readonly float[] KickContact = new float[N], KickStretch = new float[N], KickBallF = new float[N], KickBallL = new float[N];
     public readonly bool[] KickLofted = new bool[N], ThrowIn = new bool[N];
     /// <summary>Slide: when the grass stops it; tackle leg direction; keeper: catch height and dive pose.</summary>
-    public readonly float[] SlideStop = new float[N], LegX = new float[N], LegZ = new float[N], CatchY = new float[N];
+    public readonly float[] SlideStop = new float[N], LegX = new float[N], LegZ = new float[N], CatchY = new float[N], CatchF = new float[N], CatchL = new float[N], DiveFly = new float[N];
     public readonly float[] DiveRoll = new float[N], DiveLift = new float[N];
     /// <summary>For the skeleton: forward acceleration, time since and height of the last touch,
     /// the last shirt pull (direction and match time, -1 = none), the strike's power, height and
@@ -126,7 +126,7 @@ public sealed class MatchSnapshot
         Array.Copy(o.KickLeg, KickLeg, N); Array.Copy(o.KickType, KickType, N); Array.Copy(o.KickContact, KickContact, N);
         Array.Copy(o.KickStretch, KickStretch, N); Array.Copy(o.KickBallF, KickBallF, N); Array.Copy(o.KickBallL, KickBallL, N);
         Array.Copy(o.KickLofted, KickLofted, N); Array.Copy(o.ThrowIn, ThrowIn, N);
-        Array.Copy(o.SlideStop, SlideStop, N); Array.Copy(o.LegX, LegX, N); Array.Copy(o.LegZ, LegZ, N); Array.Copy(o.CatchY, CatchY, N);
+        Array.Copy(o.SlideStop, SlideStop, N); Array.Copy(o.LegX, LegX, N); Array.Copy(o.LegZ, LegZ, N); Array.Copy(o.CatchY, CatchY, N); Array.Copy(o.CatchF, CatchF, N); Array.Copy(o.CatchL, CatchL, N); Array.Copy(o.DiveFly, DiveFly, N);
         Array.Copy(o.DiveRoll, DiveRoll, N); Array.Copy(o.DiveLift, DiveLift, N);
         Array.Copy(o.AccelFwd, AccelFwd, N); Array.Copy(o.SinceTouch, SinceTouch, N); Array.Copy(o.TouchH, TouchH, N);
         Array.Copy(o.PullX, PullX, N); Array.Copy(o.PullZ, PullZ, N); Array.Copy(o.PullT, PullT, N);
@@ -238,6 +238,9 @@ public sealed partial class Match
             s.LegX[i] = (float)p.LegX;
             s.LegZ[i] = (float)p.LegZ;
             s.CatchY[i] = (float)p.CatchY;
+            s.CatchF[i] = (float)p.CatchF;
+            s.CatchL[i] = (float)p.CatchL;
+            s.DiveFly[i] = (float)p.DiveFly;
             s.DiveRoll[i] = (float)AI.DiveRoll[i];
             s.DiveLift[i] = (float)AI.DiveLift[i];
             s.Sprinting[i] = p.Sprinting;

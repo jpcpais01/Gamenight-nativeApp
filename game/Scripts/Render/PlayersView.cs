@@ -19,7 +19,7 @@ namespace GameNight.Render;
 /// - secondary motion: arms, elbows, head and shoulders carry inertia and overshoot.
 /// Every part type is one MultiMesh, so all 22 players are 14 draws.
 /// </summary>
-public sealed class PlayersView
+public sealed partial class PlayersView
 {
     const int N = MatchSnapshot.N;
     const float THIGH = 0.43f, SHIN = 0.42f, HIP_Y = 0.94f, HEAD_TOP = 0.24f;
@@ -416,6 +416,7 @@ public sealed class PlayersView
         bool throwInSp = b.SetPiece == SetPieceKind.Throw;
         float ballX = b.BallX, ballY = b.BallY, ballZ = b.BallZ, ballVX = b.BallVX, ballVZ = b.BallVZ;
         float mt = (float)b.Time;
+        _handBallId = -1;
 
         for (int id = 0; id < N; id++)
         {
@@ -430,7 +431,7 @@ public sealed class PlayersView
         for (int k = 0; k < BodyMeshes.PartCount; k++) _mm[k].Buffer = _buf[k];
         if (_ball == null) return;
 
-        _ball.Position = new Vector3(Mathf.Lerp(a.BallX, b.BallX, alpha), Mathf.Lerp(a.BallY, b.BallY, alpha), Mathf.Lerp(a.BallZ, b.BallZ, alpha));
+        _ball.Position = ShownBall(new Vector3(Mathf.Lerp(a.BallX, b.BallX, alpha), Mathf.Lerp(a.BallY, b.BallY, alpha), Mathf.Lerp(a.BallZ, b.BallZ, alpha)), dt);
 
         // Your player: the ring (it pulses on a switch) and the arrow over his head.
         int c = b.Controlled;
@@ -1010,24 +1011,29 @@ public sealed class PlayersView
             }
             case ActionKind.Dive:
             {
-                // The same pose the physics uses for the hands (KeeperPose), so saves happen where you see them.
-                float leftZ = -MathF.Cos(facing);
-                float side = MathF.Sign(b.ActionDirZ[id] * leftZ);
+                // The same pose the physics uses for the hands (KeeperPose), so saves happen where
+                // you see them, on the same clock: spring off the near foot, fly at full stretch,
+                // land on the side (a ball he's caught hugged in as he comes down), up via a knee.
+                float t = actionT, flyT = b.DiveFly[id];
+                float dirX = b.ActionDirX[id], dirZ = b.ActionDirZ[id];
+                float side = MathF.Sign(dirX * MathF.Sin(facing) - dirZ * MathF.Cos(facing));
                 if (side == 0) side = 1;
-                float reachOut = Smooth(0.015f, 0.19f, pr);
-                float land = Smooth(0.42f, 0.56f, pr);
-                float getUp = Smooth(0.74f, 0.97f, pr);
+                float reachOut = Smooth(0.02f, (float)KeeperPose.ReachTime(flyT), t);
+                float land = Smooth(flyT - 0.04f, flyT + 0.18f, t);
+                float getUp = Smooth(flyT + 0.5f, flyT + 0.85f, t);
                 float tRoll = b.DiveRoll[id], tLift = b.DiveLift[id];
                 roll = -side * Lerp(Lerp(tRoll * reachOut, MathF.Max(tRoll, 1.5f), land), 0, getUp);
                 lift = tLift * reachOut * (1 - land);
                 leanF = 0;
                 leanS = 0;
-                float dip = 1 - Smooth(0, 0.07f, pr);
-                float fly = Smooth(0.02f, 0.17f, pr) * (1 - Smooth(0.42f, 0.56f, pr));
-                float lie = Smooth(0.42f, 0.56f, pr) * (1 - Smooth(0.74f, 0.86f, pr));
-                float rise = Smooth(0.72f, 0.86f, pr) * (1 - Smooth(0.9f, 1, pr));
-                float reach = Smooth(0.015f, 0.19f, pr) * (1 - Smooth(0.74f, 0.9f, pr));
-                hipY = hip0 - dip * 0.14f - rise * 0.38f;
+                float dip = 1 - Smooth(0, 0.1f, t);
+                float fly = Smooth(0.03f, (float)KeeperPose.ReachTime(flyT) - 0.03f, t) * (1 - land);
+                float lie = land * (1 - Smooth(flyT + 0.5f, flyT + 0.65f, t));
+                float rise = Smooth(flyT + 0.45f, flyT + 0.65f, t) * (1 - Smooth(flyT + 0.75f, flyT + 0.95f, t));
+                float reach = reachOut * (1 - Smooth(flyT + 0.45f, flyT + 0.65f, t));
+                // Low (a smother, a ball skidding in at the post): flat along the grass.
+                float flat = Smooth(1.25f, 1.5f, tRoll);
+                hipY = hip0 - dip * (0.14f + 0.08f * flat) - rise * 0.38f;
                 bool nearL = side > 0;
                 float curl = lie;
                 float pushHip = 0.1f * fly + 0.5f * curl, pushKnee = Lerp(0.9f * dip + 0.15f, 0.08f, fly) + 0.8f * curl;
@@ -1043,51 +1049,80 @@ public sealed class PlayersView
                     hipR = pushHip + kneelHip; kneeR = pushKnee + kneelKnee;
                     hipL = trailHip + kneelHip * 0.4f; kneeL = trailKnee + kneelKnee * 0.6f;
                 }
-                float gather = Smooth(0.45f, 0.62f, pr) * (1 - Smooth(0.72f, 0.84f, pr));
-                float up = Lerp(0.6f, 3.0f, reach);
-                float downA = isHeld ? 1.25f : 2.2f;
+                // Arms: both out along the dive (the top hand over for a high one); after a catch
+                // they bring the ball in to the chest as he lands, and keep it there.
+                float gather = isHeld ? Smooth(0.12f, 0.3f, t) * (1 - rise) : land * (1 - Smooth(flyT + 0.45f, flyT + 0.62f, t)) * 0.6f;
+                float up = Lerp(0.6f, 3.0f - 0.35f * flat, reach);
+                float downA = isHeld ? 1.1f : 2.2f;
                 float nearArm = Lerp(Lerp(Lerp(nearL ? armL : armR, up - 0.15f, MathF.Max(reach, 0.2f)), downA, gather), 0.3f, rise);
                 float farArm = Lerp(Lerp(Lerp(nearL ? armR : armL, up + 0.08f, MathF.Max(reach, 0.2f)), downA, gather), 0.8f, rise);
-                float nearOut = Lerp(0.05f, 0.6f, rise), farOut = Lerp(0.1f, 0.25f, rise);
-                float elb = Lerp(Lerp(Lerp(0.6f, 0.18f, reach), isHeld ? 1.5f : 0.5f, gather), 0.25f, rise);
+                float nearOut = Lerp(Lerp(0.05f, 0.6f, rise), 0.2f, gather * (isHeld ? 1 : 0)), farOut = Lerp(0.1f, 0.25f, rise);
+                float elb = Lerp(Lerp(Lerp(0.6f, 0.18f, reach), isHeld ? 1.6f : 0.5f, gather), 0.25f, rise);
                 if (nearL) { armL = nearArm; armR = farArm; armOutL = nearOut; armOutR = farOut; }
                 else { armR = nearArm; armL = farArm; armOutR = nearOut; armOutL = farOut; }
                 elbowL = elbowR = elb;
                 sideExtra += -side * 0.18f * fly;
-                flexExtra += 0.35f * lie + 0.45f * rise;
+                flexExtra += 0.35f * lie + 0.45f * rise + (isHeld ? 0.25f * gather : 0);
                 headLook = false;
                 headPitch = -0.15f * fly + 0.2f * lie;
                 break;
             }
             case ActionKind.Catch:
             {
-                // Hands meet the ball at its height, then gather it into the chest.
-                float yH = Clamp(b.CatchY[id], 0.1f, 2.4f);
-                float meet = 1 - Smooth(0.25f, 0.6f, pr);
-                float reachSwing = yH > 1.6f ? 2.5f : yH > 0.9f ? 1.5f : 0.75f;
-                armL = armR = Lerp(1.0f, reachSwing, meet);
-                elbowL = elbowR = Lerp(1.35f, 0.4f, meet);
-                armOutL = armOutR = Lerp(0, 0.16f, meet);
-                float hk = Smooth(1.6f, 2.0f, yH) * MathF.Sin(MathF.Min(1, pr * 1.6f) * PI);
-                hipL += 0.9f * hk;
-                kneeL += 1.4f * hk;
-                float kneel = Smooth(0.5f, 0.3f, yH) * Smooth(0, 0.2f, pr) * (1 - Smooth(0.75f, 1, pr));
-                float low = 1 - Smooth(0.3f, 0.8f, yH);
-                kneeL += 0.7f * low + 0.25f;
-                kneeR += 0.7f * low + 0.25f;
-                hipL += 0.35f * low;
-                hipR += 0.35f * low;
-                hipY -= 0.25f * low + 0.04f;
-                flexExtra += 0.45f * low + 0.18f * (1 - meet);
-                if (yH > 1.8f) lift = 0.18f * MathF.Sin(MathF.Min(1, pr * 1.6f) * PI);
+                // The hands take it where it met them (HandsOnBall) and bring it in to the chest;
+                // the body goes to the ball: up off one leg for a high one, curled round it at the
+                // chest, down behind it for a low one (one knee to the grass when it's wide or skidding).
+                float yH = Clamp(b.CatchY[id], 0.1f, 2.7f);
+                float latX = -b.CatchL[id];
+                float gather = Smooth(0.2f, 0.8f, pr);
+                float settle = 1 - Smooth(0.75f, 1, pr);
+                float high = Smooth(1.65f, 2.05f, yH);
+                float bump = MathF.Sin(MathF.Min(1, pr * 1.7f) * PI);
+                lift = Clamp((yH - 1.85f) * 0.8f, 0, 0.42f) * bump;
+                hipL += 0.95f * high * bump;
+                kneeL += 1.5f * high * bump;
+                flexExtra -= 0.14f * high * (1 - gather);
+                float mid = Smooth(0.7f, 1.0f, yH) * (1 - high);
+                flexExtra += 0.2f * mid * gather + 0.12f * gather;
+                kneeL += 0.22f * mid;
+                kneeR += 0.22f * mid;
+                hipY -= 0.04f * mid;
+                float low = 1 - Smooth(0.45f, 0.9f, yH);
+                float kneel = low * Smooth(0.25f, 0.6f, MathF.Abs(latX) + (yH < 0.3f ? 0.4f : 0)) * Smooth(0, 0.12f, pr) * settle;
+                float stoop = low * (1 - kneel) * settle;
+                kneeL += 0.8f * stoop;
+                kneeR += 0.8f * stoop;
+                hipL += 0.5f * stoop;
+                hipR += 0.5f * stoop;
+                hipY -= 0.22f * stoop;
+                flexExtra += 0.6f * stoop * (1 - 0.5f * gather);
                 hipR = Lerp(hipR, 0.12f, kneel);
                 kneeR = Lerp(kneeR, 1.6f, kneel);
                 legYawR = Lerp(legYawR, -0.55f, kneel);
                 hipL = Lerp(hipL, 0.95f, kneel);
                 kneeL = Lerp(kneeL, 1.35f, kneel);
                 hipY = Lerp(hipY, 0.5f, kneel);
+                flexExtra += 0.4f * kneel * (1 - 0.5f * gather);
+                sideExtra += -Clamp(latX, -0.6f, 0.6f) * 0.35f * (1 - gather);
                 headLook = false;
-                headPitch = 0.2f;
+                headPitch = 0.15f + 0.3f * low * (1 - gather) - 0.3f * high * (1 - gather);
+                break;
+            }
+            case ActionKind.Punch:
+            {
+                // Up off the ground, both fists driven through the ball.
+                float k = Smooth(0, 0.1f, pr) * (1 - Smooth(0.45f, 0.9f, pr));
+                float jab = Smooth(0.02f, 0.14f, pr);
+                lift = 0.3f * MathF.Sin(MathF.Min(1, pr * 1.8f) * PI);
+                armL = Lerp(armL, 2.7f, k);
+                armR = Lerp(armR, 2.8f, k);
+                elbowL = elbowR = Lerp(elbowL, Lerp(1.7f, 0.12f, jab), k);
+                armOutL = armOutR = Lerp(armOutL, 0.06f, k);
+                hipL += 0.85f * k;
+                kneeL += 1.3f * k;
+                flexExtra -= 0.18f * k;
+                headLook = false;
+                headPitch = -0.4f * k;
                 break;
             }
             case ActionKind.Header:
@@ -1113,21 +1148,47 @@ public sealed class PlayersView
                     elbowL = elbowR = Lerp(Lerp(0.5f, 1.5f, back), 0.15f, over);
                     flexExtra += Lerp(-0.25f, 0.25f, Smooth(0.3f, 0.7f, pr));
                 }
+                else if (b.KickLofted[id])
+                {
+                    // Keeper's overarm throw: the ball taken back behind the head, the other arm
+                    // pointing where it's going, a step into it and the arm whipped over the top.
+                    float tc = MathF.Max(0.05f, b.KickContact[id]);
+                    float u = Clamp(actionT / tc, 0, 1), v = Clamp((actionT - tc) / MathF.Max(0.05f, actionDur - tc), 0, 1);
+                    float back = Smooth(0, 0.5f, u), over = Smooth(0.55f, 1, u);
+                    armR = Lerp(Lerp(0.6f, -1.5f, back), -3.75f, over) - 1.3f * Smooth(0, 0.7f, v);
+                    elbowR = Lerp(Lerp(1.2f, 1.5f, back), 0.15f, over);
+                    armOutR = 0.3f - 0.15f * over;
+                    armL = Lerp(Lerp(0.5f, 1.45f, back), -0.2f, over);
+                    elbowL = 0.25f;
+                    armOutL = 0.25f;
+                    twist = Lerp(-0.5f * back, 0.45f, over);
+                    pelvisYaw = Lerp(-0.25f * back, 0.25f, over);
+                    hipL = 0.55f * back * (1 - 0.3f * over);
+                    kneeL = 0.3f + 0.15f * over;
+                    hipR = -0.2f * over;
+                    flexExtra += Lerp(-0.18f * back, 0.28f, over) * (1 - Smooth(0.5f, 1, v));
+                    headLook = false;
+                }
                 else
                 {
-                    // Keeper's one-arm throw: wind back, whip over the top, step into it.
-                    float wind = 1 - Smooth(0.15f, 0.5f, pr);
-                    float whip = Smooth(0.35f, 0.65f, pr);
-                    armR = Lerp(Lerp(0, -1.3f, Smooth(0, 0.3f, pr)), -5.0f, whip);
-                    elbowR = Lerp(0.9f, 0.15f, whip);
-                    armOutR = 0.25f;
-                    armL = 1.2f * wind - 0.3f;
-                    armOutL = 0.2f;
-                    twist = Lerp(-0.45f, 0.45f, whip);
-                    pelvisYaw = Lerp(-0.2f, 0.25f, whip);
-                    hipL = 0.45f * Smooth(0.2f, 0.5f, pr);
-                    kneeL = 0.35f;
-                    flexExtra += Lerp(-0.15f, 0.25f, whip);
+                    // Keeper's roll: down low on a bent front knee, the ball bowled along the grass.
+                    float tc = MathF.Max(0.05f, b.KickContact[id]);
+                    float u = Clamp(actionT / tc, 0, 1), v = Clamp((actionT - tc) / MathF.Max(0.05f, actionDur - tc), 0, 1);
+                    float crouch = Smooth(0, 0.5f, u) * (1 - Smooth(0.3f, 1, v));
+                    hipY -= 0.26f * crouch;
+                    hipL += 0.95f * crouch;
+                    kneeL += 1.05f * crouch;
+                    hipR += 0.15f * crouch;
+                    kneeR += 1.25f * crouch;
+                    flexExtra += 0.6f * crouch;
+                    armR = u < 1 ? Lerp(Lerp(0.3f, -0.95f, Smooth(0, 0.55f, u)), 0.45f, Smooth(0.55f, 1, u)) : Lerp(0.45f, 1.3f, Smooth(0, 0.6f, v));
+                    elbowR = 0.12f;
+                    armOutR = 0.12f;
+                    armL = Lerp(0.4f, 0.9f, crouch);
+                    armOutL = 0.4f;
+                    elbowL = 0.35f;
+                    headLook = false;
+                    headPitch = 0.25f * crouch;
                 }
                 break;
             }
@@ -1186,9 +1247,11 @@ public sealed class PlayersView
             }
             else
             {
-                armL = armR = 0.45f;
-                elbowL = elbowR = 1.25f;
-                armOutL = armOutR = 0.12f;
+                // Tucked in at the chest (the hands are put on it in HandsOnBall), upright.
+                armL = armR = 0.5f;
+                elbowL = elbowR = 1.5f;
+                armOutL = armOutR = 0.1f;
+                flexExtra += 0.06f;
             }
         }
 
@@ -1612,22 +1675,21 @@ public sealed class PlayersView
 
         // Arms (left = +x local; swing + = forward). The shoulder moves with the arm.
         float armLen = (float)bs.ArmLen, armW = (float)bs.Arm, shoulder = (float)bs.Shoulder;
+        float gl = gk ? 1.25f : 1;
+        float wxL = wristFree ? wristL : 0.1f, wxR = wristFree ? wristR : 0.1f;
+        // Hands on the ball: the arms are bent onto it wherever the pose holds it.
+        HandsOnBall(b, id, x, z, facing, C, action, pr, isHeld, throwInSp, shoulder, torsoL, armLen, gl, wxL, wxR,
+            ref armL, ref armR, ref armOutL, ref armOutR, ref elbowL, ref elbowR, ref armRotL, ref armRotR);
         for (int sd = 0; sd < 2; sd++)
         {
             float sideSign = sd == 0 ? 1 : -1;
-            float swing = sd == 0 ? armL : armR;
-            float outA = sd == 0 ? armOutL : armOutR;
-            float elbow = sd == 0 ? elbowL : elbowR;
-            float raise = MathF.Acos(Clamp(MathF.Cos(swing) * MathF.Cos(outA), -1, 1));
-            float elev = Smooth(1.1f, 2.9f, raise);
-            float protract = 0.028f * MathF.Sin(Clamp(swing, -1.5f, 1.5f)) * (1 - 0.5f * elev);
-            var j1 = Chain(C, sideSign * (0.198f * shoulder - 0.014f * elev), 0.5f * torsoL + 0.045f * elev, protract, -swing, 0, sideSign * outA);
+            ArmChain(C, sideSign, shoulder, torsoL, armLen, sd == 0 ? armL : armR, sd == 0 ? armOutL : armOutR,
+                sd == 0 ? elbowL : elbowR, sd == 0 ? armRotL : armRotR, out var j1, out var j2);
             Put(Part.UpperArm, id * 2 + sd, j1, armW, armLen, armW);
-            var j2 = Chain(j1, 0, -0.29f * armLen, 0, -elbow, sideSign * (sd == 0 ? armRotL : armRotR), 0);
             Put(Part.Forearm, id * 2 + sd, j2, 0.5f + 0.5f * armW, armLen, 0.5f + 0.5f * armW);
             // Hand at the wrist, relaxed, the palm toward the body; keeper gloves are bigger.
-            var j3 = Chain(j2, 0, -0.245f * armLen, 0, wristFree ? (sd == 0 ? wristL : wristR) : 0.1f, 0, sideSign * -0.08f);
-            float g = gk ? 1.25f : 1;
+            var j3 = Chain(j2, 0, -0.245f * armLen, 0, sd == 0 ? wxL : wxR, 0, sideSign * -0.08f);
+            float g = gl;
             Put(Part.Hand, id * 2 + sd, j3, g, g, g);
             if (sd == 1 && _flags != null)
             {
@@ -1772,6 +1834,6 @@ public sealed class PlayersView
     {
         ActionKind.Kick => 4, ActionKind.Tackle => 6, ActionKind.Slide => 5, ActionKind.Dive => 4, ActionKind.Stumble => 7,
         ActionKind.Fall => 4, ActionKind.Header => 6, ActionKind.Throw => 5, ActionKind.Catch => 5, ActionKind.Celebrate => 9,
-        ActionKind.Stretch => 7, _ => 4,
+        ActionKind.Stretch => 7, ActionKind.Punch => 5, _ => 4,
     };
 }
