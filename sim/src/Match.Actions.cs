@@ -190,7 +190,14 @@ public sealed partial class Match
     public (double contact, double follow) KickTiming(KickPlan plan)
     {
         bool dead = SetPiece != null && (SetPiece.Kind == SetPieceKind.Penalty || SetPiece.Direct) && plan.Type == KickType.Shot;
-        if (HeldBy != null && HeldBy.Plan == plan && !(plan.Type == KickType.Lob || plan.Type == KickType.Clear)) return (0.15, 0.12);
+        if (HeldBy != null && HeldBy.Plan == plan)
+        {
+            // Throw-ins keep their quick timing. The keeper: a punt drops the ball onto the foot;
+            // a roll bends down and bowls it; an overarm throw winds back behind the head.
+            if (SetPiece?.Kind == SetPieceKind.Throw) return (0.15, 0.12);
+            if (plan.Type == KickType.Lob || plan.Type == KickType.Clear) return (0.4, 0.42);
+            return plan.Lofted == false ? (0.38, 0.42) : (0.34, 0.4);
+        }
         switch (plan.Type)
         {
             case KickType.Shot:
@@ -271,7 +278,7 @@ public sealed partial class Match
                 p.KickLeg = SetPiece != null || Math.Abs(side) < 0.32 || ballSide == p.Foot ? p.Foot : ballSide;
                 p.KickWeak = p.KickLeg != p.Foot;
                 p.StartAction(kind, dur, plan.DirX, plan.DirZ);
-                p.KickContact = kind == ActionKind.Throw ? dur * 0.55 : timing.contact;
+                p.KickContact = kind == ActionKind.Throw && p.ThrowIn ? dur * 0.55 : timing.contact;
                 p.KickType = plan.Type;
                 p.KickPower = plan.Power;
                 p.KickLofted = plan.Type == KickType.Lob || plan.Type == KickType.Cross || plan.Type == KickType.Clear || plan.Lofted == true;

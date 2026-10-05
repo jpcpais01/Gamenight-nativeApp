@@ -32,14 +32,23 @@ public static class KeeperPose
         return (roll, lift, reach);
     }
 
+    /// <summary>
+    /// The dive's timeline, in seconds from take-off (`fly` = when he comes down): push off and
+    /// stretch out (by the time the ball gets there: 0.12 to 0.28 s), fly, land on his side,
+    /// lie a moment, then get back up.
+    /// </summary>
+    public static double ReachTime(double fly) => M.Clamp(fly - 0.15, 0.12, 0.28);
+
+    public static void Timeline(double t, double fly, out double reachOut, out double land, out double getUp)
+    {
+        reachOut = M.Smoothstep(0.02, ReachTime(fly), t);
+        land = M.Smoothstep(fly - 0.04, fly + 0.18, t);
+        getUp = M.Smoothstep(fly + 0.5, fly + 0.85, t);
+    }
+
     public static DivePose Pose(Player k, double targetRoll, double targetLift, DivePose output)
     {
-        double pr = k.ActionDur > 0 ? M.Clamp(k.ActionT / k.ActionDur, 0, 1) : 0;
-        // Timeline (1.5 s): push off and stretch (to ~0.28 s), fly, land on the side, lie a
-        // moment, then get back up.
-        double reachOut = M.Smoothstep(0.015, 0.19, pr);
-        double land = M.Smoothstep(0.42, 0.56, pr);
-        double getUp = M.Smoothstep(0.74, 0.97, pr);
+        Timeline(k.ActionT, k.DiveFly, out double reachOut, out double land, out double getUp);
         output.Roll = M.Lerp(M.Lerp(targetRoll * reachOut, System.Math.Max(targetRoll, 1.5), land), 0, getUp);
         output.Lift = targetLift * reachOut * (1 - land);
         return output;

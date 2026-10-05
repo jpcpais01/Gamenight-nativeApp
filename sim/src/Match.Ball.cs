@@ -297,7 +297,7 @@ public sealed partial class Match
                 // Lead the receiver: iterate target with predicted travel time.
                 double tx = receiver.Pos.X;
                 double tz = receiver.Pos.Z;
-                bool lofted = plan.Type == KickType.Lob || plan.Type == KickType.Cross || fromHands || (setPieceKind == SetPieceKind.GoalKick && plan.Lofted != false);
+                bool lofted = plan.Type == KickType.Lob || plan.Type == KickType.Cross || (fromHands && plan.Lofted != false) || (setPieceKind == SetPieceKind.GoalKick && plan.Lofted != false);
                 // Pass weight: AI plays a normal weight; a human tap is soft, a full hold is firm.
                 double weightK = 0.8 + 0.4 * (plan.Aimed == null ? 0.5 : plan.Power);
                 if (plan.Type == KickType.Cross || setPieceKind == SetPieceKind.Corner)
@@ -427,6 +427,8 @@ public sealed partial class Match
             if (p.TouchCooldown > 0) continue;
             var ac = p.Action;
             if (ac == ActionKind.Stumble || ac == ActionKind.Fall || ac == ActionKind.Slide || ac == ActionKind.Dive || ac == ActionKind.Kick || ac == ActionKind.Throw) continue;
+            // A keeper who may handle it waits for it to reach his hands (KeeperContact).
+            if (p.Role == Role.GK && h < 2.6 && p.Plan == null && AI.CanHandle(p) && !(LastTouch == p && Time - LastKickTime < 0.6)) continue;
             double d = BallDist(p);
             double headMax = p.HeadReach;
             bool headZone = h > PlayerK.ControlHeight && h < headMax;
@@ -944,8 +946,13 @@ public sealed partial class Match
     {
         if (k.Role == Role.GK && k.Action == ActionKind.None && Phase == Phase.Play)
         {
+            double dx = Ball.Pos.X - k.Pos.X, dz = Ball.Pos.Z - k.Pos.Z;
+            double fx = JsMath.Cos(k.Facing), fz = JsMath.Sin(k.Facing);
             k.CatchY = Ball.Pos.Y;
-            k.StartAction(ActionKind.Catch, 0.45, 0, 0);
+            k.CatchF = dx * fx + dz * fz;
+            k.CatchL = -dx * fz + dz * fx;
+            // A ball he's taken at full stretch above his head or down at his feet takes longer to gather.
+            k.StartAction(ActionKind.Catch, k.CatchY > 1.9 || k.CatchY < 0.5 ? 0.6 : 0.45, 0, 0);
         }
         HeldBy = k;
         Owner = null;

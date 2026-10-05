@@ -105,7 +105,8 @@ public sealed partial class Match
             double hz = JsMath.Sin(h.Facing);
             bool throwIn = SetPiece?.Kind == SetPieceKind.Throw;
             ball.PrevPos.Copy(ball.Pos);
-            ball.Pos.Set(h.Pos.X + hx * 0.32, throwIn ? 2.05 : 1.15, h.Pos.Z + hz * 0.32);
+            HeldBallSpot(h, throwIn, out double fwd, out double hy);
+            ball.Pos.Set(h.Pos.X + hx * fwd, hy, h.Pos.Z + hz * fwd);
             ball.Vel.Copy(h.Vel);
             ball.Spin.Set(0, 0, 0);
             ball.OnGround = false;
@@ -134,6 +135,44 @@ public sealed partial class Match
         if (HeldBy != null) PossTeam = HeldBy.Team;
 
         UpdateExcitement();
+    }
+
+    /// <summary>
+    /// Where a held ball is, ahead of the holder (m) and up: tucked in at the chest; on a throw
+    /// it follows the arm (overarm: back behind the head and over; a roll: down to the grass);
+    /// on a punt it's dropped onto the foot. The renderer puts it in his hands; this is where
+    /// it leaves them.
+    /// </summary>
+    static void HeldBallSpot(Player h, bool throwIn, out double fwd, out double y)
+    {
+        double s = h.Look.Height;
+        fwd = 0.3 * s;
+        y = 1.08 * s;
+        if (throwIn)
+        {
+            fwd = 0.32;
+            y = 2.05;
+            return;
+        }
+        double u = M.Clamp(h.ActionT / Math.Max(0.05, h.KickContact), 0, 1);
+        if (h.Action == ActionKind.Throw && h.KickLofted)
+        {
+            double back = M.Smoothstep(0, 0.45, u), over = M.Smoothstep(0.55, 1, u);
+            fwd = M.Lerp(M.Lerp(fwd, -0.3, back), 0.45, over) * s;
+            y = M.Lerp(M.Lerp(y, 1.75, back), 2.05, over) * s;
+        }
+        else if (h.Action == ActionKind.Throw)
+        {
+            double down = M.Smoothstep(0, 0.6, u), through = M.Smoothstep(0.5, 1, u);
+            fwd = M.Lerp(M.Lerp(fwd, -0.15, down), 0.75, through) * s;
+            y = M.Lerp(M.Lerp(y, 0.55, down), 0.16, through);
+        }
+        else if (h.Action == ActionKind.Kick)
+        {
+            double drop = M.Smoothstep(0.55, 1, u);
+            fwd = M.Lerp(0.42, 0.55, drop) * s;
+            y = M.Lerp(0.98 * s, 0.42, drop * drop);
+        }
     }
 
     void ConsumeBallEvents()
@@ -280,6 +319,13 @@ public sealed partial class Match
                     if (spk.HasValue && spk != SetPieceKind.FreeKick && spk != SetPieceKind.Penalty && plan.Type == KickType.Shot)
                         plan.Type = spk == SetPieceKind.Corner ? KickType.Cross : KickType.Lob;
                     if (HeldBy == c && plan.Type == KickType.Shot) plan.Type = KickType.Clear;
+                    // Out of the keeper's hands: Pass rolls it, Pass slid up throws it overarm.
+                    if (HeldBy == c && SetPiece == null && plan.Type == KickType.Pass) plan.Lofted = false;
+                    else if (HeldBy == c && SetPiece == null && plan.Type == KickType.Lob && ev.Btn == Btn.A)
+                    {
+                        plan.Type = KickType.Pass;
+                        plan.Lofted = true;
+                    }
                     if (AimingDelivery)
                     {
                         // Corner / goal kick: Pass drives (whips) it onto the ring, Shoot floats it,

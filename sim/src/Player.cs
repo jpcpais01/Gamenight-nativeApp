@@ -4,7 +4,7 @@ namespace GameNight.Sim;
 
 public enum Role { GK, DEF, MID, FWD }
 
-public enum ActionKind { None, Kick, Tackle, Slide, Dive, Stumble, Fall, Header, Throw, Catch, Celebrate, Stretch }
+public enum ActionKind { None, Kick, Tackle, Slide, Dive, Stumble, Fall, Header, Throw, Catch, Celebrate, Stretch, Punch }
 
 public enum KickType { Pass, Lob, Through, Shot, Clear, Cross }
 
@@ -130,8 +130,11 @@ public sealed class Player
     public int Foot = 1;
     /// <summary>Throw-in (two hands) rather than a keeper's one-arm throw.</summary>
     public bool ThrowIn;
-    /// <summary>Height the keeper caught the ball at (for the catch animation).</summary>
-    public double CatchY = 1;
+    /// <summary>Where the keeper's hands met the ball, for the catch animation: its height, and how
+    /// far in front of him and to his left (m).</summary>
+    public double CatchY = 1, CatchF = 0.4, CatchL;
+    /// <summary>A keeper's dive: seconds in the air before he comes down on his side.</summary>
+    public double DiveFly = 0.6;
     /// <summary>Smoothed forward acceleration (m/s²), used for body inertia.</summary>
     public double AccelFwd;
     /// <summary>Seconds before this player can be knocked off balance again.</summary>
@@ -269,7 +272,7 @@ public sealed class Player
                 tx = KickVX * 0.8 + LungeX;
                 tz = KickVZ * 0.8 + LungeZ;
             }
-            else if (a == ActionKind.Header || a == ActionKind.Throw)
+            else if (a == ActionKind.Header || a == ActionKind.Throw || a == ActionKind.Punch)
             {
                 double keep = a == ActionKind.Throw ? 0.4 : 0.8;
                 tx = Vel.X * keep;
@@ -295,8 +298,8 @@ public sealed class Player
             }
             else if (a == ActionKind.Dive)
             {
-                double p = ActionT / ActionDur;
-                if (p > 0.55) Vel.Scale(Math.Max(0, 1 - dt * 10));
+                // Flying until he lands (planned with the dive), then the grass stops him.
+                if (ActionT > DiveFly) Vel.Scale(Math.Max(0, 1 - dt * 9));
                 tx = Vel.X;
                 tz = Vel.Z;
             }
