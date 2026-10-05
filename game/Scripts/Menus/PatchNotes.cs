@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.53", "New cards in the FUT style: a shaped card per tier, rating and position over flag and club crest, a name plate and six stats, with bronze lines, silver streaks, gold lattice, neon Legends and rayed Icons. New Ultimate pack and five special packs: Strikeforce, Iron Wall, Safe Hands, One Nation and Signature."),
         ("0.52", "Stadium builder: SURPRISE ME stays on screen when you tap to hide the menus, so you can keep rolling new stadiums with the view clear."),
         ("0.51", "Every stand set now has a finished outside: a base storey in its own material with a band in your club colour, lit gates with canopies, and its own ramp drums, steel stairs or stair towers. Glass facades glow evenly at night instead of looking patchy."),
         ("0.50", "Playstyle icons: each of the 20 playstyles has its own little picture (a shield for Tank, a bolt for Rapid, an eye for Maestro, a cat for Cat...) in its badge on the card, on your squad's pitch and in the squad list."),
