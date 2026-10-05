@@ -339,7 +339,16 @@ public sealed partial class RosterList : PxCanvas
         string name = c.Name;
         Px.Text(this, Px.Big, new Vector2(x + 20, rr.Position.Y + 21), Px.Fit(Px.Big, name, 22, rr.Size.X - 170), 22, Px.Ink);
         float nx = x + 26 + Mathf.Min(Px.Width(Px.Big, name, 22), rr.Size.X - 170);
-        if (starter) Px.Text(this, Px.Small, new Vector2(nx, rr.Position.Y + 19), "XI", 8, Px.Cyan);
+        if (starter)
+        {
+            Px.Text(this, Px.Small, new Vector2(nx, rr.Position.Y + 19), "XI", 8, Px.Cyan);
+            nx += 20;
+        }
+        foreach (var ps in Playstyles.Of(c))
+        {
+            Art.Playstyle(this, new Vector2(nx + 8, rr.Position.Y + 14), 8, ps);
+            nx += 20;
+        }
         if (slotPos is Pos p2)
         {
             double fit = Cards.FitFactor(c.Position, p2);
