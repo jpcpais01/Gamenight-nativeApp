@@ -44,7 +44,7 @@ public sealed class ThroughPlan
 }
 
 /// <summary>Team brains. Coordinates in comments are "team frame": +x is the goal the team attacks.</summary>
-public sealed class AI
+public sealed partial class AI
 {
     const int Samples = 36;
     const double SampleDT = 0.1;
@@ -926,6 +926,8 @@ public sealed class AI
             patience = 0.35 + m.Rng.Next() * 0.9;
         }
 
+        TeamPlay();
+
         foreach (var p in m.Players)
         {
             bool isTaker = m.SetPiece != null && m.SetPiece.Taker == p;
@@ -1066,6 +1068,12 @@ public sealed class AI
         // Second defender: cover goal-side of the ball if close.
         if (m.Owner != null && m.Owner.Team != p.Team && IsSecondPresser(p))
         {
+            // Springing the trap: he goes in too, from the other side.
+            if (trapUntil[p.Team] > m.Time)
+            {
+                Press(p, m.Owner);
+                return;
+            }
             double gx = -m.Teams[p.Team].Dir * Pitch.HalfL;
             double bx = m.Ball.Pos.X;
             double bz = m.Ball.Pos.Z;
@@ -1118,7 +1126,7 @@ public sealed class AI
                 double bdz = m.Ball.Pos.Z - a.Pos.Z;
                 double bd = Math.Max(0.1, JsMath.Hypot(bdx, bdz));
                 double danger = 1 - M.Clamp((a.Pos.X * -dir + Pitch.HalfL) / Pitch.HalfL, 0, 1);
-                double gap = 1.4 + (1 - danger) * 2.2;
+                double gap = (1.4 + (1 - danger) * 2.2) * (trapUntil[p.Team] > m.Time ? 0.55 : 1);
                 double mx = a.Pos.X + (gdx / gd) * gap + (bdx / bd) * 0.9;
                 double mz = a.Pos.Z + (gdz / gd) * gap + (bdz / bd) * 0.9;
                 // Defenders step out of the line only so far; beyond that they pass him on.
@@ -1381,6 +1389,14 @@ public sealed class AI
             // Don't defend higher than the ball.
             if (p.Role == Role.DEF) x = Math.Min(x, bx - 4);
         }
+        // The mood of the side (chasing it late, or seeing it out) and the squeeze.
+        double shift = ShapeShift(p, attacking);
+        if (shift != 0)
+        {
+            x += shift;
+            if (attacking) x = Math.Min(x, offside[p.Team] - 0.8);
+            else if (p.Role == Role.DEF) x = Math.Min(x, bx - 4 + Math.Max(0, shift) * 0.4);
+        }
         x = M.Clamp(x, -Pitch.HalfL + 4, Pitch.HalfL - 6);
         z = M.Clamp(z, -Pitch.HalfW + 1.5, Pitch.HalfW - 1.5);
         // Small personal offset keeps lines from looking robotic.
@@ -1483,8 +1499,10 @@ public sealed class AI
                 Dribble(p, true);
                 return;
             }
-            // Take a touch or two before deciding, unless someone is right on us.
-            if (held < patience && pressure > 2.2 && distGoal > 20)
+            Mood(p.Team, out double chase, out double protect);
+            bool counter = Countering(p.Team);
+            // Take a touch or two before deciding, unless someone is right on us (or it's a break: go).
+            if (held < patience * (1 + protect) && pressure > 2.2 && distGoal > 20 && !counter)
             {
                 ChooseDribble(p, pressure);
                 Dribble(p, false);
@@ -1497,6 +1515,8 @@ public sealed class AI
             if (distGoal < 16) shootP = 0.8;
             else if (distGoal < 25 && clear > 0.4) shootP = 0.5;
             else if (distGoal < 30 && clear > 1.5 && p.Attrs.Shooting > 0.75) shootP = 0.15;
+            // Chasing it late: have a go from further out.
+            if (chase > 0 && distGoal < 32 && clear > 0.3) shootP = Math.Max(shootP, chase * (distGoal < 25 ? 0.45 : 0.2));
             double angle = Math.Abs(JsMath.Atan2(b.Z, Math.Abs(gx - b.X)));
             if (angle > 1.1) shootP *= 0.2;
             if (m.Rng.Next() < shootP)
@@ -1550,9 +1570,12 @@ public sealed class AI
                 throughLook[p.Id] = m.Time + 0.45;
                 tp = PlanThrough(p, false, null);
             }
-            if (tp != null && tp.Score + ThroughBias > bestScore)
+            // On the break, and for the man the move was made for, the ball in behind comes first;
+            // seeing a game out, it's kept safe.
+            double tBias = ThroughBias + (counter ? 0.3 : 0) - protect * 0.3 + (tp != null && IsPlayRunner(tp.Receiver) ? 0.3 : 0);
+            if (tp != null && tp.Score + tBias > bestScore)
             {
-                bestScore = tp.Score + ThroughBias;
+                bestScore = tp.Score + tBias;
                 best = tp.Receiver;
                 bestThrough = true;
             }
@@ -1596,12 +1619,15 @@ public sealed class AI
             }
         }
         if (Math.Abs(b.Z) > Pitch.HalfW - 4) dz -= JsMath.Sign(b.Z) * 0.8;
+        // A team-mate overlapping outside him: cut in, and take his man with him.
+        if (overlapCarrier[p.Team] == p && playUntil[p.Team] > m.Time) dz -= JsMath.Sign(b.Z) * 0.7;
         // Never dribble backwards into our own goal area.
         if (dx * dir < -0.3) dx = -0.3 * dir;
         double n = Math.Max(0.01, JsMath.Hypot(dx, dz));
         dribX[p.Id] = dx / n;
         dribZ[p.Id] = dz / n;
-        dribSprint[p.Id] = pressure > 5 && DribbleValue(p) > 0.45;
+        // Drive into space; on the break, run at them.
+        dribSprint[p.Id] = (pressure > 5 || (Countering(p.Team) && pressure > 2.5)) && DribbleValue(p) > (Countering(p.Team) ? 0.25 : 0.45);
     }
 
     void Dribble(Player p, bool settle)
@@ -1698,7 +1724,16 @@ public sealed class AI
         double progress = ((tx - b.X) * dir) / 25;
         double goalDist = M.Dist2D(tx, tz, Pitch.HalfL * dir, 0);
         double threat = M.Clamp(1 - goalDist / 40, 0, 1);
-        return progress * 0.8 + M.Clamp(lane / 3, 0, 1) * 0.7 + M.Clamp(open / 7, 0, 1) * 0.5 + threat * 0.6 - d / 70;
+        // Switching it: the ball side is crowded and he's free across on the far side.
+        double sw = 0;
+        if (Math.Abs(tz - b.Z) > 22 && open > 7)
+        {
+            int crowd = 0;
+            foreach (var o in m.Teams[1 - p.Team].Players) if (M.Dist2D(o.Pos.X, o.Pos.Z, b.X, b.Z) < 15) crowd++;
+            if (crowd >= 4) sw = 0.35 + (crowd - 4) * 0.1;
+        }
+        if (Countering(p.Team)) progress *= 1.5;
+        return sw + progress * 0.8 + M.Clamp(lane / 3, 0, 1) * 0.7 + M.Clamp(open / 7, 0, 1) * 0.5 + threat * 0.6 - d / 70;
     }
 
     /// <summary>
