@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.38", "A real build-up before kick-off: the teams wait in the tunnel and walk out into a roar, the camera tracking beside the captains; the announcer reads both line-ups name by name, cheered and whistled; then everyone jogs to their marks as the camera rises straight into play."),
         ("0.37", "Teams play like teams: pass and move one-twos, full-backs overlapping while the winger cuts in, strikers coming short as a partner spins in behind, fast counters, first-time lay-offs, pressing traps, the back line squeezing up, and sides chasing or seeing out games late."),
         ("0.36", "Five new stand sets in the builder: Membrane (white fabric peaks on masts), Brutalist (raw concrete and raking frames), Barrio (three steep tiers stacked high), Timber (arched wooden roof grown green) and Lumen (a cushioned skin that glows in your colour at night)."),
         ("0.35", "Slide tackles win the ball far more often: the slide now aims where the ball will be when your boot gets there (near balls straight away, far ones further ahead), both legs sweep it, and a ball run into the slider's body is stopped too."),

@@ -44,6 +44,9 @@ public sealed partial class Letterbox : Control
         _capT = string.IsNullOrEmpty(_title) ? -1 : 0;
     }
 
+    /// <summary>A new subtitle under the caption already up (no slide in again).</summary>
+    public void Subtitle(string sub) => _sub = sub?.ToUpperInvariant() ?? "";
+
     public override void _GuiInput(InputEvent e)
     {
         if (e is InputEventScreenTouch { Pressed: true } || e is InputEventMouseButton { Pressed: true })
