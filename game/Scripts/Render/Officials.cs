@@ -101,7 +101,7 @@ public sealed class Officials
         double a = -1e9, b = -1e9;
         for (int i = 0; i < MatchSnapshot.N; i++)
         {
-            if (!s.Active[i] || s.Team[i] != team) continue;
+            if (!s.Active[i] || s.Team[i] != team || s.Cards[i] == 3) continue;
             double v = s.X[i] * side;
             if (v > a)
             {

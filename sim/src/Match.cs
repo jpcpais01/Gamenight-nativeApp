@@ -59,6 +59,8 @@ public sealed class Foul
     public Player Offender = null!, Victim = null!;
     public double X, Z;
     public bool Yellow, Penalty;
+    /// <summary>Sent off: a straight red, or a second yellow (SecondYellow).</summary>
+    public bool Red, SecondYellow;
     public double Time;
 }
 
@@ -101,7 +103,7 @@ public sealed class MatchEvents
     public double Post, Net, NetX, NetY, NetZ, Bounce, Save, Tackle;
     /// <summary>A foul was given (1) or the referee played advantage (2).</summary>
     public int Foul;
-    /// <summary>A yellow card was shown.</summary>
+    /// <summary>A card was shown: 1 yellow, 2 red.</summary>
     public int Card;
     /// <summary>The linesman's flag went up for offside.</summary>
     public int Offside;
@@ -379,14 +381,27 @@ public sealed partial class Match
     public double BallDist(Player p) => M.Dist2D(p.Pos.X, p.Pos.Z, Ball.Pos.X, Ball.Pos.Z);
 
     /// <summary>The player in shirt slot `index` (0 GK … 9 ST), or the best stand-in when a training
-    /// drill has left him out: an outfielder if there is one.</summary>
+    /// drill has left him out or he's been sent off: the outfielder nearest his place in the shape.</summary>
     public Player ByJob(int team, int index)
     {
         var ps = Teams[team].Players;
         if (index < ps.Count && ps[index].Index == index) return ps[index];
         foreach (var p in ps) if (p.Index == index) return p;
-        foreach (var p in ps) if (p.Role != Role.GK) return p;
-        return ps[0];
+        Player? gone = null;
+        foreach (var p in All) if (p.Team == team && p.Index == index) gone = p;
+        Player best = ps[0];
+        double bd = 1e9;
+        foreach (var p in ps)
+        {
+            if (p.Role == Role.GK) continue;
+            double d = gone == null ? 0 : M.Dist2D(p.BaseX, p.BaseZ, gone.BaseX, gone.BaseZ);
+            if (d < bd)
+            {
+                bd = d;
+                best = p;
+            }
+        }
+        return best;
     }
 
     /// <summary>

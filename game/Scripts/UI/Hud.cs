@@ -57,7 +57,7 @@ public sealed partial class Hud : Control
 
     // Caption.
     string _capTitle = "", _capSub = "";
-    int _capKind; // 0 big moment, 1 small (a call), 2 yellow (a booking)
+    int _capKind; // 0 big moment, 1 small (a call), 2 yellow (a booking), 3 red, 4 second yellow
     double _capAt = -99, _capDur;
 
     // Score card.
@@ -199,6 +199,7 @@ public sealed partial class Hud : Control
         else if (b.Foul == 1 && f != null)
         {
             if (f.Penalty) Caption("PENALTY", _info.Name[f.Victim.Team], 3, 0);
+            else if (f.Red) Booking(f, "");
             else if (f.Yellow) Caption("YELLOW CARD", $"{MatchInfo.Who(f.Offender)} · {_info.Name[f.Offender.Team]}", 2.6, 2);
             else Caption("FOUL", "Free kick · " + _info.Name[f.Victim.Team], 2, 1);
         }
@@ -206,7 +207,10 @@ public sealed partial class Hud : Control
         if (b.Offside != 0 && off != null) Caption("OFFSIDE", "Free kick · " + _info.Name[off.Team], 2, 1);
         // Booked while advantage was played: show the card now.
         if (b.Card != 0 && b.Foul == 2 && f != null)
-            Caption("YELLOW CARD", $"{MatchInfo.Who(f.Offender)} · {_info.Name[f.Offender.Team]} · advantage", 2.6, 2);
+        {
+            if (f.Red) Booking(f, " · advantage");
+            else Caption("YELLOW CARD", $"{MatchInfo.Who(f.Offender)} · {_info.Name[f.Offender.Team]} · advantage", 2.6, 2);
+        }
 
         if (b.Phase != _lastPhase)
         {
@@ -229,6 +233,13 @@ public sealed partial class Hud : Control
             _held = null;
             LayoutCard();
         }
+    }
+
+    /// <summary>A sending-off: the red card (a yellow behind it for a second booking).</summary>
+    void Booking(Foul f, string tail)
+    {
+        string why = f.SecondYellow ? "Second yellow · " : "";
+        Caption("RED CARD", $"{why}{MatchInfo.Who(f.Offender)} · {_info.Name[f.Offender.Team]}{tail}", 3, f.SecondYellow ? 4 : 3);
     }
 
     void Caption(string title, string sub, double seconds, int kind)
@@ -354,17 +365,16 @@ public sealed partial class Hud : Control
         c.DrawSetTransform(centre, 0, new Vector2(scale, scale));
 
         float tw = Style.Width(tf, _capTitle, ts);
-        float icon = _capKind == 2 ? ts * 0.64f : 0;
+        float icon = _capKind >= 2 ? ts * (_capKind == 4 ? 0.82f : 0.64f) : 0;
         float x0 = -(tw + icon) / 2;
         float baseY = (lineH + tf.GetAscent(ts) - tf.GetDescent(ts)) / 2 - lineH / 2;
-        if (_capKind == 2)
+        if (_capKind >= 2)
         {
-            // The yellow card, tilted, before the title.
+            // The card, tilted, before the title (a second booking: the yellow, then the red over it).
             float cw = ts * 0.42f, ch = ts * 0.6f;
-            var cc = new Vector2(x0 + cw / 2, baseY - ch / 2 + ts * 0.04f);
-            c.DrawSetTransformMatrix(new Transform2D(0, new Vector2(scale, scale), 0, centre) * new Transform2D(Mathf.DegToRad(-8), cc));
-            Style.Box(c, new Rect2(-cw / 2, -ch / 2 + 4, cw, ch), new Color(0, 0, 0, 0.3f * op), 2);
-            Style.Box(c, new Rect2(-cw / 2, -ch / 2, cw, ch), new Color(Style.Accent, op), 2);
+            if (_capKind == 4) CardIcon(c, centre, scale, new Vector2(x0 + cw / 2, baseY - ch / 2 + ts * 0.04f), -16, Style.Accent, op, ts);
+            float off = _capKind == 4 ? ts * 0.18f : 0;
+            CardIcon(c, centre, scale, new Vector2(x0 + off + cw / 2, baseY - ch / 2 + ts * 0.04f), -8, _capKind == 2 ? Style.Accent : RedCard, op, ts);
             c.DrawSetTransform(centre, 0, new Vector2(scale, scale));
         }
         float tx = x0 + icon;
@@ -380,6 +390,16 @@ public sealed partial class Hud : Control
             c.DrawString(sf, new Vector2(-sw / 2, sy), sub, HorizontalAlignment.Left, -1, ss, new Color(Style.InkDim, Style.InkDim.A * op));
         }
         c.DrawSetTransform(Vector2.Zero, 0, Vector2.One);
+    }
+
+    static readonly Color RedCard = new Color(0.86f, 0.15f, 0.17f);
+
+    static void CardIcon(CanvasItem c, Vector2 centre, float scale, Vector2 at, float deg, Color col, float op, int ts)
+    {
+        float cw = ts * 0.42f, ch = ts * 0.6f;
+        c.DrawSetTransformMatrix(new Transform2D(0, new Vector2(scale, scale), 0, centre) * new Transform2D(Mathf.DegToRad(deg), at));
+        Style.Box(c, new Rect2(-cw / 2, -ch / 2 + 4, cw, ch), new Color(0, 0, 0, 0.3f * op), 2);
+        Style.Box(c, new Rect2(-cw / 2, -ch / 2, cw, ch), new Color(col, op), 2);
     }
 
     // ------------------------------------------------------------------ score card

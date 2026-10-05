@@ -51,7 +51,7 @@ public sealed partial class Minimap : Control
         Position = new Vector2(MathF.Round((parent.Size.X - w) / 2), parent.Size.Y - 10 - SafeBottom - h);
         for (int i = 0; i < MatchSnapshot.N; i++)
         {
-            _on[i] = b.Active[i];
+            _on[i] = b.Active[i] && b.Cards[i] != 3;
             _x[i] = Mathf.Lerp(a.X[i], b.X[i], alpha);
             _z[i] = Mathf.Lerp(a.Z[i], b.Z[i], alpha);
             _team[i] = b.Team[i];

@@ -499,8 +499,10 @@ public sealed class Terraces
         // ...a card: the offender's end whistles, the other cheers it.
         if (e.Card > 0 && foulTeam >= 0)
         {
-            Add(React.Jeer, foulTeam, 0.4, 1, 3);
-            Add(React.Cheer, 1 - foulTeam, 0.3, 0.7f);
+            // A red: the offender's end howls, the other roars him off.
+            bool red = e.Card == 2;
+            Add(React.Jeer, foulTeam, 0.4, 1, red ? 5 : 3);
+            Add(React.Cheer, 1 - foulTeam, 0.3, red ? 1 : 0.7f);
         }
         // ...and the end whose striker was flagged gives the linesman some.
         if (e.Offside > 0 && offsideTeam >= 0) Add(React.Boo, offsideTeam, 0.15, 0.8f);

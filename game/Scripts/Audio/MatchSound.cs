@@ -26,7 +26,7 @@ public sealed class MatchSound
         if (crowded)
         {
             Terraces.Update(dt, s);
-            Terraces.OnEvents(s, s.Foul == 1 ? match.LastFoul?.Offender.Team ?? -1 : -1, s.Offside > 0 ? match.LastOffside?.Team ?? -1 : -1);
+            Terraces.OnEvents(s, s.Foul == 1 || s.Card > 0 ? match.LastFoul?.Offender.Team ?? -1 : -1, s.Offside > 0 ? match.LastOffside?.Team ?? -1 : -1);
         }
         if (playing)
         {

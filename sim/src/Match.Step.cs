@@ -81,6 +81,8 @@ public sealed partial class Match
             if (PhaseT > GoalSeq.End) StartKickoff(kickTeam);
         }
 
+        SendOffStep();
+
         // Set piece timer.
         if (SetPiece != null) SetPiece.T += DT;
 

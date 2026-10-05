@@ -497,14 +497,23 @@ public sealed partial class Match
         victim.Plan = null;
         double severity = (slide ? 0.35 : 0.1) + FromBehind(off, victim) * 0.4 + M.Clamp((off.Speed - 5) / 4, 0, 1) * 0.25 + (late ? 0.2 : 0);
         bool yellow = Rng.Next() < M.Clamp((severity - 0.5) * 1.5, 0, 0.85);
-        if (yellow)
+        // The very worst (a late slide from behind at full pelt) can be a straight red.
+        bool red = Rng.Next() < M.Clamp((severity - 1) * 1.5, 0, 0.3);
+        // Never the keeper (nobody's there to go in goal), never in a drill, and never so many that
+        // a side drops below seven: then he gets away with the booking.
+        if (off.Role == Role.GK || Training || Teams[off.Team].Players.Count <= 7 || sendOff.Contains(off)) red = false;
+        else if (yellow && Cards[off.Id] >= 1) red = true;
+        if (yellow) Cards[off.Id]++;
+        if (red)
         {
-            Cards[off.Id]++;
-            Events.Card = 1;
+            yellow = false;
+            sendOff.Add(off);
+            Events.Card = 2;
         }
+        else if (yellow) Events.Card = Math.Max(Events.Card, 1);
         bool penalty = InPenaltyArea(off.Team, x, z);
-        LastFoul = new Foul { Offender = off, Victim = victim, X = x, Z = z, Yellow = yellow, Penalty = penalty, Time = Time };
-        Log?.Invoke($"{F1(Time)} FOUL by T{off.Team} #{off.Index} on #{victim.Index}{(yellow ? " (yellow)" : "")}{(penalty ? " PENALTY" : "")}");
+        LastFoul = new Foul { Offender = off, Victim = victim, X = x, Z = z, Yellow = yellow, Red = red, SecondYellow = red && Cards[off.Id] >= 2, Penalty = penalty, Time = Time };
+        Log?.Invoke($"{F1(Time)} FOUL by T{off.Team} #{off.Index} on #{victim.Index}{(yellow ? " (yellow)" : "")}{(red ? " (RED)" : "")}{(penalty ? " PENALTY" : "")}");
         if (!penalty && AdvantageOn(victim.Team, victim))
         {
             Advantage = new Advantage { Team = victim.Team, X = x, Z = z, Penalty = penalty, Until = Time + 3 };

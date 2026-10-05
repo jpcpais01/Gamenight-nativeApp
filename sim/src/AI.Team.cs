@@ -56,6 +56,32 @@ public sealed partial class AI
 
     public bool Countering(int team) => counterUntil[team] > m.Time;
 
+    /// <summary>A player sent off: nobody marks him, runs for him or waits on him any more.</summary>
+    public void Forget(Player p)
+    {
+        for (int t = 0; t < 2; t++)
+        {
+            if (Chaser[t] == p) Chaser[t] = null;
+            if (spBest[t] == p) spBest[t] = null;
+            if (wallRunner[t] == p || wallMate[t] == p)
+            {
+                wallRunner[t] = wallMate[t] = null;
+                wallUntil[t] = -1;
+            }
+            if (playRunner[t] == p || overlapCarrier[t] == p)
+            {
+                playRunner[t] = overlapCarrier[t] = null;
+                playUntil[t] = -1;
+            }
+        }
+        for (int i = 0; i < mark.Length; i++) if (mark[i] == p) mark[i] = null;
+        mark[p.Id] = null;
+        markAt[0] = markAt[1] = 0;
+        if (oneTouchFor == p) oneTouchFor = null;
+        if (ownerSeen == p) ownerSeen = null;
+        if (lastOwner == p) lastOwner = null;
+    }
+
     /// <summary>How far the team's shape shifts up the pitch (team frame metres) for its mood and the squeeze.</summary>
     double ShapeShift(Player p, bool attacking)
     {

@@ -514,7 +514,7 @@ public partial class Main : Node
         int total = _cur.Score[0] + _cur.Score[1];
         if (total <= _logged || _cur.Phase != Phase.Goal || _cur.Scorer < 0) return;
         _logged = total;
-        var p = _match.Players.Find(x => x.Id == _cur.Scorer);
+        var p = _match.All.Find(x => x.Id == _cur.Scorer);
         if (p == null) return;
         // An own goal goes down to the side that gained it (its striker, as the engine credits it).
         _goalLog.Add(new GoalEvent { Team = p.Team, Index = p.Index, Minute = Math.Max(1, _cur.Minute) });

@@ -41,6 +41,7 @@ public sealed class MatchSnapshot
     public readonly float[] KickPower = new float[N], KickHeight = new float[N], KickRel = new float[N], SlideV0 = new float[N];
     public readonly bool[] Sprinting = new bool[N];
     public readonly float[] Stamina = new float[N];
+    /// <summary>Yellow cards; 3 = sent off (walking off, or gone).</summary>
     public readonly byte[] Cards = new byte[N];
     // Who they are (fixed for the match, copied every time for simplicity).
     public readonly byte[] Team = new byte[N], Index = new byte[N], Number = new byte[N];
@@ -195,6 +196,7 @@ public sealed partial class Match
     {
         Array.Clear(s.Active);
         foreach (var p in Players) s.Active[p.Id] = true;
+        foreach (var p in Leaving) s.Active[p.Id] = true;
         foreach (var p in All)
         {
             int i = p.Id;
@@ -245,7 +247,7 @@ public sealed partial class Match
             s.DiveLift[i] = (float)AI.DiveLift[i];
             s.Sprinting[i] = p.Sprinting;
             s.Stamina[i] = (float)p.Stamina;
-            s.Cards[i] = (byte)Cards[i];
+            s.Cards[i] = (byte)(Red[i] ? 3 : Cards[i]);
             s.Team[i] = (byte)p.Team;
             s.Index[i] = (byte)p.Index;
             s.Number[i] = (byte)p.Number;
