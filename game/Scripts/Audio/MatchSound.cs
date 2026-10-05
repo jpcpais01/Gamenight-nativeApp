@@ -34,15 +34,10 @@ public sealed class MatchSound
             if (s.KickCount > 0) audio.Kick(s.KickMax);
             if (s.Bounce > 1.5f) audio.Bounce(s.Bounce);
             if (s.Whistle > 0) audio.Whistle(s.Whistle);
-            if (s.Post > 0)
-            {
-                audio.Post(s.Post);
-                audio.CrowdGasp();
-            }
+            if (s.Post > 0) audio.Post(s.Post);
             if (s.Net > 0) audio.Net(s.Net);
             // Full until the players walk back, then fading (theirs: only the away end, briefly).
             if (s.Goal >= 0) audio.Goal(drill ? 1.5f : (float)GoalSeq.Back, drill ? 0 : s.Goal);
-            if (!drill && s.Foul == 1 && match.LastFoul?.Penalty == true) audio.CrowdGasp();
             bool pen = !drill && PenaltyNoise(s);
             // After their goal the home crowd is stunned: the bed sinks, then comes back.
             float hush = 1 - 0.6f * Terraces.Hush;

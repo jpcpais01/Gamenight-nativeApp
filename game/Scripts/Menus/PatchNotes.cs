@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.46", "The stadium plays only your crowd recordings now: no more synthesised drums, claps, applause, whistlers, boos, PA chimes, rain or thunder. The recorded crowd still rises with the danger, surges at the goal line and roars for goals; ball, whistle and net sounds stay."),
         ("0.45", "New home screen: your club hangs as a banner in its colours, tonight's match is a ticket split between both clubs, everything else in a dock of tiles. The club studio gets a tab rail, a lit showroom stage, colour wells, shirt previews for every design and a SURPRISE ME for kits."),
         ("0.44", "SURPRISE ME in the stadium builder now builds stadiums that look designed: both ends and the corners mirror each other, one stand set or two, in one colour or two (often your club's)."),
         ("0.43", "LEAGUES, rebuilt: a new button opens a pixel relief map of Europe with 17 leagues. Pick your home country and start in its local league; league titles are trophies that unlock the regional associations, then the premiers, then the star-filled Golden League. Bigger leagues pay more."),

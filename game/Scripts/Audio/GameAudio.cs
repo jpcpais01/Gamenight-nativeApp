@@ -26,8 +26,6 @@ public sealed partial class GameAudio : Node
     readonly ConcurrentQueue<Action> _q = new();
     readonly Godot.Vector2[] _block = new Godot.Vector2[Mixer.Block];
 
-    Voice _rain;
-    bool _raining;
     float _crowd = -1, _placeX = 1e9f, _lift;
     bool _muted, _suspended;
 
@@ -117,47 +115,6 @@ public sealed partial class GameAudio : Node
     /// <summary>A ground with or without a crowd.</summary>
     public void SetCrowd(bool on) => Do(() => _mx.SetCrowd(on));
 
-    /// <summary>Rain on (or off) the stadium: a hiss of drops on the roofs and the turf.</summary>
-    public void SetRain(bool on)
-    {
-        if (on == _raining) return;
-        _raining = on;
-        Do(() =>
-        {
-            double t = _mx.Now;
-            _mx.Weather(on);
-            if (on)
-            {
-                _rain ??= _mx.NoiseVoice(t, double.MaxValue, 0.83f, new Param(0), Bus.Master,
-                    new Biquad(FilterType.Highpass, 1600), new Biquad(FilterType.Peaking, 4200, 1, 5));
-                _rain.Series = true;
-                _rain.Stop = double.MaxValue;
-                _rain.Gain.Target(0.11f, t, 0.6f);
-            }
-            else if (_rain != null)
-            {
-                _rain.Gain.Target(0, t, 0.6f);
-                _rain.Stop = t + 4;
-                _rain = null;
-            }
-        });
-    }
-
-    /// <summary>Thunder after a lightning flash, `delay` seconds later (how far off the strike
-    /// was): a crack when it's close, then a long low roll that swells twice and dies away.</summary>
-    public void Thunder(float delay) => Do(() =>
-    {
-        double t = _mx.Now + delay;
-        float near = Math.Clamp(1 - delay / 4, 0, 1);
-        if (near > 0.3f) _mx.Burst(t, 0.35, FilterType.Bandpass, 900, 0.7f, 0.22f * near, 0.8f);
-        var g = new Param(0.0001f).Set(0.0001f, t).Exp(0.5f, t + 0.12).Exp(0.22f, t + 0.9)
-            .Exp(0.42f, t + 1.4).Exp(0.12f, t + 2.6).Exp(0.25f, t + 3.1).Exp(0.0001f, t + 6.5);
-        _mx.NoiseVoice(t, t + 6.6, 0.35f, g, Bus.Master,
-            new Biquad(FilterType.Lowpass, 120 + 160 * near, 0.9f), new Biquad(FilterType.Peaking, 55, 1, 6));
-        // A big one right overhead: the crowd jumps, whistles, then cheers itself.
-        if (near > 0.55f) _tape.Thunderstruck(t + 0.25, near);
-    });
-
     public bool Muted
     {
         get => _muted;
@@ -206,9 +163,6 @@ public sealed partial class GameAudio : Node
 
     /// <summary>The recorded roar, held at full for `hold` seconds; `side` 1 is the away end's.</summary>
     public void Goal(float hold, int side = 0) => Do(() => _tape.Goal(hold, side == 1 ? Bus.End1 : Bus.Crowd, side));
-
-    /// <summary>The ground draws breath.</summary>
-    public void CrowdGasp() => Do(() => _tape.Gasp());
 
     /// <summary>Menus: the crowd sinks to a distant murmur (or silence inside a pack opening).</summary>
     public void SetAmbience(float level) => SetCrowdLevel(0.35f * level);

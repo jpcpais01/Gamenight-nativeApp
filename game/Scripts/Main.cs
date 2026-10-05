@@ -314,7 +314,6 @@ public partial class Main : Node
         if (Request?.Demo != true && GameAudio.Instance != null)
         {
             GameAudio.Instance.Suspended = false;
-            GameAudio.Instance.SetRain(false);
             GameAudio.Instance.SetVenue(Venue.Default);
         }
     }
@@ -435,7 +434,6 @@ public partial class Main : Node
         }
         _prof.Lap(Profiler.Sys.Players);
         _ground.Update(_cur, _time, dt);
-        Weather();
         _prof.Lap(Profiler.Sys.Stadium);
         Sound.Frame(_match, _cur, Request?.Demo != true, Request?.Drill == null, Request?.Drill != null, _pause.IsOpen ? 0 : dt);
         GameAudio.Instance?.Place(_view.Camera.GlobalPosition.X, Sound.Terraces.Tension);
@@ -520,7 +518,6 @@ public partial class Main : Node
         _goalLog.Add(new GoalEvent { Team = p.Team, Index = p.Index, Minute = Math.Max(1, _cur.Minute) });
     }
 
-    double _thunderFor = -10;
     int _prewarm;
 
     /// <summary>The first frames of the walk-out draw the match HUD, the controls, the markers
@@ -540,20 +537,6 @@ public partial class Main : Node
             _players.Markers = !Directed;
         }
         _hud.Modulate = _controls.Modulate = new Color(1, 1, 1, done ? 1 : 0.004f);
-    }
-
-    /// <summary>The rain's hiss, and thunder after each flash (later the farther off it struck).</summary>
-    void Weather()
-    {
-        var atm = _ground.Atmosphere;
-        var audio = GameAudio.Instance;
-        if (atm == null || audio == null || Request?.Demo == true) return;
-        audio.SetRain(atm.Weather == Grounds.Weather.Rain);
-        if (atm.FlashAt > _thunderFor && atm.FlashAt <= _time)
-        {
-            _thunderFor = atm.FlashAt;
-            audio.Thunder(0.4f + (float)Random.Shared.NextDouble() * 3f);
-        }
     }
 
     /// <summary>The frame-time report into Downloads (and onto the clipboard, to paste anywhere).</summary>
