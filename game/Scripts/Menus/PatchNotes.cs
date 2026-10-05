@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.48", "Goalkeepers rebuilt: the ball sits in their gloves, caught where it meets them and gathered in. They step across for what they can reach and dive only for what they can't, rush one-on-ones, come for crosses, then roll, throw or punt it out."),
         ("0.47", "A gift: every club gets 1,000,000 coins, once. Open the store and go wild."),
         ("0.46", "The stadium plays only your crowd recordings now: no more synthesised drums, claps, applause, whistlers, boos, PA chimes, rain or thunder. The recorded crowd still rises with the danger, surges at the goal line and roars for goals; ball, whistle and net sounds stay."),
         ("0.45", "New home screen: your club hangs as a banner in its colours, tonight's match is a ticket split between both clubs, everything else in a dock of tiles. The club studio gets a tab rail, a lit showroom stage, colour wells, shirt previews for every design and a SURPRISE ME for kits."),
