@@ -31,7 +31,7 @@ public sealed class Mixer
 
     public readonly Param MasterGain = new(0.9f);
     /// <summary>The crowd bed's overall level.</summary>
-    public readonly Param BedGain = new(0.3f);
+    public readonly Param BedGain = new(0);
     /// <summary>Everything the crowd makes (off at a ground without one).</summary>
     public readonly Param CrowdGain = new(1);
     /// <summary>The terraces' overall level (menus sink it).</summary>

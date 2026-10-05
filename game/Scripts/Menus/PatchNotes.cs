@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.62", "The loading screen is free of crowd noise too: the crowd stays silent from launch until a real match starts. The splash keeps its own sounds."),
         ("0.61", "No crowd noise behind the menus any more: the home screen and every other menu are quiet apart from their own button sounds. The crowd comes in when a real match starts."),
         ("0.60", "The club crest on the home page no longer has the sweeping reflection across it."),
         ("0.59", "Pack openings are centred: each card arrives and flips in the middle of the screen, then slides over so the card and its details sit centred together, on any phone width."),

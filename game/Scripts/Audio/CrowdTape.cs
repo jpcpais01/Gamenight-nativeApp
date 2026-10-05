@@ -18,8 +18,8 @@ public sealed class CrowdTape
     readonly List<(Param g, double next)> _drift = new();
     int _scheduledId = -1;
 
-    /// <summary>1 at a match; the menus sink it.</summary>
-    float _level = 1;
+    /// <summary>1 at a match; silent until one starts (the loading screen and the menus have no crowd).</summary>
+    float _level;
     float _excite = 0.2f, _mouth;
     float _bedSent = -1;
     /// <summary>Moments the whole bed rises for (an end on its feet): start, peak level, rise, hold, fall.</summary>
