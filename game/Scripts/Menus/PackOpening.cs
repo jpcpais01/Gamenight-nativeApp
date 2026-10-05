@@ -17,7 +17,7 @@ namespace GameNight.Menus;
 /// </summary>
 public sealed partial class PackOpening : PxCanvas
 {
-    enum Phase { Intro, Tease, Crack, Burst, Lights, Walkout, Enter, Charged, Flip, Shown, Summary }
+    enum Phase { Intro, Tease, Crack, Burst, Lights, Walkout, Tunnel, Enter, Charged, Flip, Shown, Summary }
 
     readonly Menus _ui;
     readonly PackDef _pack;
@@ -143,6 +143,9 @@ public sealed partial class PackOpening : PxCanvas
                 }
                 if (_t > (Tier >= 3 ? 1.2 : 1.0)) NextWalk();
                 break;
+            case Phase.Tunnel:
+                TunnelTick(dt);
+                break;
             case Phase.Enter when _t > (Tier >= 2 ? 0.5 : 0.36):
                 if (Tier >= 2) To(Phase.Charged);
                 else Flip();
@@ -171,6 +174,8 @@ public sealed partial class PackOpening : PxCanvas
 
     void To(Phase p)
     {
+        if (p != Phase.Tunnel) TunnelOff();
+        else TunnelOn();
         _phase = p;
         _t = 0;
         _spawn = 0;
@@ -258,8 +263,8 @@ public sealed partial class PackOpening : PxCanvas
     void NextWalk()
     {
         _walkStep++;
-        int steps = (Tier >= 3 ? 3 : 2) + (Playstyles.Of(Cur).Count > 0 ? 1 : 0);
-        if (_walkStep >= steps) To(Phase.Enter);
+        int steps = 2 + (Playstyles.Of(Cur).Count > 0 ? 1 : 0);
+        if (_walkStep >= steps) To(Phase.Tunnel);
         else
         {
             _t = 0;
@@ -363,6 +368,7 @@ public sealed partial class PackOpening : PxCanvas
             case Phase.Intro: To(Phase.Tease); break;
             case Phase.Tease: Charge(); break;
             case Phase.Walkout: NextWalk(); break;
+            case Phase.Tunnel: TunnelTap(); break;
             case Phase.Lights when _t > 1.0: StartWalkout(); break;
             case Phase.Enter or Phase.Charged: Flip(); break;
             case Phase.Shown when _t > 0.2: Next(); break;
@@ -429,6 +435,7 @@ public sealed partial class PackOpening : PxCanvas
         {
             Phase.Lights => _lightsOn == 0 ? 1 : 0.92f,
             Phase.Walkout => 0.8f,
+            Phase.Tunnel => 0.9f,
             Phase.Charged => Mathf.Min(0.6f, (float)_t * (Tier >= 3 ? 0.8f : 0.4f)),
             _ => 0,
         };
@@ -442,8 +449,9 @@ public sealed partial class PackOpening : PxCanvas
         // The pedestal and the lamp over it.
         var ped = PedestalTop();
         float spotA = _phase == Phase.Intro ? Mathf.Min(1, (float)_t * 2) * 0.14f : _phase == Phase.Lights ? 0 : 0.14f;
+        if (_phase == Phase.Tunnel) spotA = 0;
         if (spotA > 0) Fx.Spot(this, new Vector2(ped.X, -10), ped, 60, 230, tint.Lerp(Colors.White, 0.5f), spotA);
-        if (_phase != Phase.Summary) Fx.Pedestal(this, ped, 170, tint, _phase == Phase.Tease ? _taps / 3f : 0.6f);
+        if (_phase is not (Phase.Summary or Phase.Tunnel)) Fx.Pedestal(this, ped, 170, tint, _phase == Phase.Tease ? _taps / 3f : 0.6f);
 
         switch (_phase)
         {
@@ -451,6 +459,7 @@ public sealed partial class PackOpening : PxCanvas
             case Phase.Burst: BurstStage(); break;
             case Phase.Lights: LightsStage(); break;
             case Phase.Walkout: WalkoutStage(); break;
+            case Phase.Tunnel: TunnelStage(); break;
             case Phase.Enter or Phase.Charged or Phase.Flip or Phase.Shown: CardStage(); break;
             case Phase.Summary: SummaryStage(); break;
         }
@@ -655,9 +664,9 @@ public sealed partial class PackOpening : PxCanvas
         Fx.Beams(this, m, col, 12, Size.Length(), 0.05f, (float)T * 0.4f, 0.1f);
         Fx.Glow(this, m, 150, col, 0.18f);
         // The playstyles step comes last (after the rating for the best cards).
-        int styleStep = Tier >= 3 ? 3 : 2;
-        string[] labels = { "NATION", "POSITION", "RATING" };
-        Px.TextC(this, Px.Small, m.X, 58, _walkStep >= styleStep ? "PLAYSTYLE" : labels[Math.Min(_walkStep, 2)], 10, Px.InkDim);
+        const int styleStep = 2;
+        string[] labels = { "NATION", "POSITION" };
+        Px.TextC(this, Px.Small, m.X, 58, _walkStep >= styleStep ? "PLAYSTYLE" : labels[Math.Min(_walkStep, 1)], 10, Px.InkDim);
         if (_walkStep >= styleStep)
         {
             var ps = Playstyles.Of(c);
@@ -681,8 +690,7 @@ public sealed partial class PackOpening : PxCanvas
             Px.Flag(this, fr, n);
             Px.TextC(this, Px.Big, m.X, m.Y + 76 * s, n.Code, (int)(46 * s), col, new Color(0, 0, 0, 0.7f), 3);
         }
-        else if (_walkStep == 1) Px.TextC(this, Px.Big, m.X, m.Y + 52 * s, c.Position.ToString(), (int)(150 * s), col, new Color(0, 0, 0, 0.7f), 5);
-        else Px.TextC(this, Px.Big, m.X, m.Y + 62 * s, c.Overall.ToString(), (int)(190 * s), col, new Color(0, 0, 0, 0.7f), 6);
+        else Px.TextC(this, Px.Big, m.X, m.Y + 52 * s, c.Position.ToString(), (int)(150 * s), col, new Color(0, 0, 0, 0.7f), 5);
     }
 
     void CardStage()

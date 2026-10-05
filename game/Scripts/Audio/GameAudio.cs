@@ -266,6 +266,14 @@ public sealed partial class GameAudio : Node
     /// <summary>A card flying in.</summary>
     public void Whoosh() => Do(() => _mx.Burst(_mx.Now, 0.35, FilterType.Bandpass, 1800, 0.9f, 0.18f, 1.6f));
 
+    /// <summary>A boot on the tunnel floor in the dark: a low thud.</summary>
+    public void Footstep() => Do(() =>
+    {
+        double t = _mx.Now;
+        _mx.Tone(t, 72, 0.22, Wave.Sine, 0.32f, 48);
+        _mx.Burst(t, 0.12, FilterType.Lowpass, 420, 0.8f, 0.22f, 0.9f);
+    });
+
     /// <summary>Walkout beat: nation / position stingers.</summary>
     public void Stinger(int step) => Do(() =>
     {
@@ -295,7 +303,5 @@ public sealed partial class GameAudio : Node
             if (tier >= 2) _mx.Burst(t, 0.9 + tier * 0.3, FilterType.Highpass, 6000, 0.5f, 0.12f + tier * 0.04f, 1.2f);
             if (tier >= 3) _mx.Tone(t, 98, 2, Wave.Sine, 0.4f, 49);
         });
-        // The best cards: a stadium erupting.
-        if (tier >= 3) Do(() => _tape.Goal(0, Bus.Master));
     }
 }
