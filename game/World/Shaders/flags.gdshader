@@ -65,23 +65,17 @@ void vertex() {
 	// Quiet: two in five poles come down to rest.
 	float rest = (1.0 - smoothstep(0.05, 0.4, act)) * step(h, 0.4);
 
-	// The swing: his own pace and style; on the beat when the end sings; round and round for a goal.
+	// The swing: his own steady pace and style (a pace that never changes, so the motion never
+	// jumps); the mood only makes the arcs bigger and heavier, round and round for a goal.
 	float f8 = smoothstep(0.35, 0.75, h2);
 	float circ = max(step(0.82, h2), goal);
-	float sp = (1.25 + h2 * 0.6) * mix(0.8, 1.35, act);
-	float A = mix(0.32, 0.78, act) * (1.0 - rest) * (1.0 - gn_chant.w * 0.75);
+	float sp = 2.0 + h2 * 0.7;
+	float A = mix(0.3, 0.85, act) * (1.0 - rest) * (1.0 - gn_chant.w * 0.75);
 	// The cloth lags the pole by ~0.5 rad per metre: the swing travels out along it.
 	float lag = x * 0.55;
 	float th = TIME * sp + ph * 6.2832;
 	vec2 a = swing(th - lag, f8, circ);
 	vec2 da = swing(th - lag + 0.1, f8, circ) - a;
-	float beatK = smoothstep(0.0, 0.5, sing) * (1.0 - gn_chant.w);
-	if (beatK > 0.01) {
-		float bt = (gn_chant.z + h * 0.03) * 6.2832;
-		vec2 ab = swing(bt - lag, f8, circ);
-		a = mix(a, ab, beatK);
-		da = mix(da, swing(bt - lag + 0.1, f8, circ) - ab, beatK);
-	}
 	a *= A;
 	// Resting: leant on the shoulder to one side, held lower.
 	a.x += rest * (h < 0.2 ? 0.55 : -0.55);
@@ -96,7 +90,7 @@ void vertex() {
 	vec2 off = vec2(x * cos(droop), -x * sin(droop) - k * k * 0.25 * hang);
 	p.xy = vec2(p.x * (1.0 - cloth), p.y) + off;
 	// Ripples running out to the fly end (quicker and finer when flying), and slack folds hanging.
-	float t = TIME * (3.0 + 3.0 * fly);
+	float t = TIME * 4.2;
 	float ph1 = x * 2.6 - t + ph * 6.2832;
 	float ph2 = x * 5.6 - t * 1.7 + p.y * 2.2 + ph * 8.17;
 	float amp = (0.08 + 0.16 * fly) * pow(k, 1.2);

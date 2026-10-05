@@ -34,7 +34,7 @@ void vertex() {
 		float seed = v.x * 0.37 + v.z * 0.61;
 		float gust = 0.6 + 0.4 * sin(TIME * 0.53 + seed) * sin(TIME * 1.31 + seed * 1.7);
 		float s = UV.x * (flag ? 7.0 : 9.0);
-		float wave = sin(s - TIME * 3.4 + seed) * 0.62 + sin(s * 2.3 - TIME * 5.8 + UV.y * 3.0 + seed * 2.0) * 0.26;
+		float wave = sin(s - TIME * 2.5 + seed) * 0.62 + sin(s * 2.3 - TIME * 4.1 + UV.y * 3.0 + seed * 2.0) * 0.26;
 		v += NORMAL * (flag ? 0.09 : 0.16) * gust * (pow(f, 1.4) * wave + 0.25 * f);
 	}
 	wpos = (MODEL_MATRIX * vec4(v, 1.0)).xyz;

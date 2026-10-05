@@ -102,7 +102,7 @@ public static class Art
         // Playstyle badges down the right edge.
         var ps = Playstyles.Of(c);
         for (int i = 0; i < ps.Count; i++)
-            Playstyle(ci, p + new Vector2(inner.Size.X - u * 1.05f, u * 1.25f + i * u * 1.95f), u * 0.88f, ps[i], u >= 7);
+            Playstyle(ci, p + new Vector2(inner.Size.X - u * 1.1f, u * 1.3f + i * u * 2.05f), Mathf.Max(5, u * 0.95f), ps[i]);
         ci.DrawRect(new Rect2(p.X + u * 0.6f, p.Y + u * 6.9f, inner.Size.X - u * 1.2f, Mathf.Max(1, u * 0.12f)), new Color(ink, 0.35f));
         Px.TextC(ci, Px.Big, inner.GetCenter().X, p.Y + u * 8.5f, Px.Fit(Px.Big, c.LastName.ToUpperInvariant(), (int)(u * 1.8f), inner.Size.X - u), (int)(u * 1.8f), ink);
         var fs = Cards.FaceStats(c);
@@ -119,7 +119,7 @@ public static class Art
     }
 
     /// <summary>Face-down card back.</summary>
-    /// <summary>A playstyle badge: a hexagon in its colour, with its two letters when there's room.</summary>
+    /// <summary>A playstyle badge: a hexagon in its colour with the style's own pictogram inside.</summary>
     public static void Playstyle(CanvasItem ci, Vector2 c, float r, Playstyle p, bool letters = true)
     {
         Vector2[] Hex(float rr)
@@ -135,9 +135,129 @@ public static class Art
         var col = Px.Hex(p.Color);
         ci.DrawColoredPolygon(Hex(r + Mathf.Max(1, r * 0.14f)), new Color(0, 0, 0, 0.75f));
         ci.DrawColoredPolygon(Hex(r), col);
-        ci.DrawColoredPolygon(Hex(r * 0.78f), Px.Hex(0x14121c));
-        if (letters) Px.TextC(ci, Px.Big, c.X, c.Y + r * 0.42f, p.Code, Math.Max(8, (int)(r * 1.15f)), col);
+        ci.DrawColoredPolygon(Hex(r * 0.8f), Px.Hex(0x14121c));
+        if (r >= 4.5f) Glyph(ci, c, r * 0.58f, p.Id, col.Lightened(0.15f));
         else ci.DrawColoredPolygon(Hex(r * 0.36f), col);
+    }
+
+    /// <summary>The pictogram of a playstyle, drawn in a box of half-size s around c.</summary>
+    public static void Glyph(CanvasItem ci, Vector2 c, float s, string id, Color col)
+    {
+        Vector2 P(float x, float y) => c + new Vector2(x, y) * s;
+        void Poly(params float[] xy)
+        {
+            var pts = new Vector2[xy.Length / 2];
+            for (int i = 0; i < pts.Length; i++) pts[i] = P(xy[i * 2], xy[i * 2 + 1]);
+            ci.DrawColoredPolygon(pts, col);
+        }
+        void Box(float x, float y, float w, float h) => ci.DrawRect(new Rect2(P(x, y), new Vector2(w, h) * s), col);
+        float lw = Mathf.Max(1, s * 0.28f);
+        void Line(float x0, float y0, float x1, float y1) => ci.DrawLine(P(x0, y0), P(x1, y1), col, lw);
+        void Arc(float x, float y, float rr, float a0, float a1) => ci.DrawArc(P(x, y), rr * s, a0, a1, 12, col, lw);
+        void Disc(float x, float y, float rr) => ci.DrawColoredPolygon(Px.Ellipse(P(x, y), rr * s, rr * s, 12), col);
+        var dark = Px.Hex(0x14121c);
+        switch (id)
+        {
+            case "tank": Poly(-0.8f, -0.85f, 0.8f, -0.85f, 0.8f, 0.05f, 0, 0.95f, -0.8f, 0.05f); break; // shield
+            case "rapid": Poly(0.25f, -1, -0.65f, 0.15f, -0.05f, 0.15f, -0.3f, 1, 0.65f, -0.2f, 0.05f, -0.2f); break; // bolt
+            case "quickstep": // two chevrons
+                Poly(-0.95f, -0.8f, -0.45f, -0.8f, 0.05f, 0, -0.45f, 0.8f, -0.95f, 0.8f, -0.45f, 0);
+                Poly(-0.05f, -0.8f, 0.45f, -0.8f, 0.95f, 0, 0.45f, 0.8f, -0.05f, 0.8f, 0.45f, 0);
+                break;
+            case "engine": // a heart
+                Disc(-0.42f, -0.28f, 0.48f);
+                Disc(0.42f, -0.28f, 0.48f);
+                Poly(-0.88f, -0.1f, 0.88f, -0.1f, 0, 0.95f);
+                break;
+            case "finesse": // curling arrow
+                Arc(0.15f, 0.55f, 0.95f, Mathf.Pi * 1.05f, Mathf.Pi * 1.62f);
+                Poly(0.3f, -0.75f, 0.95f, -0.42f, 0.3f, -0.05f);
+                break;
+            case "powershot": // a ball with speed lines
+                Disc(0.35f, 0, 0.6f);
+                ci.DrawColoredPolygon(Px.Ellipse(P(0.35f, 0), 0.24f * s, 0.24f * s, 5), dark);
+                Box(-1, -0.45f, 0.6f, 0.2f);
+                Box(-1, -0.1f, 0.8f, 0.2f);
+                Box(-1, 0.25f, 0.6f, 0.2f);
+                break;
+            case "maestro": // an eye
+                ci.DrawColoredPolygon(Px.Ellipse(c, s, s * 0.55f, 14), col);
+                Disc(0, 0, 0.42f);
+                ci.DrawColoredPolygon(Px.Ellipse(c, 0.42f * s, 0.42f * s, 10), dark);
+                Disc(0, 0, 0.2f);
+                break;
+            case "technician": // the ball at the boot
+                Disc(0, -0.1f, 0.62f);
+                ci.DrawColoredPolygon(Px.Ellipse(P(0, -0.1f), 0.25f * s, 0.25f * s, 5), dark);
+                Box(-0.95f, 0.65f, 1.9f, 0.28f);
+                break;
+            case "aerial": // up over a bar
+                Poly(0, -1, 0.8f, -0.15f, 0.3f, -0.15f, 0.3f, 0.35f, -0.3f, 0.35f, -0.3f, -0.15f, -0.8f, -0.15f);
+                Box(-0.9f, 0.6f, 1.8f, 0.3f);
+                break;
+            case "intercept": // an arrow cut by a wall
+                Box(-1, -0.12f, 1.2f, 0.24f);
+                Poly(0.2f, -0.45f, 0.55f, 0, 0.2f, 0.45f);
+                Box(0.62f, -0.95f, 0.3f, 1.9f);
+                break;
+            case "bruiser": // a fist
+                Box(-0.75f, -0.6f, 1.4f, 1.1f);
+                for (int i = 0; i < 3; i++) Box(-0.75f + i * 0.47f, -0.62f, 0.06f, 0.5f);
+                Box(-0.45f, 0.5f, 0.8f, 0.45f);
+                break;
+            case "anticipate": // a clock
+                Arc(0, 0, 0.82f, 0, Mathf.Tau);
+                Line(0, 0, 0, -0.55f);
+                Line(0, 0, 0.4f, 0.15f);
+                break;
+            case "trickster": // a zigzag run
+                ci.DrawPolyline(new[] { P(-0.95f, 0.7f), P(-0.45f, -0.6f), P(0.05f, 0.6f), P(0.55f, -0.6f) }, col, lw);
+                Poly(0.35f, -0.85f, 0.95f, -0.95f, 0.8f, -0.35f);
+                break;
+            case "poacher": // crosshair
+                Arc(0, 0, 0.72f, 0, Mathf.Tau);
+                Disc(0, 0, 0.22f);
+                Line(0, -1, 0, -0.45f);
+                Line(0, 0.45f, 0, 1);
+                Line(-1, 0, -0.45f, 0);
+                Line(0.45f, 0, 1, 0);
+                break;
+            case "longball": // a dotted lob
+                for (int i = 0; i < 4; i++)
+                {
+                    float x = -0.9f + i * 0.45f;
+                    Disc(x, 0.6f - Mathf.Sin((i + 0.5f) / 4.5f * Mathf.Pi) * 1.3f, 0.16f);
+                }
+                Disc(0.75f, 0.55f, 0.28f);
+                break;
+            case "relentless": // a flame
+                Poly(0, -1, 0.65f, -0.1f, 0.6f, 0.55f, 0.2f, 0.95f, -0.2f, 0.95f, -0.6f, 0.55f, -0.65f, -0.05f, -0.3f, 0.1f);
+                Poly(0, 0.05f, 0.25f, 0.5f, 0, 0.8f, -0.25f, 0.5f);
+                break;
+            case "whirlwind": // a twister
+                Box(-0.95f, -0.85f, 1.9f, 0.28f);
+                Box(-0.6f, -0.4f, 1.3f, 0.28f);
+                Box(-0.35f, 0.05f, 0.8f, 0.28f);
+                Box(-0.1f, 0.5f, 0.4f, 0.28f);
+                break;
+            case "cat": // a cat's head
+                Poly(-0.85f, -0.95f, -0.25f, -0.45f, 0.25f, -0.45f, 0.85f, -0.95f, 0.85f, 0.35f, 0.4f, 0.85f, -0.4f, 0.85f, -0.85f, 0.35f);
+                Box(-0.45f, -0.05f, 0.25f, 0.25f);
+                Box(0.2f, -0.05f, 0.25f, 0.25f);
+                ci.DrawRect(new Rect2(P(-0.45f, -0.05f), new Vector2(0.25f, 0.25f) * s), dark);
+                ci.DrawRect(new Rect2(P(0.2f, -0.05f), new Vector2(0.25f, 0.25f) * s), dark);
+                break;
+            case "rushout": // out off the line
+                Box(-0.95f, 0.65f, 1.9f, 0.28f);
+                Poly(0, -1, 0.75f, -0.2f, 0.28f, -0.2f, 0.28f, 0.45f, -0.28f, 0.45f, -0.28f, -0.2f, -0.75f, -0.2f);
+                break;
+            case "farreach": // a hand at full stretch
+                Box(-0.55f, -0.15f, 1.1f, 1.05f);
+                for (int i = 0; i < 4; i++) Box(-0.55f + i * 0.3f, -0.95f + Math.Abs(i - 1.5f) * 0.15f, 0.22f, 0.85f);
+                Poly(0.55f, 0.2f, 0.95f, -0.25f, 1, 0.05f, 0.55f, 0.6f);
+                break;
+            default: Disc(0, 0, 0.5f); break;
+        }
     }
 
     public static void CardBack(CanvasItem ci, Rect2 r, Rarity rarity)
@@ -191,6 +311,10 @@ public static class Art
         float w = Px.Width(Px.Small, name, 8) + 6;
         ci.DrawRect(new Rect2(r.GetCenter().X - w / 2, r.End.Y + 2, w, 12), new Color(0.05f, 0.04f, 0.15f, 0.85f));
         Px.TextC(ci, Px.Small, r.GetCenter().X, r.End.Y + 11, name, 8, Px.Ink);
+        // Playstyles: little badges up the left edge.
+        var ps = Playstyles.Of(c);
+        for (int i = 0; i < ps.Count; i++)
+            Playstyle(ci, new Vector2(r.Position.X + 2, r.End.Y - 7 - i * 15), 7, ps[i]);
         if (captain)
         {
             var cr = new Rect2(r.End.X - 10, r.End.Y - 14, 13, 13);
