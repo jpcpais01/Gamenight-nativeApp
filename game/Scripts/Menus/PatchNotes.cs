@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.49", "Mystery walkouts: after the clues your new star walks out of the players' tunnel through the smoke as a silhouette, then the lights slam on and there he is in his kit, celebrating as his name lands. No more goal roar when packs reveal."),
         ("0.48", "Goalkeepers rebuilt: the ball sits in their gloves, caught where it meets them and gathered in. They step across for what they can reach and dive only for what they can't, rush one-on-ones, come for crosses, then roll, throw or punt it out."),
         ("0.47", "A gift: every club gets 1,000,000 coins, once. Open the store and go wild."),
         ("0.46", "The stadium plays only your crowd recordings now: no more synthesised drums, claps, applause, whistlers, boos, PA chimes, rain or thunder. The recorded crowd still rises with the danger, surges at the goal line and roars for goals; ball, whistle and net sounds stay."),
