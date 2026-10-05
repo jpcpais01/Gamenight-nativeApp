@@ -108,7 +108,8 @@ public sealed partial class AI
             return;
         }
         double t = m.Time - holdStart[k.Team];
-        bool human = k.Team == m.HumanTeam && !m.AutoPlay;
+        // (Yours only comes here once you've held it six seconds: he plays it straight away.)
+        bool human = k == m.Controlled && !m.AutoPlay;
         // Body to the pitch, ball cradled, eyes up.
         k.Facing += M.AngleDiff(k.Facing, dir > 0 ? 0 : Math.PI) * 0.08;
         if (k.Plan != null)
@@ -116,7 +117,7 @@ public sealed partial class AI
             k.WantSpeed = 0;
             return;
         }
-        if (t < (human ? 5 : 0.6))
+        if (t < (human ? 0.2 : 0.6))
         {
             k.WantSpeed = 0;
             return;
@@ -156,7 +157,7 @@ public sealed partial class AI
                 k.Plan = HandPlan(k, throwTo, true, exp);
                 return;
             }
-            if (t > 1.1)
+            if (t > (human ? 0.3 : 1.1))
             {
                 if (roll != null && (throwTo == null || rs + 1 > ts))
                 {
@@ -170,7 +171,7 @@ public sealed partial class AI
                 }
             }
             bool atEdge = M.Dist2D(k.Pos.X, k.Pos.Z, carryX[k.Team], carryZ[k.Team]) < 0.8;
-            if (t > 4.5 || (atEdge && t > 2.2))
+            if (t > (human ? 1.5 : 4.5) || (atEdge && t > 2.2))
             {
                 // Long: to the most open of the front three, a punt or a lower drop-kick.
                 Player? best = null;
@@ -676,8 +677,9 @@ public sealed partial class AI
         if (m.Owner != null && m.Owner.Team == k.Team && m.Owner != k) return false;
         // Ball at his feet: he's playing it as an outfielder (no picking it up mid-dribble).
         if (m.Owner == k) return false;
-        // Back-pass rule: no hands from a teammate's deliberate kick.
-        if (m.LastKicker != null && m.LastKicker.Team == k.Team && m.LastKicker != k && m.LastTouch == m.LastKicker) return false;
+        // Back-pass rule: no hands from a teammate's deliberate kick or throw-in (a header or a
+        // deflection off him is fine).
+        if (m.LastKickFoot && m.LastKicker != null && m.LastKicker.Team == k.Team && m.LastKicker != k && m.LastTouch == m.LastKicker) return false;
         // Only a ball in front of the goal line can be handled.
         if (b.Pos.X * -m.Teams[k.Team].Dir > Pitch.HalfL) return false;
         // A ball in an opponent's control at his feet is for a smother, not for the hands.
@@ -830,6 +832,7 @@ public sealed partial class AI
         m.LastTouch = k;
         m.LastKicker = k;
         m.LastKickTime = m.Time;
+        m.LastKickFoot = false;
         m.PassTarget = null;
     }
 }

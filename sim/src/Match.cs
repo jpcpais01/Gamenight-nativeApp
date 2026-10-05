@@ -209,6 +209,11 @@ public sealed partial class Match
     public Player? LastTouch;
     public Player? LastKicker;
     public double LastKickTime = -10;
+    /// <summary>LastKicker played it with his foot (or threw it in): the back-pass rule applies.
+    /// Headers, deflections and the keeper's own saves don't count.</summary>
+    public bool LastKickFoot;
+    /// <summary>When the ball went into the keeper's hands (the six-second rule).</summary>
+    public double HeldSince;
     public Player? PassTarget;
     /// <summary>Team that last had controlled possession (for team shape).</summary>
     public int PossTeam;

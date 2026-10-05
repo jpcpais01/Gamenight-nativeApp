@@ -125,7 +125,9 @@ public sealed partial class Match
             double sideSign = 0;
             if (plan.Aimed == null)
             {
-                if (Math.Abs(plan.DirZ) > 0.35) sideSign = JsMath.Sign(plan.DirZ);
+                // The computer names a side: in AimZ, or (the drills) by the stick-like direction.
+                if (plan.AimZ is double named) sideSign = JsMath.Sign(named);
+                else if (Math.Abs(plan.DirZ) > 0.35) sideSign = JsMath.Sign(plan.DirZ);
             }
             else if (plan.Aimed == true)
             {
@@ -357,6 +359,7 @@ public sealed partial class Match
         LastTouch = p;
         LastKicker = p;
         LastKickTime = Time;
+        LastKickFoot = true;
         PassTarget = receiver;
         ShotBy = plan.Type == KickType.Shot ? p : null;
         p.TouchCooldown = 0.35;
@@ -531,6 +534,7 @@ public sealed partial class Match
         b.Pos.Z = p.Pos.Z + nz * (PlayerK.Radius + BallK.Radius + 0.01);
         LastTouch = p;
         LastKicker = p;
+        LastKickFoot = false;
         JudgeOffside(p, false);
         PassTarget = null;
         if (Owner != null && Owner != p) Owner = null;
@@ -797,6 +801,7 @@ public sealed partial class Match
         LastTouch = p;
         LastKicker = p;
         LastKickTime = Time;
+        LastKickFoot = false;
         JudgeOffside(p);
         PassTarget = null;
         ShotBy = wantShot ? p : null;
@@ -954,6 +959,7 @@ public sealed partial class Match
             // A ball he's taken at full stretch above his head or down at his feet takes longer to gather.
             k.StartAction(ActionKind.Catch, k.CatchY > 1.9 || k.CatchY < 0.5 ? 0.6 : 0.45, 0, 0);
         }
+        if (HeldBy != k) HeldSince = Time;
         HeldBy = k;
         Owner = null;
         PassTarget = null;

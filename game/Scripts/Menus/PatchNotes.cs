@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.54", "Gameplay fixes: a late penalty is always taken before the whistle; keepers may catch headers and deflections off their own defenders; your keeper can't carry the ball out of his box and plays it after six seconds; strikers leave keepers with the ball alone; no tackling dead balls."),
         ("0.53", "New cards in the FUT style: a shaped card per tier, rating and position over flag and club crest, a name plate and six stats, with bronze lines, silver streaks, gold lattice, neon Legends and rayed Icons. New Ultimate pack and five special packs: Strikeforce, Iron Wall, Safe Hands, One Nation and Signature."),
         ("0.52", "Stadium builder: SURPRISE ME stays on screen when you tap to hide the menus, so you can keep rolling new stadiums with the view clear."),
         ("0.51", "Every stand set now has a finished outside: a base storey in its own material with a band in your club colour, lit gates with canopies, and its own ramp drums, steel stairs or stair towers. Glass facades glow evenly at night instead of looking patchy."),

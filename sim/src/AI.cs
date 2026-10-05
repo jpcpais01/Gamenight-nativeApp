@@ -930,10 +930,14 @@ public sealed partial class AI
 
         TeamPlay();
 
+        // Your keeper sitting on the ball: after six seconds he plays it himself.
+        var gk = m.Controlled;
+        bool keeperSits = gk.Role == Role.GK && m.HeldBy == gk && m.SetPiece == null && gk.Plan == null && m.Time - m.HeldSince > 6;
+
         foreach (var p in m.Players)
         {
             bool isTaker = m.SetPiece != null && m.SetPiece.Taker == p;
-            if (p == m.Controlled && !isTaker && m.Phase != Phase.Goal && !m.AutoPlay) continue;
+            if (p == m.Controlled && !isTaker && !keeperSits && m.Phase != Phase.Goal && !m.AutoPlay) continue;
             Think(p);
         }
     }
@@ -1053,8 +1057,8 @@ public sealed partial class AI
             OffBall(p, true);
             return;
         }
-        // Defending or loose ball.
-        if (Chaser[p.Team] == p)
+        // Defending or loose ball. (The ball in their keeper's hands can't be challenged: drop off.)
+        if (Chaser[p.Team] == p && (m.HeldBy == null || m.HeldBy.Team == p.Team))
         {
             if (m.Owner != null && m.Owner.Team != p.Team)
             {
@@ -1524,7 +1528,12 @@ public sealed partial class AI
             if (m.Rng.Next() < shootP)
             {
                 double pw = M.Clamp(0.55 + distGoal / 40 + m.Rng.Gauss() * 0.12, 0.35, 1.0);
-                p.Plan = Plan(KickType.Shot, dir, m.Rng.Next() < 0.5 ? -1 : 1, pw, -1, m.Time + 1);
+                // He picks a corner (AimZ carries the side) and shapes up toward it.
+                double side = m.Rng.Next() < 0.5 ? -1 : 1;
+                double sx = gx - b.X, sz = side * (Pitch.GoalHalfWidth - 0.55) - b.Z;
+                double sn = Math.Max(0.1, JsMath.Hypot(sx, sz));
+                p.Plan = Plan(KickType.Shot, sx / sn, sz / sn, pw, -1, m.Time + 1);
+                p.Plan.AimZ = side;
                 Dribble(p, true);
                 return;
             }
@@ -1901,7 +1910,7 @@ public sealed partial class AI
             bool human = p.Team == m.HumanTeam && !m.AutoPlay;
             // (In a real match, the other side's goal kick takes a moment longer: the camera drops
             // in behind the keeper to watch it.)
-            double wait = human ? (runUp || sp.Kind == SetPieceKind.Corner ? 20 : 7) : runUp ? 2.6 : sp.Kind == SetPieceKind.FreeKick ? 1.8 : m.AutoPlay ? 1.3 : 2.6;
+            double wait = human ? (runUp || sp.Kind == SetPieceKind.Corner || sp.Kind == SetPieceKind.GoalKick ? 20 : 7) : runUp ? 2.6 : sp.Kind == SetPieceKind.FreeKick ? 1.8 : m.AutoPlay ? 1.3 : 2.6;
             if (sp.T > wait && p.Plan == null) PlanSetPiece(p);
             return;
         }

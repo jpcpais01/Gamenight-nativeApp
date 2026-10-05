@@ -26,7 +26,8 @@ public sealed partial class Match
         double over = Clock - (MatchK.HalfSeconds * (45 + AddedTime)) / 45;
         bool inBox = Math.Abs(ball.Pos.X) > Pitch.HalfL - Pitch.BoxDepth && Math.Abs(ball.Pos.Z) < Pitch.BoxHalfWidth;
         bool attack = inBox || (Math.Abs(ball.Pos.X) > Pitch.HalfL / 3 && Teams[PossTeam].Dir == JsMath.Sign(ball.Pos.X) && HeldBy == null);
-        if (running && over >= 0 && ((Phase == Phase.Play && !attack) || Phase == Phase.Out || over >= (MatchK.HalfSeconds * 3) / 45))
+        // A penalty, once given, is always taken.
+        if (running && over >= 0 && !PenaltyPending && ((Phase == Phase.Play && !attack) || Phase == Phase.Out || over >= (MatchK.HalfSeconds * 3) / 45))
         {
             pendingRestart = null;
             SetPiece = null;
@@ -93,6 +94,7 @@ public sealed partial class Match
         CollidePlayers();
         ConfineToPitch();
         KeepRestartDistance();
+        KeepHeldInBox();
 
         // Action resolution (kicks, tackles).
         foreach (var p in Players) ResolveActions(p);
@@ -298,6 +300,8 @@ public sealed partial class Match
             if (attacking)
             {
                 if (ev.Kind != ButtonKind.Up) continue;
+                // Play's stopped: nothing to strike (a queued pass would go off after the restart).
+                if (Phase == Phase.Out || Phase == Phase.Halftime || Phase == Phase.Fulltime) continue;
                 // Pressed before the last player switch: cancelled by it.
                 if (ev.Hold > SwitchT + 0.05) continue;
                 double ax = m > 0.12 ? input.MoveX / m : JsMath.Cos(c.Facing);
@@ -351,7 +355,7 @@ public sealed partial class Match
             else
             {
                 if (ev.Btn == Btn.B && ev.Kind == ButtonKind.Down) ManualSwitch();
-                if (ev.Btn == Btn.A && ev.Kind == ButtonKind.Down)
+                if (ev.Btn == Btn.A && ev.Kind == ButtonKind.Down && Phase == Phase.Play)
                 {
                     bool dbl = Time - lastTackleTap < 0.32;
                     lastTackleTap = Time;

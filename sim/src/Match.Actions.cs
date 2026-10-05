@@ -167,6 +167,30 @@ public sealed partial class Match
         }
     }
 
+    /// <summary>
+    /// A keeper with the ball in his hands can carry it anywhere in his area but not out of it
+    /// (a ratchet, like the restart distance: caught at the edge, he just can't go further).
+    /// </summary>
+    void KeepHeldInBox()
+    {
+        var k = HeldBy;
+        if (k == null || k.Role != Role.GK || SetPiece != null) return;
+        double own = -Teams[k.Team].Dir;
+        double edge = Math.Max(Pitch.BoxDepth - 0.6, Pitch.HalfL - k.PrevPos.X * own);
+        if (Pitch.HalfL - k.Pos.X * own > edge)
+        {
+            k.Pos.X = own * (Pitch.HalfL - edge);
+            if (k.Vel.X * own < 0) k.Vel.X = 0;
+        }
+        double side = Math.Max(Pitch.BoxHalfWidth - 0.6, Math.Abs(k.PrevPos.Z));
+        if (Math.Abs(k.Pos.Z) > side)
+        {
+            double s = JsMath.Sign(k.Pos.Z);
+            k.Pos.Z = s * side;
+            if (k.Vel.Z * s > 0) k.Vel.Z = 0;
+        }
+    }
+
     void ConfineToPitch()
     {
         const double lx = Pitch.HalfL + 4;
@@ -322,7 +346,7 @@ public sealed partial class Match
             else if (plan != null && Time < plan.Expires) p.Plan = plan; // missed it: stay queued and try again
         }
 
-        if ((p.Action == ActionKind.Tackle || p.Action == ActionKind.Slide) && !p.ActionDone)
+        if ((p.Action == ActionKind.Tackle || p.Action == ActionKind.Slide) && !p.ActionDone && Phase == Phase.Play)
         {
             bool slide = p.Action == ActionKind.Slide;
             if (TackleLeg(p, out var leg))
@@ -648,6 +672,7 @@ public sealed partial class Match
             if (Advantage == null)
             {
                 p.Action = slide ? ActionKind.Slide : ActionKind.Stumble;
+                p.ActionT = slide ? p.ActionT : 0;
                 p.ActionDur = slide ? p.ActionDur : 0.4;
                 return;
             }
