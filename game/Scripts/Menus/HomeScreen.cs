@@ -521,7 +521,7 @@ public sealed partial class HomeScreen : PxCanvas
         Px.Frame(this, down ? k.Translated(Vector2.One * 2) : k, new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.85f), new Color(Px.Cyan, 0.6f), down ? null : Px.ShadowSoft, 2, 3);
         Px.TextC(this, Px.Small, k.GetCenter().X + (down ? 2 : 0), k.GetCenter().Y + 4 + (down ? 2 : 0), "PHONE CONTROLLER", 8, Px.Cyan);
         Tap("phone", k, () => _ui.Open(new Link.PhoneModal(_ui)));
-        string s = host.PhoneConnected ? "PHONE CONNECTED" : host.WebAddress != "" ? "SCAN THE CODE WITH ANY PHONE" : "";
+        string s = host.PhoneConnected ? "PHONE CONNECTED" : $"PAIRING CODE {host.Code}";
         Px.Text(this, Px.Small, new Vector2(k.End.X + 12, H - 11), Px.Fit(Px.Small, s, 8, x1 - k.End.X - 12), 8, host.PhoneConnected ? Px.Win : Px.InkDim);
     }
 

@@ -42,7 +42,11 @@ let W = 0, H = 0, S = 1, inset = {l:0, r:0, t:0, b:0};
 const now = () => performance.now();
 
 // What the PC said last.
-let mode = 0, picked = -1, live = false, statusAt = -1e9, ping = -1, pcName = '';
+let mode = 0, picked = -1, live = false, paired = false, statusAt = -1e9, ping = -1, pcName = '';
+// The pairing code: from the QR code's link, else the one that worked last time, else typed.
+const urlCode = parseInt(new URLSearchParams(location.search).get('c') || '', 10);
+let code = urlCode > 0 ? urlCode : parseInt(store('gnCode') || '0', 10) || 0, entry = '', tried = false, keys = [];
+function store(k, v) { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (_) { return null; } }
 // The controls.
 const nonce = (Math.floor(Math.random() * 0x7ffffffe) + 1) >>> 0;
 let moveX = 0, moveY = 0, sprintDown = false, sprintSwipe = 0, sprintStart = null;
@@ -74,13 +78,16 @@ function connect() {
   ws.binaryType = 'arraybuffer';
   ws.onmessage = e => {
     const d = new DataView(e.data);
-    if (d.byteLength < 11 || d.getUint8(0) !== 71 || d.getUint8(1) !== 78 || d.getUint8(2) !== 4) return;
+    if (d.byteLength < 12 || d.getUint8(0) !== 71 || d.getUint8(1) !== 78 || d.getUint8(2) !== 4) return;
     const rtt = ((now() >>> 0) - d.getUint32(4, true)) >>> 0;
     if (rtt < 2000) ping = ping < 0 ? rtt : ping + (rtt - ping) * 0.1;
     live = d.getUint8(8) !== 0;
     mode = Math.min(5, d.getUint8(9));
     picked = d.getInt8(10);
-    pcName = new TextDecoder().decode(new Uint8Array(e.data, 11));
+    const ok = d.getUint8(11) !== 0;
+    if (ok && !paired) store('gnCode', String(code));
+    paired = ok;
+    pcName = new TextDecoder().decode(new Uint8Array(e.data, 12));
     statusAt = now();
   };
   ws.onclose = () => { ws = null; setTimeout(connect, 500); };
@@ -92,9 +99,9 @@ const connected = () => now() - statusAt < 1500;
 function send() {
   if (!ws || ws.readyState !== 1) return;
   const ev = events.slice(-12);
-  const buf = new ArrayBuffer(40 + ev.length * 5), d = new DataView(buf);
+  const buf = new ArrayBuffer(42 + ev.length * 5), d = new DataView(buf);
   let o = 0;
-  for (const b of [71, 78, 3, 1]) d.setUint8(o++, b);
+  for (const b of [71, 78, 3, 2]) d.setUint8(o++, b);
   d.setUint32(o, nonce, true); o += 4;
   d.setUint32(o, now() >>> 0, true); o += 4;
   d.setUint8(o++, view === 'controls' ? 0 : 1);
@@ -117,6 +124,7 @@ function send() {
   d.setUint16(o, clickId & 0xffff, true); o += 2;
   d.setFloat32(o, curX, true); o += 4;
   d.setFloat32(o, curY, true); o += 4;
+  d.setUint16(o, code & 0xffff, true);
   ws.send(buf);
 }
 
@@ -152,6 +160,10 @@ function joyMove(p) {
 }
 
 function down(id, p) {
+  if (view === 'code') {
+    for (const k of keys) if (inRect(k.r, p)) key(k.k);
+    return;
+  }
   if (view === 'controls') {
     if (inRect(pauseRect, p)) { backId++; return; }
     let hit = -1, best = 1e9;
@@ -222,7 +234,7 @@ let last = now();
 function frame() {
   const t = now(), dt = Math.min(0.1, (t - last) / 1000);
   last = t;
-  const want = !connected() ? 'wait' : live ? 'controls' : 'pad';
+  const want = !connected() ? 'wait' : !paired ? 'code' : live ? 'controls' : 'pad';
   if (want !== view) { releaseAll(); view = want; }
   for (let i = 0; i < 3; i++) if (held[i]) holdT[i] += dt;
   events = events.filter(e => t - e.t < 500).slice(-12);
@@ -264,6 +276,7 @@ function draw(sec) {
   g.font = font(15 * S); g.textAlign = 'right'; g.textBaseline = 'middle'; g.fillStyle = 'rgba(244,239,227,0.7)';
   g.fillText((pcName + (ping >= 0 ? '  ·  ' + Math.round(ping) + ' ms' : '')).toUpperCase(), W - inset.r - 30 * S, inset.t + 24 * S);
   g.fillStyle = '#6ff0a8'; g.fillRect(W - inset.r - 22 * S, inset.t + 20 * S, 8 * S, 8 * S);
+  if (view === 'code') return drawCode();
   if (view === 'pad') return drawPad();
   pauseRect = {x: W / 2 - 50 * S, y: inset.t + 8 * S, w: 100 * S, h: 34 * S};
   box(pauseRect, 'rgba(28,24,70,0.92)', 'rgba(190,200,255,0.3)');
@@ -294,6 +307,35 @@ function draw(sec) {
     g.strokeStyle = ACCENT; g.beginPath(); g.arc(c.x, c.y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); g.stroke();
   }
   if (cel && picked < 0) label(W - inset.r - 140 * S, H - 240 * S, 'C E L E B R A T E', 15 * S, '#ffe08a');
+}
+function key(k) {
+  if (k === 'DEL') { entry = entry.slice(0, -1); return; }
+  if (entry.length >= 4) return;
+  entry += k;
+  if (entry.length === 4) { code = parseInt(entry, 10); entry = ''; tried = true; }
+}
+function drawCode() {
+  const x = inset.l + 40 * S;
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  g.font = font(40 * S); g.fillStyle = INK; g.fillText('PAIRING CODE', x, inset.t + 60 * S);
+  g.font = font(17 * S); g.fillStyle = '#6ff0a8'; g.fillText('Found ' + pcName + '.', x, inset.t + 92 * S);
+  g.fillStyle = 'rgba(244,239,227,0.7)';
+  g.fillText("Type the 4-digit code on the PC's screen", x, inset.t + 116 * S);
+  g.fillText('(home screen > PHONE CONTROLLER).', x, inset.t + 138 * S);
+  for (let i = 0; i < 4; i++) {
+    const r = {x: x + i * 58 * S, y: inset.t + 160 * S, w: 48 * S, h: 60 * S};
+    box(r, 'rgba(16,14,44,0.86)', i === entry.length ? CYAN : 'rgba(190,200,255,0.3)');
+    if (i < entry.length) label(r.x + r.w / 2, r.y + r.h / 2, entry[i], 40 * S, GOLD);
+  }
+  if (tried && entry.length === 0) { g.textAlign = 'left'; g.font = font(22 * S); g.fillStyle = '#ff8a7a'; g.fillText('Wrong code, try again', x, inset.t + 260 * S); }
+  const kw = 74 * S, kh = 56 * S, gap = 8 * S, kx = W - inset.r - 30 * S - kw * 3 - gap * 2, ky = (H - kh * 4 - gap * 3) / 2 + 10 * S;
+  keys = [];
+  ['1','2','3','4','5','6','7','8','9','DEL','0'].forEach((k, i) => {
+    const r = {x: kx + (i % 3) * (kw + gap), y: ky + Math.floor(i / 3) * (kh + gap), w: kw, h: kh};
+    keys.push({k, r});
+    box(r, 'rgba(28,24,70,0.92)', 'rgba(190,200,255,0.3)');
+    label(r.x + kw / 2, r.y + kh / 2, k, (k === 'DEL' ? 20 : 32) * S, INK);
+  });
 }
 function drawPad() {
   pauseRect = null;

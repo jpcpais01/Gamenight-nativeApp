@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.84", "Phone controllers now pair with a 4-digit code shown on the PC (PHONE CONTROLLER on its home screen). Type it once and the phone remembers it; scanning the PC's QR code pairs by itself. NEW CODE makes every phone pair again."),
         ("0.83", "An iPhone (or any phone) can now be the controller for GameNight on a PC, no app needed: tap PHONE CONTROLLER on the PC's home screen, scan the code with the phone's camera and turn it sideways. Same stick, buttons and swipes, and a touchpad in the menus."),
         ("0.82", "League: SIMULATE now lets you watch your match. The real game plays out with the computer running both sides (walk-out, replays, crowd, all of it) and its result counts in the table. Skip to full time whenever you like, or still take an instant result."),
         ("0.81", "Substitutions: SUBSTITUTIONS in the pause menu shows your eleven with their legs left and your bench of seven. Tap one of each; he comes on at the next stoppage, five changes a match. Computer managers make their own changes from the hour."),

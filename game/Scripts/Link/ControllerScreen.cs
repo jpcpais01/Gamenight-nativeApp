@@ -10,7 +10,8 @@ namespace GameNight.Link;
 
 /// <summary>
 /// The phone as a controller for GameNight on a PC (Home → PLAY ON PC). It finds the PC on the
-/// home Wi-Fi by itself (or by its address, typed in), then shows the match's own touch
+/// home Wi-Fi by itself (or by its address, typed in), asks once for the 4-digit code the PC
+/// shows (and remembers it), then shows the match's own touch
 /// controls, stick, buttons, swipes and all, and sends their state every frame and on every
 /// touch. When the PC is in its menus, paused or showing a replay, the phone turns into a
 /// touchpad: slide to move the mouse, tap to click, hold CLICK to drag, BACK to go back.
@@ -29,7 +30,8 @@ public sealed partial class ControllerScreen : PxCanvas
     string _targetName = "";
     double _targetAt, _statusAt = -100, _helloAt = -100, _now;
     float _ping = -1;
-    bool _live;
+    bool _live, _paired, _tried;
+    string _entry = "";
     Wire.View _view = Wire.View.Pad;
 
     readonly List<(double At, Wire.NumberedEvent E)> _ring = new();
@@ -69,6 +71,7 @@ public sealed partial class ControllerScreen : PxCanvas
         {
             string last = (string)cfg.GetValue("pc", "address", "");
             if (IPAddress.TryParse(last, out _)) _found.Add((last, ""));
+            _out.Code = (ushort)(int)cfg.GetValue("pc", "code", 0);
         }
     }
 
@@ -96,7 +99,7 @@ public sealed partial class ControllerScreen : PxCanvas
                         break;
                     }
         }
-        var want = Connected && _live ? Wire.View.Controls : Wire.View.Pad;
+        var want = Connected && _paired && _live ? Wire.View.Controls : Wire.View.Pad;
         if (want != _view) Switch(want);
         _controls.Tick((float)delta);
         Send();
@@ -137,10 +140,11 @@ public sealed partial class ControllerScreen : PxCanvas
                     if (i >= 0) _found[i] = (ip, name);
                     else _found.Add((ip, name));
                 }
-                else if (Wire.ReadStatus(b, b.Length, out uint echo, out bool live, out int mode, out int picked, out string name)
+                else if (Wire.ReadStatus(b, b.Length, out uint echo, out bool live, out int mode, out int picked, out bool paired, out string name)
                          && _target != null && ep.Address.Equals(_target.Address))
                 {
-                    if (!Connected) Remember(ip);
+                    if (paired && !_paired) Remember(ip, _out.Code);
+                    _paired = paired;
                     _statusAt = _now;
                     _targetName = name;
                     _live = live;
@@ -163,10 +167,11 @@ public sealed partial class ControllerScreen : PxCanvas
         _helloAt = -100;
     }
 
-    static void Remember(string ip)
+    static void Remember(string ip, int code)
     {
         var cfg = new ConfigFile();
         cfg.SetValue("pc", "address", ip);
+        cfg.SetValue("pc", "code", code);
         cfg.Save(SaveFile);
     }
 
@@ -219,7 +224,7 @@ public sealed partial class ControllerScreen : PxCanvas
     public void Back()
     {
         if (_typed != null) CloseTyping();
-        else if (Connected) _out.BackId++;
+        else if (Connected && _paired) _out.BackId++;
         else Exit?.Invoke();
     }
 
@@ -227,7 +232,7 @@ public sealed partial class ControllerScreen : PxCanvas
 
     public override void _Input(InputEvent e)
     {
-        if (!Connected) return;
+        if (!Connected || !_paired) return;
         if (e is InputEventScreenTouch t)
         {
             var p = ((InputEventScreenTouch)MakeInputLocal(t)).Position;
@@ -335,6 +340,12 @@ public sealed partial class ControllerScreen : PxCanvas
             Searching(W, H);
             return;
         }
+        if (!_paired)
+        {
+            _pauseRect = _padRect = _clickRect = _backRect = new Rect2();
+            Pairing(W, H);
+            return;
+        }
         Px.Scanlines(this, new Rect2(0, 0, W, H));
         SmallKey(_exitRect, "EXIT", Px.Ink);
         string link = _targetName + (_ping >= 0 ? $" · {Mathf.RoundToInt(_ping)} MS" : "");
@@ -368,6 +379,50 @@ public sealed partial class ControllerScreen : PxCanvas
     {
         Px.Frame(this, r, Px.Glass2, Px.Line2, Px.ShadowSoft, 2, 3);
         Px.TextC(this, Px.Big, r.GetCenter().X, r.GetCenter().Y + 7, label, 20, ink);
+    }
+
+    /// <summary>Found the PC: its 4-digit code, typed on a keypad (sent as soon as it's whole).</summary>
+    void Pairing(float W, float H)
+    {
+        Px.Scanlines(this, new Rect2(0, 0, W, H));
+        BackButton(new Vector2(16, 12), () => Exit?.Invoke());
+        Title(new Vector2(70, 42), "PAIRING CODE", 36);
+        float x = 70;
+        Px.Text(this, Px.Small, new Vector2(x, 82), $"FOUND {_targetName.ToUpperInvariant()}.", 8, Px.Win);
+        Px.Text(this, Px.Small, new Vector2(x, 100), "TYPE THE 4-DIGIT CODE ON THE PC'S SCREEN", 8, Px.InkDim);
+        Px.Text(this, Px.Small, new Vector2(x, 116), "(HOME SCREEN > PHONE CONTROLLER).", 8, Px.InkDim);
+        for (int i = 0; i < 4; i++)
+        {
+            var r = new Rect2(x + i * 58, 140, 48, 60);
+            Px.Frame(this, r, Px.Glass, i == _entry.Length ? Px.Cyan : Px.Line2, null, 2, 0);
+            if (i < _entry.Length) Px.TextC(this, Px.Big, r.GetCenter().X, r.GetCenter().Y + 14, _entry[i].ToString(), 40, Px.Gold);
+        }
+        if (_tried && _entry.Length == 0) Px.Text(this, Px.Big, new Vector2(x, 236), "WRONG CODE, TRY AGAIN", 22, Px.Loss);
+        // The keypad, on the right.
+        float kw = 74, kh = 56, kx = W - 30 - kw * 3 - 16, ky = (H - kh * 4 - 24) / 2 + 10;
+        string[] keys = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "DEL", "0", "" };
+        for (int i = 0; i < keys.Length; i++)
+        {
+            if (keys[i] == "") continue;
+            string k = keys[i];
+            var r = new Rect2(kx + i % 3 * (kw + 8), ky + i / 3 * (kh + 8), kw, kh);
+            GhostButton("k" + k, r, k, k == "DEL" ? 22 : 34, () => Key(k));
+        }
+    }
+
+    void Key(string k)
+    {
+        if (k == "DEL")
+        {
+            if (_entry.Length > 0) _entry = _entry[..^1];
+            return;
+        }
+        if (_entry.Length >= 4) return;
+        _entry += k;
+        if (_entry.Length < 4) return;
+        _out.Code = ushort.Parse(_entry);
+        _entry = "";
+        _tried = true;
     }
 
     /// <summary>Not connected yet: how it works, what was found, and typing the address.</summary>

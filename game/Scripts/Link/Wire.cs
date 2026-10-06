@@ -9,7 +9,7 @@ namespace GameNight.Link;
 /// The phone-as-controller protocol: small UDP packets on the home network. The phone shouts
 /// HELLO (broadcast) until a PC answers HERE; then it sends its whole controller state every
 /// frame (INPUT) and the PC answers each one with STATUS (what the buttons say, and the phone's
-/// own clock echoed back for the ping). Each packet carries everything, so a lost one costs
+/// own clock echoed back for the ping). The PC only takes input carrying its pairing code. Each packet carries everything, so a lost one costs
 /// nothing: the next is a frame behind. Button presses and tackles are numbered and repeated
 /// for half a second, so the PC plays each exactly once even if a packet goes missing.
 /// </summary>
@@ -17,7 +17,7 @@ public static class Wire
 {
     public const int Port = 47820;
     public const byte Hello = 1, Here = 2, Input = 3, Status = 4;
-    const byte Version = 1;
+    const byte Version = 2;
 
     /// <summary>What the phone shows: the match controls, or a touchpad for the menus.</summary>
     public enum View : byte { Controls, Pad }
@@ -44,6 +44,8 @@ public static class Wire
         /// <summary>The touchpad's travel so far (in widths of the PC's window) and its held click.</summary>
         public float CursorX, CursorY;
         public bool MouseDown;
+        /// <summary>The pairing code typed on the phone (shown on the PC); 0 for none yet.</summary>
+        public ushort Code;
     }
 
     public static bool Is(byte[] b, int n, byte type) => n >= 4 && b[0] == 'G' && b[1] == 'N' && b[2] == type && b[3] == Version;
@@ -72,28 +74,31 @@ public static class Wire
 
     public static string ReadHere(byte[] b, int n) => Encoding.UTF8.GetString(b, 4, Math.Max(0, n - 4));
 
-    public static int WriteStatus(byte[] b, uint echo, bool live, int mode, int picked, string name)
+    /// <summary>The PC's answer; `paired` says the phone's code was right (else it's ignored).</summary>
+    public static int WriteStatus(byte[] b, uint echo, bool live, int mode, int picked, bool paired, string name)
     {
         int o = Head(b, Status);
         o = U32(b, o, echo);
         b[o++] = (byte)(live ? 1 : 0);
         b[o++] = (byte)mode;
         b[o++] = (byte)(sbyte)picked;
+        b[o++] = (byte)(paired ? 1 : 0);
         return Str(b, o, name);
     }
 
-    public static bool ReadStatus(byte[] b, int n, out uint echo, out bool live, out int mode, out int picked, out string name)
+    public static bool ReadStatus(byte[] b, int n, out uint echo, out bool live, out int mode, out int picked, out bool paired, out string name)
     {
         echo = 0;
-        live = false;
+        live = paired = false;
         mode = picked = 0;
         name = "";
-        if (!Is(b, n, Status) || n < 11) return false;
+        if (!Is(b, n, Status) || n < 12) return false;
         echo = RU32(b, 4);
         live = b[8] != 0;
         mode = b[9];
         picked = (sbyte)b[10];
-        name = Encoding.UTF8.GetString(b, 11, n - 11);
+        paired = b[11] != 0;
+        name = Encoding.UTF8.GetString(b, 12, n - 12);
         return true;
     }
 
@@ -129,12 +134,13 @@ public static class Wire
         o = U16(b, o, p.ClickId);
         o = F32(b, o, p.CursorX);
         o = F32(b, o, p.CursorY);
+        o = U16(b, o, p.Code);
         return o;
     }
 
     public static bool ReadPad(byte[] b, int n, Pad p)
     {
-        if (!Is(b, n, Input) || n < 30) return false;
+        if (!Is(b, n, Input) || n < 42) return false;
         try
         {
             int o = 4;
@@ -167,7 +173,8 @@ public static class Wire
             p.BackId = RU16(b, o); o += 2;
             p.ClickId = RU16(b, o); o += 2;
             p.CursorX = BitConverter.ToSingle(b, o); o += 4;
-            p.CursorY = BitConverter.ToSingle(b, o);
+            p.CursorY = BitConverter.ToSingle(b, o); o += 4;
+            p.Code = RU16(b, o);
             return true;
         }
         catch (ArgumentException) { return false; }

@@ -12,16 +12,16 @@ public sealed partial class PhoneModal : Modal
 
     public PhoneModal(Menus.Menus ui) : base(ui) { }
 
-    protected override Vector2 BoxSize => new(620, 330);
+    protected override Vector2 BoxSize => new(640, 380);
 
     protected override void PaintBox(Rect2 box)
     {
         var host = Host.Instance;
-        string url = host?.WebAddress ?? "";
-        if (url != _url)
+        string url = host?.WebAddress ?? "", qrText = host?.PairingAddress ?? "";
+        if (qrText != _url)
         {
-            _url = url;
-            _qr = url != "" ? Qr.Encode(url) : null;
+            _url = qrText;
+            _qr = qrText != "" ? Qr.Encode(qrText) : null;
         }
         float x = box.Position.X + 24, y = box.Position.Y + 28;
         Kicker(new Vector2(x, y), "Phone as controller");
@@ -55,12 +55,17 @@ public sealed partial class PhoneModal : Modal
         }
         Line("IPHONE OR ANY PHONE, NO APP NEEDED", Px.Cyan, 9);
         Line("1. PUT IT ON THE SAME WI-FI AS THIS PC.", Px.Ink);
-        Line("2. POINT ITS CAMERA AT THE CODE AND OPEN THE LINK, OR TYPE THIS IN SAFARI:", Px.Ink);
+        Line("2. POINT ITS CAMERA AT THE QR AND OPEN THE LINK (IT PAIRS BY ITSELF), OR TYPE THIS IN SAFARI:", Px.Ink);
         if (url != "") Px.Text(this, Px.Big, new Vector2(tx, ty + 12), url.Replace("http://", ""), 24, Px.Gold);
         ty += 26;
         Line("3. TURN THE PHONE SIDEWAYS. SHARE > ADD TO HOME SCREEN MAKES IT FULL SCREEN.", Px.Ink);
         ty += 4;
         Line("ANDROID WITH THE GAMENIGHT APP: TAP PLAY ON PC ON ITS HOME SCREEN.", Px.InkDim);
+        // The pairing code, big, with a key for a new one (every phone pairs again).
+        int code = host?.Code ?? 0;
+        Px.Text(this, Px.Small, new Vector2(x, qr.End.Y + 22), "PAIRING CODE", 8, Px.InkDim);
+        Px.Text(this, Px.Big, new Vector2(x, qr.End.Y + 58), code.ToString(), 44, Px.Gold, new Color(0, 0, 0, 0.5f), 3);
+        GhostButton("newcode", new Rect2(x + 100, qr.End.Y + 26, 86, 32), "NEW CODE", 18, () => host?.NewCode());
         bool on = host?.PhoneConnected == true;
         Px.Text(this, Px.Big, new Vector2(tx, box.End.Y - 22), on ? "PHONE CONNECTED" : "WAITING FOR A PHONE...", 22, on ? Px.Win : Px.InkDim);
     }

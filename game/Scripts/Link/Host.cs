@@ -60,6 +60,7 @@ public sealed partial class Host : Node
         Instance = this;
         ProcessMode = ProcessModeEnum.Always;
         if (!_pc) return;
+        LoadCode();
         if (!OS.HasFeature("editor")) DisplayServer.WindowSetMode(DisplayServer.WindowMode.ExclusiveFullscreen);
         try
         {
@@ -130,6 +131,33 @@ public sealed partial class Host : Node
     /// <summary>The controller web page's address, for any phone's browser ("" if not serving).</summary>
     public string WebAddress => _web?.Serving == true && Address != "" ? $"http://{Address}:{WebLink.Port}" : "";
 
+    /// <summary>The page with the pairing code in it, for the QR code (scanning it pairs).</summary>
+    public string PairingAddress => WebAddress != "" ? $"{WebAddress}/?c={Code}" : "";
+
+    /// <summary>The pairing code: a phone must send it before its input counts. Kept between
+    /// sessions so a paired phone stays paired, until a new one is picked.</summary>
+    public int Code { get; private set; }
+    const string CodeFile = "user://link.cfg";
+
+    void LoadCode()
+    {
+        var cfg = new ConfigFile();
+        cfg.Load(CodeFile);
+        Code = (int)cfg.GetValue("pairing", "code", 0);
+        if (Code < 1000 || Code > 9999) NewCode();
+    }
+
+    /// <summary>A fresh code: every phone has to pair again.</summary>
+    public void NewCode()
+    {
+        int old = Code;
+        while (Code == old) Code = Random.Shared.Next(1000, 10000);
+        var cfg = new ConfigFile();
+        cfg.SetValue("pairing", "code", Code);
+        cfg.Save(CodeFile);
+        lock (_gate) _phoneAt = -100000;
+    }
+
     // ---------------------------------------------------------------- network thread
 
     void Listen()
@@ -172,9 +200,10 @@ public sealed partial class Host : Node
     /// and the STATUS answer written into `buf` (its length returned). Any thread.</summary>
     internal int Answer(Wire.Pad rx, IPEndPoint ep, byte[] buf)
     {
-        Take(rx, ep);
+        bool paired = rx.Code == Code;
+        if (paired) Take(rx, ep);
         bool live = Now - Volatile.Read(ref _liveAt) < 250;
-        return Wire.WriteStatus(buf, rx.Time, live, _mode, _picked, _name);
+        return Wire.WriteStatus(buf, rx.Time, live, _mode, _picked, paired, _name);
     }
 
     /// <summary>A phone's packet: its state replaces the last; numbered presses, tackles, backs
