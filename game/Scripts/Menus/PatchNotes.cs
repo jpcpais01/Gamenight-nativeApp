@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.78", "High balls to you are kept, even when pressed: he chests it, lets it drop or cushions it down with his head. He only nods it on when a team-mate close by is free to take it. Headers at goal near the box are unchanged."),
         ("0.77", "Through balls join the new passing: the stick picks the runner the same way (within 50° of it), the hold how deep, and a defender there first or across the lane counts against him, as for a pass to feet."),
         ("0.76", "Passing rebuilt, mobile-style: the stick picks the man, the hold how far. Passes go to his feet (or into his stride), crisp, and long ones are lifted. He comes to the ball, team-mates leave it, and passes and first touches are cleaner."),
         ("0.75", "A new pause menu: one card with Resume, Restart and Leave on the left and the settings on the right in sections (Picture, Match, Performance), each a tile that shows its value and moves on with a tap. In training it offers Restart drill and End training."),

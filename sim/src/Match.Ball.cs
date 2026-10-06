@@ -565,6 +565,17 @@ public sealed partial class Match
         {
             // Head it only when he means to (or must); otherwise he takes it down. A ball dropping
             // onto him from above chest height he lets come down onto the chest.
+            if (pl == Controlled && pl.Team == HumanTeam && !AutoPlay && pl.Plan == null && !HeadsAtGoal(pl))
+            {
+                // Yours: he keeps a high ball, pressed or not. He only nods it on when a team-mate
+                // close by is free to take it; otherwise chest, let it drop, or cushion it down.
+                var mate = OpenMateNear(pl);
+                if (mate != null) Header(pl, challenged, mate);
+                else if (h <= ChestMax) ControlTouch(pl, challenged);
+                else if (Ball.Vel.Y < -0.5 && DropsOnto(pl)) return;
+                else CushionHeader(pl, challenged);
+                return;
+            }
             if (challenged || ShouldHead(pl)) Header(pl, challenged);
             else if (h > ChestTop && Ball.Vel.Y < -0.5 && DropsOnto(pl)) return;
             else if (h > ChestMax) Header(pl, false);
@@ -755,7 +766,7 @@ public sealed partial class Match
         }
     }
 
-    void ControlTouch(Player p)
+    void ControlTouch(Player p, bool challenged = false)
     {
         var b = Ball;
         double h = b.Pos.Y;
@@ -771,6 +782,8 @@ public sealed partial class Match
         double err = rel * (0.045 + (1 - q) * 0.08 + heightPen * 0.05) * Math.Abs(1 + Rng.Gauss() * 0.5) * (1 + 1.3 * stretched);
         // Yours, taking a pass played to him: a cleaner first touch.
         if (p.Team == HumanTeam && PassTarget == p) err *= 0.6;
+        // Taken with a man leaning into him: it doesn't sit as kindly.
+        if (challenged) err *= 1.5;
         DribbleDir(p, tmpV);
         bool moving = p.WantSpeed > 0.3;
         double push = (moving ? 1.0 + p.Speed * 0.15 : 0.3) * (1 - 0.6 * stretched);
@@ -823,7 +836,58 @@ public sealed partial class Match
         return JsMath.Hypot(dx, dz) < 0.75;
     }
 
-    void Header(Player p, bool challenged = false)
+    bool HeadsAtGoal(Player p) =>
+        M.Dist2D(Ball.Pos.X, Ball.Pos.Z, Pitch.HalfL * Teams[p.Team].Dir, 0) < 13;
+
+    /// <summary>
+    /// A team-mate within a short nod who is free to take it: nobody on him, and a lane that's his.
+    /// </summary>
+    Player? OpenMateNear(Player p)
+    {
+        Player? best = null;
+        double bestC = double.MaxValue;
+        var team = Teams[p.Team];
+        foreach (var q in team.Players)
+        {
+            if (q == p || q.Role == Role.GK) continue;
+            double d = M.Dist2D(q.Pos.X, q.Pos.Z, Ball.Pos.X, Ball.Pos.Z);
+            if (d < 3 || d > 15) continue;
+            if (NearestOpponentDist(q) < 3) continue;
+            if (AI.PassMargin(p, q) < 0.4) continue;
+            // The nearer the better; a little preference for one facing play.
+            double c = d - (q.Pos.X - p.Pos.X) * team.Dir * 0.15;
+            if (c < bestC)
+            {
+                bestC = c;
+                best = q;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>He kills a high ball with his head: it drops just ahead of him to keep.</summary>
+    void CushionHeader(Player p, bool challenged)
+    {
+        var b = Ball;
+        DribbleDir(p, tmpV);
+        double ea = Rng.Next() * Math.PI * 2;
+        double err = (0.3 + (1 - p.Attrs.Control) * 0.6) * (challenged ? 1.8 : 1) * Math.Abs(Rng.Gauss());
+        b.Kick(p.Vel.X * 0.9 + tmpV.X * 1.2 + JsMath.Cos(ea) * err, 0.4, p.Vel.Z * 0.9 + tmpV.Z * 1.2 + JsMath.Sin(ea) * err, 0, 0, 0);
+        b.OnGround = false;
+        p.StartAction(ActionKind.Header, 0.4, tmpV.X, tmpV.Z);
+        p.TouchCooldown = 0.25;
+        p.SinceTouch = 0;
+        p.TouchH = b.Pos.Y;
+        Owner = null;
+        LastTouch = p;
+        JudgeOffside(p);
+        PassTarget = null;
+        PossTeam = p.Team;
+        Events.Kicks.Add(0.15);
+        SetControlled(p);
+    }
+
+    void Header(Player p, bool challenged = false, Player? layTo = null)
     {
         var b = Ball;
         var team = Teams[p.Team];
@@ -834,7 +898,16 @@ public sealed partial class Match
         double speed;
         double up;
         bool wantShot = (p.Plan?.Type == KickType.Shot || distGoal < (p == Controlled ? 13 : 16)) && distGoal < 20;
-        if (wantShot)
+        if (layTo != null)
+        {
+            // Nodded into a free team-mate's stride, weighted for his feet.
+            dirX = layTo.Pos.X + layTo.Vel.X * 0.4 - b.Pos.X;
+            dirZ = layTo.Pos.Z + layTo.Vel.Z * 0.4 - b.Pos.Z;
+            speed = M.Clamp(4 + JsMath.Hypot(dirX, dirZ) * 0.5, 5, 11);
+            up = 0.03;
+            wantShot = false;
+        }
+        else if (wantShot)
         {
             double tz = (Rng.Next() < 0.5 ? -1 : 1) * (Pitch.GoalHalfWidth - 0.8);
             dirX = gx - b.Pos.X;
@@ -878,9 +951,11 @@ public sealed partial class Match
         LastKickTime = Time;
         LastKickFoot = false;
         JudgeOffside(p);
-        PassTarget = null;
+        PassTarget = layTo;
+        PassIntoSpace = false;
         ShotBy = wantShot ? p : null;
         Events.Kicks.Add(0.35);
+        if (layTo != null) SetControlled(layTo);
     }
 
     // ------------------------------------------------------------------ crosses
