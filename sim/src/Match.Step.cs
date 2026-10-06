@@ -579,16 +579,18 @@ public sealed partial class Match
             burst = d < 2.5;
         }
 
-        // The stick barely touches it: anywhere but straight back against his run it only nudges
-        // it (a few degrees); pulled right back (past ~145°) it takes him, at the same pace.
-        double want = 1;
+        // The stick only nudges it, and only pointed at the ball: full nudge straight at it,
+        // fading to none 45° off; beyond that it's ignored.
         if (m > 0.12)
         {
             double sx = input.MoveX / m;
             double sz = -input.MoveY / m;
-            want = M.Smoothstep(-0.95, -0.8, sx * tx + sz * tz);
-            double nx = tx * want + sx * (1 - 0.94 * want);
-            double nz = tz * want + sz * (1 - 0.94 * want);
+            double bx = Ball.Pos.X - c.Pos.X;
+            double bz = Ball.Pos.Z - c.Pos.Z;
+            double off = Math.Abs(JsMath.Atan2(sx * bz - sz * bx, sx * bx + sz * bz));
+            double w = 0.06 * Math.Max(0, 1 - off / (Math.PI / 4));
+            double nx = tx + sx * w;
+            double nz = tz + sz * w;
             double n = JsMath.Hypot(nx, nz);
             if (n > 0.05)
             {
@@ -601,7 +603,6 @@ public sealed partial class Match
         c.WantSpeed = Math.Min(c.TopSpeed, speed);
         // Running hard costs legs, button or not (as it does the computer's players).
         c.Sprinting = c.WantSpeed > PlayerK.JogSpeed + 0.5;
-        if (want < 0.5) return;
         c.Burst = burst;
         if (face && d < 6)
         {
