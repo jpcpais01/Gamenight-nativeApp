@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>GameNight Football</title>
+<meta name="description" content="Pixel-art 11 v 11 football with real ball physics. Build your club, open packs, design your stadium and win the leagues of Europe. Free on PC, Android and iPhone.">
+<meta property="og:title" content="GameNight Football">
+<meta property="og:description" content="Pixel-art 11 v 11 football. Build your club, your stadium, and conquer Europe.">
+<meta property="og:image" content="img/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#110f1c">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;800&family=Jersey+10&family=Silkscreen&display=swap">
+<style>
+/* Layout: a floodlit night match. Full-bleed stadium hero, then alternating
+   screenshot/text "fixtures", an LED ad-board strip, and a three-way kit-room download. */
+:root {
+  --night: #110f1c;      /* page ground, the game's menu navy */
+  --stand: #1b1830;      /* raised panels */
+  --line: #2f2a4d;       /* panel edges */
+  --chalk: #f2efe6;      /* text */
+  --muted: #a7a2c2;      /* secondary text */
+  --gold: #ffcf3a;       /* the PLAY MATCH button */
+  --gold-deep: #d99a12;
+  --turf: #2fbf5b;       /* pitch green, used sparingly */
+  --red: #e0413f;        /* home kit */
+  --display: "Jersey 10", "Silkscreen", ui-monospace, monospace;
+  --pixel: "Silkscreen", ui-monospace, monospace;
+  --body: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --gutter: clamp(16px, 4vw, 48px);
+  --max: 1180px;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--night);
+  color: var(--chalk);
+  font: 500 clamp(18px, 1.35vw, 21px)/1.45 var(--body);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+img { max-width: 100%; display: block; image-rendering: pixelated; }
+a { color: inherit; }
+:focus-visible { outline: 3px solid var(--gold); outline-offset: 3px; }
+.wrap { max-width: var(--max); margin-inline: auto; padding-inline: var(--gutter); }
+h1, h2, h3 { font-family: var(--display); font-weight: 400; line-height: .9; margin: 0; text-wrap: balance; letter-spacing: .01em; }
+.eyebrow { font: 400 12px/1.2 var(--pixel); letter-spacing: .14em; text-transform: uppercase; color: var(--gold); margin: 0; }
+p { margin: 0; }
+
+/* ---------- top bar ---------- */
+.bar {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20;
+  background: color-mix(in srgb, var(--night) 82%, transparent);
+  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+.bar .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 10px; }
+.logo { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.logo b { font: 400 34px/1 var(--display); color: var(--gold); letter-spacing: .02em; text-shadow: 2px 2px 0 var(--red); }
+.logo span { font: 400 10px/1.2 var(--pixel); color: var(--muted); letter-spacing: .14em; }
+.bar nav { display: flex; gap: 22px; align-items: center; }
+.bar nav a.link { font: 600 17px var(--body); text-decoration: none; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.bar nav a.link:hover { color: var(--chalk); }
+@media (max-width: 760px) { .bar nav a.link, .logo span { display: none; } }
+
+/* ---------- buttons (the game's chunky gold key) ---------- */
+.btn {
+  --c: var(--gold); --d: var(--gold-deep); --t: #1a1306;
+  display: inline-flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 0;
+  padding: 12px 22px 14px; min-height: 60px;
+  background: linear-gradient(var(--c) 0 55%, color-mix(in srgb, var(--c) 82%, var(--d)) 55%);
+  color: var(--t); text-decoration: none;
+  border: 3px solid #0b0a12; box-shadow: 0 5px 0 #0b0a12, inset 0 -4px 0 var(--d);
+  font: 800 21px/1 var(--body); text-transform: uppercase; letter-spacing: .04em;
+  transition: transform .08s, box-shadow .08s;
+}
+.btn:hover { transform: translateY(-2px); box-shadow: 0 7px 0 #0b0a12, inset 0 -4px 0 var(--d); }
+.btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #0b0a12, inset 0 -4px 0 var(--d); }
+.btn small { display: block; font: 400 10px/1.3 var(--pixel); letter-spacing: .08em; text-transform: uppercase; opacity: .78; margin-top: 4px; }
+.btn svg { width: 26px; height: 26px; flex: none; }
+.btn.ghost { --c: #2a2546; --d: #1c1833; --t: var(--chalk); }
+.btn.small { min-height: 0; padding: 8px 14px 10px; font-size: 17px; }
+
+/* ---------- hero ---------- */
+.hero { position: relative; isolation: isolate; overflow: hidden; }
+.hero > img {
+  position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 40%;
+  z-index: -2;
+}
+.hero::after {
+  content: ""; position: absolute; inset: 0; z-index: -1;
+  background:
+    linear-gradient(90deg, rgba(17,15,28,.94) 0%, rgba(17,15,28,.72) 38%, rgba(17,15,28,.05) 72%),
+    linear-gradient(0deg, var(--night) 0%, rgba(17,15,28,0) 30%);
+}
+.hero .wrap { padding-block: clamp(64px, 11vw, 150px) clamp(56px, 8vw, 110px); display: grid; gap: 22px; max-width: var(--max); }
+.hero h1 { font-size: clamp(64px, 10.5vw, 148px); max-width: 11ch; text-shadow: 4px 4px 0 rgba(0,0,0,.45); }
+.hero h1 em { font-style: normal; color: var(--gold); }
+.hero .lede { max-width: 34ch; font-size: clamp(20px, 1.8vw, 25px); color: #dcd8ee; }
+.cta { display: flex; flex-wrap: wrap; gap: 14px 16px; margin-top: 8px; }
+.release { font: 400 11px/1.4 var(--pixel); color: var(--muted); letter-spacing: .08em; }
+.release b { color: var(--turf); font-weight: 400; }
+
+/* ---------- score bug (a nod to the in-game HUD) ---------- */
+.bug { display: inline-flex; align-items: stretch; font: 400 22px/1 var(--display); border: 2px solid #0b0a12; width: max-content; }
+.bug span { padding: 6px 10px 5px; background: #1d1a2e; }
+.bug .home { border-left: 5px solid var(--red); }
+.bug .score { background: var(--chalk); color: #111; padding-inline: 12px; }
+.bug .away { border-right: 5px solid #e8e8f0; }
+.bug .min { background: #33304a; color: var(--gold); }
+
+/* ---------- LED ad boards ---------- */
+.boards { border-block: 3px solid #0b0a12; background: #08070e; overflow: hidden; }
+.boards .track { display: flex; width: max-content; animation: run 38s linear infinite; }
+.boards .track span {
+  font: 400 26px/1 var(--display); letter-spacing: .06em; text-transform: uppercase;
+  padding: 12px 30px; white-space: nowrap; border-right: 3px solid #0b0a12;
+}
+.boards .track span:nth-child(4n+1) { background: var(--red); color: #fff; }
+.boards .track span:nth-child(4n+2) { background: #262a7a; color: var(--gold); }
+.boards .track span:nth-child(4n+3) { background: var(--gold); color: #1a1306; }
+.boards .track span:nth-child(4n) { background: #0f5a33; color: #e9ffe9; }
+@keyframes run { to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .boards .track { animation: none; } }
+
+/* ---------- numbers ---------- */
+.numbers { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 2px; background: var(--line); border: 2px solid var(--line); margin-block: clamp(48px, 7vw, 88px); }
+.numbers div { background: var(--night); padding: 18px 18px 16px; display: grid; gap: 6px; }
+.numbers b { font: 400 clamp(48px, 5vw, 64px)/.85 var(--display); color: var(--gold); font-variant-numeric: tabular-nums; }
+.numbers span { font: 400 11px/1.3 var(--pixel); letter-spacing: .08em; color: var(--muted); text-transform: uppercase; }
+
+/* ---------- feature rows ---------- */
+section.feature { padding-block: clamp(44px, 6vw, 84px); }
+.row { display: grid; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); gap: clamp(24px, 4vw, 64px); align-items: center; }
+.row.flip { grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); }
+.row.flip .copy { order: 2; }
+@media (max-width: 860px) { .row, .row.flip { grid-template-columns: minmax(0, 1fr); } .row.flip .copy { order: 0; } }
+.copy { display: grid; gap: 16px; min-width: 0; }
+.copy h2 { font-size: clamp(48px, 6vw, 84px); }
+.copy p { color: #d6d2e8; max-width: 46ch; }
+.ticks { list-style: none; padding: 0; margin: 4px 0 0; display: grid; gap: 8px; }
+.ticks li { display: grid; grid-template-columns: 14px 1fr; gap: 12px; align-items: baseline; color: var(--chalk); }
+.ticks li::before { content: ""; width: 10px; height: 10px; background: var(--turf); box-shadow: 2px 2px 0 #0b0a12; transform: translateY(-1px); }
+
+/* screenshots sit in a chunky "TV" bezel */
+.shot { position: relative; border: 3px solid #0b0a12; box-shadow: 0 0 0 2px var(--line), 10px 10px 0 rgba(0,0,0,.35); background: #000; min-width: 0; }
+.shot img { width: 100%; height: auto; aspect-ratio: 16 / 9; object-fit: cover; }
+.shot figcaption { position: absolute; left: 10px; bottom: 10px; font: 400 10px/1 var(--pixel); letter-spacing: .1em; text-transform: uppercase; background: rgba(8,7,14,.85); color: var(--chalk); padding: 6px 8px; }
+.stack { display: grid; gap: 16px; min-width: 0; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 520px) { .pair { grid-template-columns: 1fr; } }
+figure { margin: 0; }
+
+/* goal explosions: a full-width wall */
+.goals { padding-block: clamp(48px, 7vw, 96px); background: radial-gradient(80% 60% at 50% 0%, #2a1840 0%, var(--night) 70%); }
+.goals header { display: grid; gap: 14px; justify-items: start; margin-bottom: 28px; }
+.goals h2 { font-size: clamp(56px, 8vw, 110px); }
+.goals h2 span { color: var(--gold); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips span { font: 400 11px/1 var(--pixel); letter-spacing: .08em; text-transform: uppercase; padding: 8px 10px; border: 2px solid var(--line); background: var(--stand); }
+.goals .shot img { aspect-ratio: auto; }
+
+/* play-your-way cards */
+.ways { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 28px; }
+@media (max-width: 900px) { .ways { grid-template-columns: minmax(0, 1fr); } }
+.way { background: var(--stand); border: 2px solid var(--line); padding: 24px 22px 26px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+.way h3 { font-size: 40px; }
+.way p { color: #d6d2e8; }
+.way .ico { width: 52px; height: 52px; image-rendering: pixelated; }
+.code { display: flex; gap: 6px; }
+.code span { font: 400 34px/1 var(--display); width: 38px; height: 46px; display: grid; place-items: center; background: #0b0a12; color: var(--gold); border: 2px solid var(--line); }
+
+/* ---------- downloads ---------- */
+.downloads { padding-block: clamp(56px, 8vw, 110px); border-top: 3px solid #0b0a12; background:
+  repeating-linear-gradient(90deg, #13301f 0 80px, #163823 80px 160px); }
+.downloads h2 { font-size: clamp(56px, 8vw, 110px); }
+.downloads > .wrap > header { display: grid; gap: 12px; margin-bottom: 30px; }
+.kits { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
+@media (max-width: 900px) { .kits { grid-template-columns: minmax(0, 1fr); } }
+.kit { background: var(--night); border: 3px solid #0b0a12; box-shadow: 8px 8px 0 rgba(0,0,0,.35); padding: 24px 22px; display: grid; gap: 16px; align-content: start; min-width: 0; }
+.kit h3 { font-size: 46px; display: flex; align-items: center; gap: 12px; }
+.kit h3 svg { width: 34px; height: 34px; color: var(--gold); }
+.kit .btn { align-items: center; width: 100%; }
+.kit ol { margin: 0; padding-left: 1.2em; display: grid; gap: 6px; color: #d6d2e8; }
+.kit ol li::marker { font-family: var(--pixel); font-size: 12px; color: var(--gold); }
+.kit .note { font-size: 16px; color: var(--muted); }
+
+footer { padding-block: 34px 44px; border-top: 1px solid var(--line); }
+footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 24px; justify-content: space-between; align-items: center; color: var(--muted); font-size: 16px; }
+footer a { color: var(--chalk); }
+</style>
+</head>
+<body>
+
+<header class="bar">
+  <div class="wrap">
+    <a class="logo" href="#top" aria-label="GameNight home">
+      <b>GAMENIGHT</b><span>FOOTBALL · 11 V 11</span>
+    </a>
+    <nav>
+      <a class="link" href="#match">The match</a>
+      <a class="link" href="#club">Your club</a>
+      <a class="link" href="#stadium">Stadium</a>
+      <a class="btn small" href="#download">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero">
+    <img src="img/hero.webp" alt="A packed Italian bowl stadium at sunset, seen from above the corner flag" fetchpriority="high">
+    <div class="wrap">
+      <div class="bug" aria-hidden="true"><span class="home">ROS</span><span class="score">0 - 0</span><span class="away">ATL</span><span class="min">1'</span></div>
+      <h1>Football <em>night</em>, every night.</h1>
+      <p class="lede">Pixel-art 11 v 11 football with real ball physics. Build your club, open packs, design your own stadium, then go and win the leagues of Europe.</p>
+      <div class="cta">
+        <a class="btn" href="#download">Download free<small>PC · Android · iPhone</small></a>
+        <a class="btn ghost" href="https://football-game-dusky.vercel.app" target="_blank" rel="noopener">Play in browser<small>No install</small></a>
+      </div>
+      <p class="release" id="release">Latest build on GitHub Releases</p>
+    </div>
+  </section>
+
+  <div class="boards" aria-hidden="true">
+    <div class="track">
+      <span>Big night ★</span><span>11 v 11</span><span>Forza ragazzi</span><span>Season 1</span><span>One club · one night</span><span>Pixel perfect</span><span>Café Centrale</span><span>Gamenight</span>
+      <span>Big night ★</span><span>11 v 11</span><span>Forza ragazzi</span><span>Season 1</span><span>One club · one night</span><span>Pixel perfect</span><span>Café Centrale</span><span>Gamenight</span>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="numbers">
+      <div><b>120</b><span>Hz match engine</span></div>
+      <div><b>17</b><span>Leagues across Europe</span></div>
+      <div><b>20</b><span>Stand sets to build with</span></div>
+      <div><b>14</b><span>Goal explosions</span></div>
+      <div><b>20</b><span>Player playstyles</span></div>
+    </div>
+  </div>
+
+  <section class="feature" id="match">
+    <div class="wrap row">
+      <div class="copy">
+        <p class="eyebrow">The match</p>
+        <h2>Every touch is physics.</h2>
+        <p>The ball is a real ball. Passes curl, shots dip, keepers parry, and twenty-two players read the game around you. Mobile-style controls make it feel right on a phone, with a keyboard or a gamepad on PC.</p>
+        <ul class="ticks">
+          <li>Passes weighted by how long you hold, through balls timed to the run</li>
+          <li>Sunny afternoons, golden evenings and rainy nights</li>
+          <li>Referees, linesmen, fouls, cards, substitutions and goal replays</li>
+          <li>Walk out of the tunnel to tifos, flares and a full crowd</li>
+        </ul>
+      </div>
+      <div class="stack">
+        <figure class="shot"><img src="img/match2.webp" alt="A sunny afternoon match in front of a packed stand" loading="lazy"><figcaption>Stadio Comunale · afternoon</figcaption></figure>
+        <div class="pair">
+          <figure class="shot"><img src="img/match3.webp" alt="A rainy night match with puddles on the pitch" loading="lazy"><figcaption>Rainy night</figcaption></figure>
+          <figure class="shot"><img src="img/walkout.webp" alt="Both teams walking out of the tunnel" loading="lazy"><figcaption>The walk-out</figcaption></figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="feature" id="league">
+    <div class="wrap row flip">
+      <div class="copy">
+        <p class="eyebrow">League mode</p>
+        <h2>Start local. Conquer Europe.</h2>
+        <p>Pick your home country and begin in its local league. Win titles to unlock the regional leagues, then the premiers, then the golden league. Every rival club has its own stadium, colours and goal explosion, so away days feel like away days.</p>
+        <ul class="ticks">
+          <li>A map of Europe with 17 leagues to unlock</li>
+          <li>Fixtures, table, stats and the Sunday paper</li>
+          <li>Play a matchday, simulate it, or watch it play out</li>
+        </ul>
+      </div>
+      <div class="stack">
+        <figure class="shot"><img src="img/map.webp" alt="The map of Europe where you pick your home country" loading="lazy"><figcaption>Pick your home</figcaption></figure>
+        <figure class="shot"><img src="img/league.webp" alt="The league hub with the next fixture and the table" loading="lazy"><figcaption>Matchday 9 of 30</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="feature" id="club">
+    <div class="wrap row">
+      <div class="copy">
+        <p class="eyebrow">Your club</p>
+        <h2>Open packs. Build the squad.</h2>
+        <p>Design your kit, crest, fans and touchline manager. Open card packs to sign new players, from bronze to legends, each with a rating and playstyles like Speedster or Rocket shot. Then pick your formation and your best eleven.</p>
+        <ul class="ticks">
+          <li>Daily free pack, plus Bronze, Silver, Gold, Legend and Ultimate</li>
+          <li>Six formations and a bench of seven</li>
+          <li>Kit designer, crest maker, banners and giant tifos</li>
+        </ul>
+      </div>
+      <div class="stack">
+        <figure class="shot"><img src="img/shown.webp" alt="A pack opening revealing a 93-rated Icon card" loading="lazy"><figcaption>Pack opening</figcaption></figure>
+        <div class="pair">
+          <figure class="shot"><img src="img/store.webp" alt="The store with five card packs" loading="lazy"><figcaption>The store</figcaption></figure>
+          <figure class="shot"><img src="img/squad.webp" alt="The squad screen with players on a tactics board" loading="lazy"><figcaption>Squad</figcaption></figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="feature" id="stadium">
+    <div class="wrap row flip">
+      <div class="copy">
+        <p class="eyebrow">Stadium builder</p>
+        <h2>Your ground, your rules.</h2>
+        <p>Pick a stand for every side of the pitch from 20 sets, paint each one in 16 colours, then drop the whole thing into one of nine places: a seaside lawn, a city block, an Alpine valley or a white Alentejo hill town. Drag to fly round it, then play your next match there.</p>
+        <ul class="ticks">
+          <li>Arena, Terrace, Curva, The Wall and sixteen more</li>
+          <li>Nine surroundings, from Docklands to a tropical bay</li>
+          <li>Surprise Me builds a matching ground in one tap</li>
+        </ul>
+      </div>
+      <div class="stack">
+        <figure class="shot"><img src="img/builder.webp" alt="The stadium builder with stand cards and a 3D view" loading="lazy"><figcaption>The builder</figcaption></figure>
+        <figure class="shot"><img src="img/exterior.webp" alt="A custom stadium seen from outside in a city by the sea" loading="lazy"><figcaption>Downtown, from the air</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="goals" id="goals">
+    <div class="wrap">
+      <header>
+        <p class="eyebrow">Goal explosions</p>
+        <h2>Score. <span>Then make it loud.</span></h2>
+        <p style="max-width:52ch;color:#d6d2e8">Choose what goes off in the net when you score. It fires in your club colours, and the crowd goes with it.</p>
+        <div class="chips">
+          <span>Supernova</span><span>Fireworks</span><span>Thunderstrike</span><span>Volcano</span><span>Black hole</span><span>Frostbite</span><span>Party cannon</span><span>Arcade</span><span>Phoenix</span><span>Meteor</span><span>Tornado</span><span>Disco</span><span>Rainbow</span><span>Haunted</span>
+        </div>
+      </header>
+      <div class="stack">
+        <figure class="shot"><img src="img/goals.webp" alt="Ten goal explosions side by side: supernova, fireworks, lightning, volcano, black hole and more" loading="lazy"></figure>
+        <figure class="shot"><img src="img/goals2.webp" alt="Four more goal explosions: tornado, disco ball, rainbow and haunted" loading="lazy"></figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="feature" id="together">
+    <div class="wrap">
+      <div class="copy">
+        <p class="eyebrow">Play your way</p>
+        <h2>On the sofa or across the world.</h2>
+      </div>
+      <div class="ways">
+        <article class="way">
+          <svg class="ico" viewBox="0 0 13 13" aria-hidden="true" shape-rendering="crispEdges"><rect width="13" height="13" fill="#1b1830"/><rect x="1" y="3" width="4" height="7" fill="#e0413f"/><rect x="8" y="3" width="4" height="7" fill="#f2efe6"/><rect x="6" y="5" width="1" height="1" fill="#ffcf3a"/><rect x="6" y="7" width="1" height="1" fill="#ffcf3a"/></svg>
+          <h3>Online 1 v 1</h3>
+          <p>Host a match and read out the four-digit code. Your friend types it in and you play, each with your own club, phone against PC or any mix.</p>
+          <div class="code" aria-label="Example code 4 8 2 0"><span>4</span><span>8</span><span>2</span><span>0</span></div>
+        </article>
+        <article class="way">
+          <svg class="ico" viewBox="0 0 13 13" aria-hidden="true" shape-rendering="crispEdges"><rect width="13" height="13" fill="#1b1830"/><rect x="1" y="2" width="11" height="7" fill="#2fbf5b"/><rect x="2" y="3" width="9" height="5" fill="#1d6b35"/><rect x="5" y="9" width="3" height="1" fill="#a7a2c2"/><rect x="3" y="10" width="7" height="1" fill="#a7a2c2"/><rect x="9" y="6" width="3" height="6" fill="#ffcf3a"/><rect x="10" y="7" width="1" height="3" fill="#110f1c"/></svg>
+          <h3>Phone as controller</h3>
+          <p>Play the big-screen version on your PC and use your phone as the pad. Scan the QR code on the PC, enter the short pairing code once, and you're in. Works with Android and iPhone over your home Wi-Fi.</p>
+        </article>
+        <article class="way">
+          <svg class="ico" viewBox="0 0 13 13" aria-hidden="true" shape-rendering="crispEdges"><rect width="13" height="13" fill="#1b1830"/><rect x="5" y="2" width="3" height="6" fill="#ffcf3a"/><rect x="3" y="6" width="7" height="1" fill="#ffcf3a"/><rect x="4" y="7" width="5" height="1" fill="#ffcf3a"/><rect x="5" y="8" width="3" height="1" fill="#ffcf3a"/><rect x="6" y="9" width="1" height="1" fill="#ffcf3a"/><rect x="2" y="10" width="9" height="1" fill="#f2efe6"/></svg>
+          <h3>Updates in the app</h3>
+          <p>New versions land often. When one is out, a gold Update key appears on the home screen. Tap it and the game downloads and installs the new build for you, on Android and on PC.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section class="downloads" id="download">
+    <div class="wrap">
+      <header>
+        <p class="eyebrow">Free to play</p>
+        <h2>Pick your kit.</h2>
+      </header>
+      <div class="kits">
+        <article class="kit">
+          <h3><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M2 4.5 10 3.4V11H2V4.5Zm9-1.2L22 2v9H11V3.3ZM2 12h8v7.6l-8-1.1V12Zm9 0h11v10l-11-1.5V12Z"/></svg>Windows</h3>
+          <a class="btn" href="https://github.com/jpcpais01/Gamenight-nativeApp/releases/latest/download/GameNight-Windows.zip">Download for PC<small>GameNight-Windows.zip</small></a>
+          <ol>
+            <li>Unzip the download anywhere outside Program Files.</li>
+            <li>Open the GameNight folder and run GameNight.exe.</li>
+            <li>If Windows asks, allow it on private networks so your phone can find it as a controller.</li>
+          </ol>
+          <p class="note">Keyboard, Xbox-style gamepad, or your phone.</p>
+        </article>
+        <article class="kit">
+          <h3><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7.2 3.1 8.5 5.4A8.7 8.7 0 0 1 12 4.7c1.3 0 2.5.3 3.5.7l1.3-2.3.9.5-1.3 2.3A7.6 7.6 0 0 1 20 12H4a7.6 7.6 0 0 1 3.6-6.1L6.3 3.6l.9-.5ZM9 8.3a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8Zm6 0a.9.9 0 1 0 0 1.8.9.9 0 0 0 0-1.8ZM4 13h16v6.5c0 .8-.7 1.5-1.5 1.5H17v1.5a1.5 1.5 0 0 1-3 0V21h-4v1.5a1.5 1.5 0 0 1-3 0V21H5.5c-.8 0-1.5-.7-1.5-1.5V13Z"/></svg>Android</h3>
+          <a class="btn" href="https://github.com/jpcpais01/Gamenight-nativeApp/releases/latest/download/GameNight.apk">Download APK<small>GameNight.apk</small></a>
+          <ol>
+            <li>Open this page on your phone and tap Download APK.</li>
+            <li>Open the file. If asked, allow your browser to install unknown apps.</li>
+            <li>Turn the phone sideways and kick off.</li>
+          </ol>
+          <p class="note">Later versions install from inside the game.</p>
+        </article>
+        <article class="kit">
+          <h3><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.4 12.6c0-2.4 2-3.6 2.1-3.7a4.6 4.6 0 0 0-3.6-2c-1.5-.2-3 .9-3.7.9-.8 0-2-.9-3.2-.9a4.8 4.8 0 0 0-4.1 2.5c-1.8 3-.5 7.6 1.3 10.1.8 1.2 1.8 2.6 3.1 2.5 1.2 0 1.7-.8 3.2-.8s1.9.8 3.2.8c1.3 0 2.2-1.2 3-2.5a10 10 0 0 0 1.4-2.8 4.3 4.3 0 0 1-2.7-4.1ZM14 5.4a4.3 4.3 0 0 0 1-3.2 4.5 4.5 0 0 0-2.9 1.5 4.1 4.1 0 0 0-1 3.1A3.7 3.7 0 0 0 14 5.4Z"/></svg>iPhone</h3>
+          <a class="btn" href="https://football-game-dusky.vercel.app" target="_blank" rel="noopener">Play in Safari<small>Browser version</small></a>
+          <ol>
+            <li>Open the browser version in Safari and tap Share, then Add to Home Screen.</li>
+            <li>Launch it from your home screen and turn the phone sideways.</li>
+            <li>Got the PC game? Scan its Phone Controller QR code to use your iPhone as the pad.</li>
+          </ol>
+          <p class="note">There's no App Store app yet, so iPhone plays in the browser.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>GameNight Football · made by João</span>
+    <span><a href="https://github.com/jpcpais01/Gamenight-nativeApp/releases" target="_blank" rel="noopener">All releases</a></span>
+  </div>
+</footer>
+
+<script>
+// Show the latest version number from GitHub (the page works the same without it).
+(async () => {
+  try {
+    const r = await fetch("https://api.github.com/repos/jpcpais01/Gamenight-nativeApp/releases/latest", { headers: { Accept: "application/vnd.github+json" } });
+    if (!r.ok) return;
+    const rel = await r.json();
+    const v = String(rel.tag_name || "").replace(/^v/i, "");
+    if (!v) return;
+    const d = new Date(rel.published_at);
+    const when = isNaN(d) ? "" : " · " + d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
+    document.getElementById("release").innerHTML = "Latest build <b>v" + v.replace(/[^0-9a-z.\-]/gi, "") + "</b>" + when;
+  } catch (e) { /* offline or rate-limited: keep the plain line */ }
+})();
+</script>
+</body>
+</html>
