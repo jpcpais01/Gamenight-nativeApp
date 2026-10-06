@@ -144,6 +144,7 @@ public sealed partial class Hud : Control
         _held = null;
         _revealAt = -1;
         _capAt = _cardAt = -99;
+        _subsShown = 0;
         _card.Visible = false;
         _pcFor = -2;
         _lastPhase = Phase.Kickoff;
@@ -192,6 +193,31 @@ public sealed partial class Hud : Control
 
     // ------------------------------------------------------------------ events
 
+    int _subsShown;
+
+    /// <summary>A change (or two, made together): who's on, who's off.</summary>
+    void Substitutions()
+    {
+        var lines = new System.Collections.Generic.List<string>();
+        int team = 0;
+        lock (_match.SubGate)
+        {
+            for (; _subsShown < _match.Subs.Count; _subsShown++)
+            {
+                var s = _match.Subs[_subsShown];
+                var p = _match.All[s.Id];
+                _info.Surname[s.Id] = MatchInfo.Who(p);
+                lines.Add($"{_info.Surname[s.Id]} on for {Surname(s.Off, p.Index)}");
+                team = s.Team;
+            }
+        }
+        if (lines.Count == 0) return;
+        _pcFor = -2;
+        Caption("SUBSTITUTION", string.Join(", ", lines) + " · " + _info.Name[team], 3, 0);
+    }
+
+    static string Surname(string name, int index) => string.IsNullOrWhiteSpace(name) ? "#" + (index + 1) : name.Trim().Split(' ')[^1];
+
     void Events(MatchSnapshot b)
     {
         if (_info == null) return;
@@ -217,6 +243,7 @@ public sealed partial class Hud : Control
             else if (f.Yellow) Caption("YELLOW CARD", $"{MatchInfo.Who(f.Offender)} · {_info.Name[f.Offender.Team]}", 2.6, 2);
             else Caption("FOUL", "Free kick · " + _info.Name[f.Victim.Team], 2, 1);
         }
+        if (b.Sub != 0) Substitutions();
         var off = _match?.LastOffside;
         if (b.Offside != 0 && off != null) Caption("OFFSIDE", "Free kick · " + _info.Name[off.Team], 2, 1);
         // Booked while advantage was played: show the card now.

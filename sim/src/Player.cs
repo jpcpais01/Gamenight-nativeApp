@@ -171,7 +171,8 @@ public sealed class Player
     /// <summary>Formation slot in team frame (attacking +x): x,z in -1..1.</summary>
     public readonly double BaseX, BaseZ;
     public Attributes Attrs;
-    public readonly Look Look;
+    /// <summary>Changes only when a substitute takes the slot.</summary>
+    public Look Look;
 
     double accelFor = double.NaN, weightFor = double.NaN, accelMemo;
     double agileFor = double.NaN, agileMemo = 1;

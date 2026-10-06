@@ -211,7 +211,7 @@ public partial class Main : Node
         _officials.Reset();
         _invader.Clear(null);
         _goalLog.Clear();
-        _logged = 0;
+        _logged = _subsDressed = 0;
         _skipping = false;
         if (_watchBar != null) _watchBar.Skipping = false;
         while (_skipGoals.TryDequeue(out _)) { }
@@ -221,6 +221,7 @@ public partial class Main : Node
         // Names and kits are read before the match's own thread starts.
         _players.SetMatch(_match);
         _hud.SetMatch(_match);
+        _pause.Match = Request?.Drill == null ? _match : null;
         _runner = new MatchRunner(_match);
         if (Request?.Drill is DrillKind kind)
         {
@@ -443,7 +444,11 @@ public partial class Main : Node
         float dt = (float)delta;
         _prof.Begin();
         _controls.Tick(dt);
-        _runner.Submit(_controls.Input);
+        // The keyboard, a gamepad and a phone used as a controller play alongside the touch controls.
+        bool live = Request?.Demo != true && Request?.Watch != true && _controls.Visible && !_pause.IsOpen && !Directed && !_invaderShown;
+        var input = Link.Host.Mix(_controls.Input, live, _controls.Current, _controls.Picked);
+        _controls.SelfModulate = Link.Host.Instance?.RemotePlay == true ? Colors.Transparent : Colors.White;
+        _runner.Submit(input);
         _runner.Read(_prev, _cur, out float alpha);
         if (_watchBar != null) Skip();
 
@@ -455,6 +460,7 @@ public partial class Main : Node
         if (_cur.Goal >= 0) _camera.Bump(0.4f);
         if (_cur.Goal >= 0 && !Directed) Explode(_cur);
         LogGoal();
+        if (_cur.Sub != 0) Substituted();
         if (_cur.Post > 0) _camera.Bump(0.6f);
         float run = _pause.IsOpen ? 0 : dt;
         if (_replay.Active)
@@ -508,7 +514,7 @@ public partial class Main : Node
 
         bool attack = _cur.HumanAttacking;
         _controls.SetMode(ButtonMode(_cur, attack, out int picked), picked);
-        _hud.Tick(_prev, _cur, alpha, _controls.Input, attack, delta);
+        _hud.Tick(_prev, _cur, alpha, input, attack, delta);
         _drillHud?.Tick();
         if (_prewarm > 0) Prewarm(--_prewarm == 0);
         _pause.FoulShown = !Directed;
@@ -583,7 +589,20 @@ public partial class Main : Node
         var p = _match.All.Find(x => x.Id == _cur.Scorer);
         if (p == null) return;
         // An own goal goes down to the side that gained it (its striker, as the engine credits it).
-        _goalLog.Add(new GoalEvent { Team = p.Team, Index = p.Index, Minute = Math.Max(1, _cur.Minute) });
+        _goalLog.Add(new GoalEvent { Team = p.Team, Index = p.Index, Minute = Math.Max(1, _cur.Minute), Name = p.Name });
+    }
+
+    int _subsDressed;
+
+    /// <summary>Substitutes have come on: dress them.</summary>
+    void Substituted()
+    {
+        lock (_match.SubGate)
+        {
+            for (; _subsDressed < _match.Subs.Count; _subsDressed++)
+                _players.Dress(_match, _match.All[_match.Subs[_subsDressed].Id]);
+        }
+        _players.Flush();
     }
 
     int _prewarm;

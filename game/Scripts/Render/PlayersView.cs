@@ -193,15 +193,18 @@ public sealed partial class PlayersView
     {
         Snap();
         _lastTime = -1;
-        foreach (var p in m.All)
-        {
-            if (p.Id < 0 || p.Id >= N) continue;
-            var team = m.Teams[p.Team];
-            bool captain = team.Captain == p.Index && team.Players.Count > p.Index && team.Players[p.Index] == p;
-            int number = p.Number > 0 ? p.Number : p.Role == Role.GK ? 1 : p.Index + 1;
-            SetBody(p.Id, p, team.Info.Kit, number, captain);
-        }
+        foreach (var p in m.All) Dress(m, p);
         Flush();
+    }
+
+    /// <summary>One player's body and shirt as the match has him now (a substitute coming on). Call Flush when done.</summary>
+    public void Dress(Match m, Player p)
+    {
+        if (p.Id < 0 || p.Id >= N) return;
+        var team = m.Teams[p.Team];
+        bool captain = team.Captain == p.Index && team.Players.Count > p.Index && team.Players[p.Index] == p;
+        int number = p.Number > 0 ? p.Number : p.Role == Role.GK ? 1 : p.Index + 1;
+        SetBody(p.Id, p, team.Info.Kit, number, captain);
     }
 
     readonly Random _rng = new();

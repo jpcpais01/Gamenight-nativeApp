@@ -491,13 +491,33 @@ public sealed partial class HomeScreen : PxCanvas
 
     void Footer(float x0, float W, float H)
     {
-        Px.Text(this, Px.Small, new Vector2(x0, H - 11), "JOYSTICK TO MOVE · PASS / THROUGH / KICK", 8, Px.InkDim);
         var notes = new Rect2(W - 16 - 120, H - 26, 120, 22);
+        PhoneLink(x0, notes.Position.X - 60, H);
         bool held = Held("notes");
         Px.Frame(this, held ? notes.Translated(Vector2.One * 2) : notes, new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.85f), Px.Line2, held ? null : Px.ShadowSoft, 2, 3);
         Px.TextC(this, Px.Small, notes.GetCenter().X + (held ? 2 : 0), notes.GetCenter().Y + 4 + (held ? 2 : 0), "PATCH NOTES", 8, Px.Ink);
         Tap("notes", notes, () => _ui.Open(new NotesModal(_ui)));
         Px.TextR(this, Px.Small, notes.Position.X - 12, H - 11, "V" + _ui.Version, 9, Px.Cyan);
+    }
+
+    /// <summary>The phone-as-controller corner: on the phone a PLAY ON PC key, on a computer how
+    /// to connect (or that a phone is).</summary>
+    void PhoneLink(float x0, float x1, float H)
+    {
+        var host = Link.Host.Instance;
+        if (host == null || !host.Listening)
+        {
+            var r = new Rect2(x0, H - 26, 130, 22);
+            bool held = Held("pc");
+            Px.Frame(this, held ? r.Translated(Vector2.One * 2) : r, new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.85f), new Color(Px.Cyan, 0.6f), held ? null : Px.ShadowSoft, 2, 3);
+            Px.TextC(this, Px.Small, r.GetCenter().X + (held ? 2 : 0), r.GetCenter().Y + 4 + (held ? 2 : 0), "PLAY ON PC", 8, Px.Cyan);
+            Tap("pc", r, () => _ui.App.OpenController());
+            Px.Text(this, Px.Small, new Vector2(r.End.X + 12, H - 11), Px.Fit(Px.Small, "PHONE AS CONTROLLER", 8, x1 - r.End.X - 12), 8, Px.InkDim);
+            return;
+        }
+        string s = host.PhoneConnected ? "PHONE CONNECTED · IT'S YOUR CONTROLLER"
+            : $"PHONE AS CONTROLLER: PLAY ON PC IN THE PHONE APP{(host.Address != "" ? " · THIS PC " + host.Address : "")}";
+        Px.Text(this, Px.Small, new Vector2(x0, H - 11), Px.Fit(Px.Small, s, 8, x1 - x0), 8, host.PhoneConnected ? Px.Win : Px.InkDim);
     }
 
     // ---------------------------------------------------------------- light
