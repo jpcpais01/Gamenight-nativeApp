@@ -26,6 +26,8 @@ env:
 jobs:
   apk:
     runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
 
@@ -83,11 +85,13 @@ jobs:
           cp android-overlay/GodotApp.java android/build/src/main/java/com/godot/game/GodotApp.java
 
       - name: Version
+        id: version
         working-directory: game
         run: |
           base=$(sed -n 's/^config\/version="\(.*\)"/\1/p' project.godot)
           name="${base%.*}.${{ github.run_number }}"
           echo "APP_VERSION=$name" >> $GITHUB_ENV
+          echo "version=$name" >> $GITHUB_OUTPUT
           sed -i "s/^version\/code=.*/version\/code=${{ github.run_number }}/; s/^version\/name=.*/version\/name=\"$name\"/" export_presets.cfg
           # The app reads its own version (shown on the home screen) from the project settings.
           sed -i "s/^config\/version=.*/config\/version=\"$name\"/" project.godot
@@ -152,22 +156,13 @@ jobs:
             build/export.log
             game/android/build/build/outputs/logs/**
 
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
+      # Published together with the Windows build by the release job below, so a release never
+      # comes out with only one of them (a newer push cancels the whole run instead).
+      - uses: actions/upload-artifact@v4
         with:
-          tag_name: v${{ env.APP_VERSION }}
-          name: GameNight ${{ env.APP_VERSION }}
-          target_commitish: ${{ github.sha }}
-          body: |
-            Build ${{ github.run_number }} from ${{ github.sha }}.
-            ${{ github.event.head_commit.message }}
-
-            Install: open this page on the phone and tap GameNight-${{ env.APP_VERSION }}.apk (or GameNight.apk, the same file).
-            It installs over the previous version: same app id, same signing key, higher version code.
-          files: |
-            build/GameNight-${{ env.APP_VERSION }}.apk
-            build/GameNight.apk
-          make_latest: true
+          name: apk
+          path: build/GameNight*.apk
+          compression-level: 0
 
   # The PC version: the same project exported for Windows, zipped (GameNight.exe and its .NET
   # files). Built alongside the APK, then added to the APK's release once that exists.
@@ -264,27 +259,37 @@ jobs:
           path: build/GameNight-*Windows.zip
           compression-level: 0
 
-  windows-release:
+  # One release with everything: the APK and the Windows zip, published at once.
+  release:
     needs: [apk, windows]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: windows
           path: build
+          merge-multiple: true
 
-      - name: Add the Windows build to the release
+      - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ needs.windows.outputs.version }}
-          append_body: true
+          tag_name: v${{ needs.apk.outputs.version }}
+          name: GameNight ${{ needs.apk.outputs.version }}
+          target_commitish: ${{ github.sha }}
           body: |
+            Build ${{ github.run_number }} from ${{ github.sha }}.
+            ${{ github.event.head_commit.message }}
+
+            Install: open this page on the phone and tap GameNight-${{ needs.apk.outputs.version }}.apk (or GameNight.apk, the same file).
+            It installs over the previous version: same app id, same signing key, higher version code.
 
             On a Windows PC: download GameNight-${{ needs.windows.outputs.version }}-Windows.zip, unzip it and run GameNight.exe (keep it next to its data folder).
-            To use the phone as the controller, tap PLAY ON PC on the phone's home screen (same Wi-Fi).
+            To use a phone as the controller: PHONE CONTROLLER on the PC's home screen.
           files: |
+            build/GameNight-${{ needs.apk.outputs.version }}.apk
+            build/GameNight.apk
             build/GameNight-${{ needs.windows.outputs.version }}-Windows.zip
             build/GameNight-Windows.zip
+          make_latest: true
 
   # The online relay (relay/): a Cloudflare Worker, deployed on every push once the account's
   # secrets are in the repository (free tier).
