@@ -5,8 +5,8 @@ namespace GameNight.Account;
 /// firestore.rules decide who may read what. Empty means accounts aren't switched on yet.</summary>
 public static class FirebaseConfig
 {
-    public const string BuiltKey = "";
-    public const string BuiltProject = "";
+    public const string BuiltKey = "AIzaSyCEFidsWO0R8CHac1WFC7i1b8Hw8sW0sOk";
+    public const string BuiltProject = "gamenight-68aa3";
 
     /// <summary>Debug: `-- --firebase=apiKey@projectId` talks to another project.</summary>
     static string[] Override
