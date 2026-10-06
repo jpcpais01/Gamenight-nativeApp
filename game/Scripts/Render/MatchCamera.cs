@@ -59,6 +59,10 @@ public sealed class MatchCamera
     public bool Centred;
     Vector3 _pan, _panGoal;
     const float El0 = 0.6f;
+    /// <summary>The builder's view with its menus hidden: 0 the drone, 1 down on the pitch looking
+    /// up at the stands, 2 high over a corner taking in the ground and all round it.</summary>
+    public int View;
+    readonly float[] _viewW = { 1, 0, 0 };
 
     /// <summary>The builder: turn round the ground and tilt (radians), zoom (a factor), and slide
     /// across it (metres to the camera's right and away from it).</summary>
@@ -390,6 +394,24 @@ public sealed class MatchCamera
             var right = new Vector3(MathF.Cos(a), 0, -MathF.Sin(a));
             look = new Vector3(-MathF.Sin(_orbit) * 40, 8, -MathF.Cos(_orbit) * 30) - right * 26 * _dist * _side + _pan;
             fov = 40;
+
+            // The other views, blended in by weight so a switch glides across.
+            for (int i = 0; i < 3; i++) _viewW[i] += ((View == i ? 1 : 0) - _viewW[i]) * ease;
+            if (_viewW[1] > 0.001f || _viewW[2] > 0.001f)
+            {
+                // On the pitch: standing near the centre circle, the stand towering up ahead.
+                var ahead = new Vector3(-MathF.Sin(a), 0, -MathF.Cos(a));
+                var p1 = -ahead * (6 + 22 * _dist) + new Vector3(_pan.X, 1.7f, _pan.Z);
+                var l1 = p1 + ahead * 80 + new Vector3(0, 4 + 22 * (_elev - 0.12f), 0);
+                // Over a corner: the bowl below and the surroundings out to the horizon.
+                float c = a + 0.75f;
+                var p2 = new Vector3(MathF.Sin(c) * 300 * fh, Math.Max(40, 230 * fv), MathF.Cos(c) * 270 * fh) + _pan;
+                var l2 = new Vector3(-MathF.Sin(c) * 30, 0, -MathF.Cos(c) * 25) + _pan;
+                float w0 = _viewW[0], sum = w0 + _viewW[1] + _viewW[2];
+                pos = (pos * w0 + p1 * _viewW[1] + p2 * _viewW[2]) / sum;
+                look = (look * w0 + l1 * _viewW[1] + l2 * _viewW[2]) / sum;
+                fov = (40 * w0 + 58 * _viewW[1] + 42 * _viewW[2]) / sum;
+            }
             subX = subY = 0;
         }
         SubPixelX = subX;

@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.102", "Builder with the menu hidden: pick a camera top left. DRONE is the usual view, PITCH puts you on the grass by the centre circle looking up at the stands, AERIAL hangs high over a corner showing the ground and everything round it. Drag, slide and pinch work in all three."),
         ("0.101", "Windows: the running game shows the GameNight icon on its taskbar button and in Alt+Tab."),
         ("0.100", "Every release now comes out with both the Android app and the Windows version together, never one without the other."),
         ("0.99", "The patch notes scroll again: swipe them on the phone, or use the mouse wheel on PC. The mouse wheel now scrolls every list in the menus."),

@@ -468,6 +468,12 @@ public partial class Main : Node
         if (_camera != null) _camera.Centred = on;
     }
 
+    /// <summary>The stadium builder's view (see <see cref="MatchCamera.View"/>).</summary>
+    public void View(int view)
+    {
+        if (_camera != null) _camera.View = view;
+    }
+
     /// <summary>The demo match behind the menus: hidden (and not drawn or stepped) under a full screen.</summary>
     public void Backdrop(bool shown)
     {

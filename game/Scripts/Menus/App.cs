@@ -211,6 +211,12 @@ public sealed partial class App : Node
         if (_showcase && !_playing) _match?.Centre(bare);
     }
 
+    /// <summary>The stadium builder's camera view: 0 the drone, 1 on the pitch, 2 over a corner.</summary>
+    public void StadiumView(int view)
+    {
+        if (_showcase && !_playing) _match?.View(view);
+    }
+
     /// <summary>Straight into a match at this ground.</summary>
     public void PlayAt(string ground)
     {

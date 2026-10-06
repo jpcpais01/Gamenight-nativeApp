@@ -58,6 +58,9 @@ public sealed partial class StadiumScreen : PxCanvas
     // A plain tap on the stadium hides the menus (the stadium alone, centred); another brings them back.
     bool _bare;
     double _bareAt;
+    // The view with the menus hidden (the menus always come back to the drone's).
+    int _view;
+    static readonly string[] Views = { "DRONE", "PITCH", "AERIAL" };
     public bool Bare => _bare;
 
     public override void _Notification(int what)
@@ -68,6 +71,7 @@ public sealed partial class StadiumScreen : PxCanvas
         {
             _bare = false;
             _ui.App.StadiumBare(false);
+            _ui.App.StadiumView(0);
         }
     }
 
@@ -125,6 +129,7 @@ public sealed partial class StadiumScreen : PxCanvas
         _bare = !_bare;
         _bareAt = T;
         _ui.App.StadiumBare(_bare);
+        _ui.App.StadiumView(_bare ? _view : 0);
     }
 
     (Vector2 centre, float spread) Fingers()
@@ -240,6 +245,13 @@ public sealed partial class StadiumScreen : PxCanvas
             // isn't the tap that brings the menu back).
             float bw = Px.Width(Px.Big, "SURPRISE ME", 18) + 18;
             Chip("surprise", new Vector2(W - 16 - bw, 16), "SURPRISE ME", false, Surprise);
+            // The camera: the drone, down on the pitch, or high over a corner.
+            float vx = 16;
+            for (int i = 0; i < Views.Length; i++)
+            {
+                int v = i;
+                vx += Chip("view" + i, new Vector2(vx, 16), Views[i], _view == i, () => { _view = v; _ui.App.StadiumView(v); }) + 8;
+            }
             if (_building || _changedAt >= 0)
                 Px.TextR(this, Px.Big, W - 16, 74, (T % 0.6) < 0.3 ? "BUILDING..." : "BUILDING", 22, Px.Gold, new Color(0, 0, 0, 0.6f), 2);
             return;
