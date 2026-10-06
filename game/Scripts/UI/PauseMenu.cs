@@ -197,6 +197,16 @@ public sealed partial class PauseMenu : Control
         _subsCard.Visible = on;
     }
 
+    /// <summary>Online: the match doesn't stop for the menu and can't be restarted.</summary>
+    public bool Online
+    {
+        set
+        {
+            _title.Text = value ? "ONLINE" : "PAUSED";
+            _restart.Visible = !value;
+        }
+    }
+
     /// <summary>Training: the left column's actions are for the drill.</summary>
     public bool Training
     {

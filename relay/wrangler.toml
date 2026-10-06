@@ -1,0 +1,13 @@
+# GameNight's online relay: a room per 4-digit code that passes the two games' messages
+# between them. Deployed by .github/workflows/android.yml (job "relay") on Cloudflare's free tier.
+name = "gamenight-relay"
+main = "src/index.js"
+compatibility_date = "2025-01-01"
+
+[[durable_objects.bindings]]
+name = "ROOMS"
+class_name = "Room"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room"]

@@ -145,7 +145,8 @@ public sealed class MatchCamera
         }
         // After a goal: follow the scorer's celebration (then the crowd shot, then back to the field).
         bool goal = b.Phase == Phase.Goal && b.Scorer >= 0 && b.PhaseT < GoalSeq.Back;
-        int ci = goal ? b.Scorer : Follow != null ? -1 : b.Controlled;
+        // (A 1v1 has two players of its own: the camera stays with the ball.)
+        int ci = goal ? b.Scorer : Follow != null || b.Versus ? -1 : b.Controlled;
         float cx = ci >= 0 ? Mathf.Lerp(a.X[ci], b.X[ci], alpha) : bx;
         float cz = ci >= 0 ? Mathf.Lerp(a.Z[ci], b.Z[ci], alpha) : bz;
         // Aiming a corner: frame the ring in the box along with the taker at the flag.

@@ -136,6 +136,7 @@ public sealed class SetupPlayer
     /// <summary>His own position, for the bench list ("CB", "ST"...).</summary>
     public string Pos = "";
     /// <summary>Where he came from (the game's player card), carried for the HUD; the engine never reads it.</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
     public object? Source;
 }
 

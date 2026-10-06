@@ -111,6 +111,21 @@ jobs:
             echo "::warning::No ANDROID_KEYSTORE_BASE64 secret: signing with the sideload key (see README)."
           fi
 
+      - name: Online relay address
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # The relay's address comes from the Cloudflare account (its workers.dev name); without
+          # the secrets the game says online play isn't set up yet.
+          url=""
+          if [ -n "$CF_TOKEN" ] && [ -n "$CF_ACCOUNT" ]; then
+            sub=$(curl -s -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/workers/subdomain" | jq -r '.result.subdomain // empty')
+            [ -n "$sub" ] && url="wss://gamenight-relay.$sub.workers.dev"
+          fi
+          echo "Relay: ${url:-none}"
+          sed -i "s#public const string Built = \".*\";#public const string Built = \"$url\";#" game/Scripts/Net/RelayConfig.cs
+
       - name: Import and build C#
         working-directory: game
         run: |
@@ -200,6 +215,21 @@ jobs:
           echo "version=$name" >> $GITHUB_OUTPUT
           sed -i "s/^config\/version=.*/config\/version=\"$name\"/" project.godot
 
+      - name: Online relay address
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          # The relay's address comes from the Cloudflare account (its workers.dev name); without
+          # the secrets the game says online play isn't set up yet.
+          url=""
+          if [ -n "$CF_TOKEN" ] && [ -n "$CF_ACCOUNT" ]; then
+            sub=$(curl -s -H "Authorization: Bearer $CF_TOKEN" "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/workers/subdomain" | jq -r '.result.subdomain // empty')
+            [ -n "$sub" ] && url="wss://gamenight-relay.$sub.workers.dev"
+          fi
+          echo "Relay: ${url:-none}"
+          sed -i "s#public const string Built = \".*\";#public const string Built = \"$url\";#" game/Scripts/Net/RelayConfig.cs
+
       - name: Import and build C#
         working-directory: game
         run: |
@@ -249,3 +279,21 @@ jobs:
           files: |
             build/GameNight-${{ needs.windows.outputs.version }}-Windows.zip
             build/GameNight-Windows.zip
+
+  # The online relay (relay/): a Cloudflare Worker, deployed on every push once the account's
+  # secrets are in the repository (free tier).
+  relay:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy the relay
+        working-directory: relay
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::warning::No Cloudflare secrets: the online relay isn't deployed (online play stays off)."
+            exit 0
+          fi
+          npx --yes wrangler@3 deploy

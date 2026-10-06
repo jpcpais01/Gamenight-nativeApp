@@ -3,6 +3,7 @@ using Godot;
 using GameNight.Grounds;
 using GameNight.Audio;
 using GameNight.Menus;
+using GameNight.Net;
 using GameNight.Render;
 using GameNight.Sim;
 using GameNight.UI;
@@ -59,6 +60,24 @@ public partial class Main : Node
     volatile bool _chunkBusy;
     /// <summary>Goals scored while skipping (written on the engine thread).</summary>
     readonly System.Collections.Concurrent.ConcurrentQueue<GoalEvent> _skipGoals = new();
+    // A 1v1 (same screen or online).
+    bool _versus;
+    /// <summary>Online: the line to the other game; on the friend's screen this one only draws
+    /// the host's frames (_feed) and sends its controls (_netIn).</summary>
+    Online _online;
+    bool _guest;
+    NetFeed _feed;
+    readonly NetInput _netIn = new();
+    readonly FrameCodec _codec = new();
+    /// <summary>Host: events since the last frame sent, the frame going out, and when.</summary>
+    readonly MatchSnapshot _netEvents = new(), _netOut = new();
+    double _sentAt = -1;
+    /// <summary>The away side's controls (the friend's online, or the second player's on the same screen).</summary>
+    readonly InputState _home = new(), _away = new();
+    readonly TouchControls.Mode[] _modes = new TouchControls.Mode[2];
+    readonly int[] _picks = { -1, -1 };
+    double _pingMs = -1, _pingAt;
+    bool _friendGone, _hostDirectedWas;
     /// <summary>Debug: `-- --screenshot=out.png` saves the screen after a few seconds and quits.</summary>
     string _shotPath;
     double _time, _shotAt = 6;
@@ -73,7 +92,7 @@ public partial class Main : Node
         _view = new PixelView();
         AddChild(_view);
         World.Build(_view.WorldRoot);
-        _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup, Request?.HostCrest, Request?.HostPlan).AddTo(_view.WorldRoot);
+        _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup, Request?.HostCrest, Request?.HostPlan, Request?.HomeCrest).AddTo(_view.WorldRoot);
         // An away day: the stands' home end is the other side's, for the crowd's sound too.
         Sound.Terraces.Flip = Request?.AwayDay == true;
         Acoustics();
@@ -118,20 +137,15 @@ public partial class Main : Node
             return peak;
         };
         _prof.Context = SpikeContext;
-        _letterbox.Skip += () =>
-        {
-            if (_invader.Holding)
-            {
-                _invader.Clear(_runner);
-                return;
-            }
-            if (Cutscene.Active)
-            {
-                Cutscene.Next();
-                if (!Cutscene.Active) EndDirected();
-            }
-            else EndDirected();
-        };
+        _online = Request?.Online;
+        _guest = Request?.Guest == true;
+        _versus = Request?.Versus == true || _online != null;
+        if (_guest) _feed = new NetFeed();
+        _netEvents.ClearEvents();
+        _hud.Side = _guest ? 1 : 0;
+        _hud.Remote = _guest;
+        _hud.Versus = Request?.Versus == true;
+        _letterbox.Skip += () => SkipDirected(true);
         Cutscene.OnCaption = _letterbox.Caption;
         Cutscene.OnSubtitle = _letterbox.Subtitle;
         Cutscene.OnBeat = WalkOutCrowd;
@@ -159,10 +173,11 @@ public partial class Main : Node
         _pause.Restart += NewMatch;
         _pause.SettingsChanged += ApplySettings;
         if (Request != null && !Request.Demo) _pause.Leave = () => Report(false);
+        if (_online != null) _pause.Online = true;
         _pause.WeatherName = () => Atmosphere.Names[(int)_ground.Atmosphere.Weather];
         _pause.CycleWeather = () => Atmosphere.Names[(int)_ground.Atmosphere.Cycle()];
         _pause.SaveReport = SaveReport;
-        if (Request?.Demo != true && Request?.Watch != true && Request?.Drill == null)
+        if (Request?.Demo != true && Request?.Watch != true && Request?.Drill == null && !_versus)
         {
             _pause.Foul = () => _runner?.Invoke(m => m.DebugFoul());
             _pause.Invader = () => _runner?.Invoke(m => m.DebugInvader(0.3));
@@ -218,10 +233,12 @@ public partial class Main : Node
         _match = Request != null ? new Match(Request.Seed, Request.Setup) : new Match(seed: DateTime.Now.Ticks % 2147483647);
         PickExplosions();
         if (Request?.Demo == true || Request?.Watch == true) _match.AutoPlay = true;
+        _match.Versus = _versus;
         // Names and kits are read before the match's own thread starts.
         _players.SetMatch(_match);
         _hud.SetMatch(_match);
-        _pause.Match = Request?.Drill == null ? _match : null;
+        // (The friend's subs aren't theirs to make online: the engine is on the host's side.)
+        _pause.Match = Request?.Drill == null && !_guest ? _match : null;
         _runner = new MatchRunner(_match);
         if (Request?.Drill is DrillKind kind)
         {
@@ -230,8 +247,9 @@ public partial class Main : Node
             _drillHud.Drill = _drill;
         }
         _runner.Read(_prev, _cur, out _);
-        _runner.Paused = _pause.IsOpen;
-        _runner.Start();
+        _runner.Paused = _pause.IsOpen && _online == null;
+        // The friend's screen draws the host's match: its own engine only holds the line-ups.
+        if (!_guest) _runner.Start();
         // Debug: `-- --invader` sends a fan on a few seconds into the match.
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--invader") >= 0) _runner.Invoke(m => m.DebugInvader(3));
         // A real match opens with the walk-out.
@@ -245,7 +263,8 @@ public partial class Main : Node
 
     void SetPaused(bool on)
     {
-        if (_runner != null) _runner.Paused = on || Directed;
+        // Online the match goes on behind the menu (the other player is still playing).
+        if (_runner != null) _runner.Paused = (on && _online == null) || Directed;
         _hud.Paused = on;
         if (GameAudio.Instance != null) GameAudio.Instance.Suspended = on;
         if (on) _controls.ReleaseAll();
@@ -321,7 +340,26 @@ public partial class Main : Node
         _hud.Visible = Request?.Demo != true;
         _controls.Visible = !_pause.IsOpen;
         _letterbox.Close();
-        if (_runner != null) _runner.Paused = _pause.IsOpen;
+        if (_runner != null) _runner.Paused = _pause.IsOpen && _online == null;
+    }
+
+    /// <summary>The walk-out, a replay or a pitch invader skipped (tapped here, or, online, by the
+    /// other player: either skips both).</summary>
+    void SkipDirected(bool here)
+    {
+        if (here && _online != null && (Directed || _invader.Holding)) _online.Send(Online.Skip, Array.Empty<byte>());
+        if (_invader.Holding)
+        {
+            _invader.Clear(_runner);
+            return;
+        }
+        if (!Directed) return;
+        if (Cutscene.Active)
+        {
+            Cutscene.Next();
+            if (!Cutscene.Active) EndDirected();
+        }
+        else EndDirected();
     }
 
     void ApplySettings()
@@ -386,6 +424,7 @@ public partial class Main : Node
     void Report(bool finished)
     {
         if (_reported || Request?.Done == null) return;
+        _online?.Dispose();
         _reported = true;
         _runner.Paused = true;
         while (_skipGoals.TryDequeue(out var g)) _goalLog.Add(g);
@@ -406,7 +445,7 @@ public partial class Main : Node
         var old = _ground;
         old.Root.GetParent()?.RemoveChild(old.Root);
         old.Root.QueueFree();
-        _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup, Request?.HostCrest, Request?.HostPlan).AddTo(_view.WorldRoot);
+        _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup, Request?.HostCrest, Request?.HostPlan, Request?.HomeCrest).AddTo(_view.WorldRoot);
         _view.Camera.Far = _ground.ViewRange;
         Acoustics();
     }
@@ -446,10 +485,33 @@ public partial class Main : Node
         _controls.Tick(dt);
         // The keyboard, a gamepad and a phone used as a controller play alongside the touch controls.
         bool live = Request?.Demo != true && Request?.Watch != true && _controls.Visible && !_pause.IsOpen && !Directed && !_invaderShown;
-        var input = Link.Host.Mix(_controls.Input, live, _controls.Current, _controls.Picked);
-        _controls.SelfModulate = Link.Host.Instance?.RemotePlay == true ? Colors.Transparent : Colors.White;
-        _runner.Submit(input);
-        _runner.Read(_prev, _cur, out float alpha);
+        InputState input;
+        if (Request?.Versus == true)
+        {
+            // Same screen: each controller plays for the side it was put on.
+            _modes[0] = ButtonMode(_cur, 0, out _picks[0]);
+            _modes[1] = ButtonMode(_cur, 1, out _picks[1]);
+            Link.Host.MixVersus(_controls.Input, live, _modes, _picks, _home, _away);
+            input = _home;
+        }
+        else input = Link.Host.Mix(_controls.Input, live, _controls.Current, _controls.Picked);
+        // (A phone's own screen still plays its side of a same-screen 1v1, pads or not.)
+        bool touchPlays = Request?.Versus == true && !OS.HasFeature("pc") && Link.Host.Instance?.SideOf("keys") >= 0;
+        _controls.SelfModulate = Link.Host.Instance?.RemotePlay == true && !touchPlays ? Colors.Transparent : Colors.White;
+        float alpha;
+        if (_guest)
+        {
+            OnlineGuest(input);
+            if (!_feed.Read(_prev, _cur, out alpha, _time)) _runner.Read(_prev, _cur, out alpha);
+        }
+        else
+        {
+            _runner.Submit(input);
+            if (_online != null) OnlineHost();
+            else if (Request?.Versus == true) _runner.Submit2(_away);
+            _runner.Read(_prev, _cur, out alpha);
+            if (_online != null) SendFrame();
+        }
         if (_watchBar != null) Skip();
 
         if (_view.Fit())
@@ -460,7 +522,7 @@ public partial class Main : Node
         if (_cur.Goal >= 0) _camera.Bump(0.4f);
         if (_cur.Goal >= 0 && !Directed) Explode(_cur);
         LogGoal();
-        if (_cur.Sub != 0) Substituted();
+        if (_cur.Sub != 0 && !_guest) Substituted();
         if (_cur.Post > 0) _camera.Bump(0.6f);
         float run = _pause.IsOpen ? 0 : dt;
         if (_replay.Active)
@@ -482,7 +544,7 @@ public partial class Main : Node
         {
             _camera.Follow = _invader.Focus;
             _camera.Update(_prev, _cur, alpha, run);
-            _players.Update(_prev, _cur, alpha, _time, (float)_match.SwitchT);
+            _players.Update(_prev, _cur, alpha, _time, _guest ? 1 : (float)_match.SwitchT);
             if (Request?.Demo != true && Request?.Drill == null)
             {
                 _replay.Record(_cur);
@@ -512,9 +574,12 @@ public partial class Main : Node
         _prof.Lap(Profiler.Sys.Sound);
         _view.Present(_camera.SubPixelX, _camera.SubPixelY);
 
-        bool attack = _cur.HumanAttacking;
-        _controls.SetMode(ButtonMode(_cur, attack, out int picked), picked);
-        _hud.Tick(_prev, _cur, alpha, input, attack, delta);
+        // Whose buttons the screen shows: the friend's side online; on a shared screen the side it's on.
+        int side = _guest ? 1 : Request?.Versus == true ? Math.Max(0, Link.Host.Instance?.SideOf("keys") ?? 0) : 0;
+        bool attack = side == 1 ? _cur.HumanAttacking2 : _cur.HumanAttacking;
+        _controls.SetMode(ButtonMode(_cur, side, out int picked), picked);
+        if (Request?.Versus == true) _hud.Tick(_prev, _cur, alpha, input, attack, delta, _away, _cur.HumanAttacking2);
+        else _hud.Tick(_prev, _cur, alpha, input, attack, delta);
         _drillHud?.Tick();
         if (_prewarm > 0) Prewarm(--_prewarm == 0);
         _pause.FoulShown = !Directed;
@@ -545,6 +610,12 @@ public partial class Main : Node
     /// (a league host's) or another at random.</summary>
     void PickExplosions()
     {
+        if (Request?.GoalFx is { Length: 2 } both)
+        {
+            _fxStyle[0] = Math.Clamp(both[0], 0, GoalFx.Count - 1);
+            _fxStyle[1] = Math.Clamp(both[1], 0, GoalFx.Count - 1);
+            return;
+        }
         var rng = new Random((int)(DateTime.Now.Ticks & 0x7fffffff));
         bool mine = Request != null && Request.Demo != true && Ground.Club != null;
         _fxStyle[0] = mine ? Math.Clamp(Ground.Club.S.GoalFx, 0, GoalFx.Count - 1) : rng.Next(GoalFx.Count);
@@ -669,19 +740,120 @@ public partial class Main : Node
     /// <summary>What the buttons say (the PWA's main loop): after your goal they pick the
     /// celebration (and show which while it plays), in goal at training they dive, and lining up
     /// your corner or goal kick they name the delivery.</summary>
-    TouchControls.Mode ButtonMode(MatchSnapshot s, bool attack, out int picked)
+    TouchControls.Mode ButtonMode(MatchSnapshot s, int side, out int picked)
     {
         picked = -1;
         bool drill = Request?.Drill != null;
-        if (s.CelebrationOpen && !drill) return TouchControls.Mode.Celebrate;
-        if (s.HumanScored && s.Celebration is { } kind && s.PhaseT < s.CelebrationAt + 1.6 && !drill)
+        bool attack = side == 1 ? s.HumanAttacking2 : s.HumanAttacking;
+        // A 1v1: only the scorer's side celebrates, only the taker's side aims.
+        bool mine = s.Scorer >= 0 && s.Team[s.Scorer] == side;
+        bool scored = s.Phase == Phase.Goal && mine && (s.Versus || s.HumanScored);
+        if (s.CelebrationOpen && mine && !drill) return TouchControls.Mode.Celebrate;
+        if (scored && s.Celebration is { } kind && s.PhaseT < s.CelebrationAt + 1.6 && !drill)
         {
             picked = Array.IndexOf(Match.Celebrations, kind);
             return TouchControls.Mode.Celebrate;
         }
-        if (s.KeeperButtons) return TouchControls.Mode.Keeper;
-        if (s.AimingCorner) return TouchControls.Mode.Corner;
-        if (s.AimingGoalKick) return TouchControls.Mode.GoalKick;
+        if (s.KeeperButtons && side == 0) return TouchControls.Mode.Keeper;
+        bool taker = s.SetPieceTeam == side;
+        if (s.AimingCorner && taker) return TouchControls.Mode.Corner;
+        if (s.AimingGoalKick && taker) return TouchControls.Mode.GoalKick;
         return attack ? TouchControls.Mode.Attack : TouchControls.Mode.Defend;
+    }
+
+    // ---------------------------------------------------------------- online
+
+    /// <summary>The host's side of the line each frame: the friend's controls into the engine,
+    /// skips, and what to do when they've gone.</summary>
+    void OnlineHost()
+    {
+        while (_online.TryReceive(out var m))
+        {
+            if (m.Length == 0) continue;
+            if (m[0] == Online.Input)
+            {
+                uint clock = NetInput.Unpack(m, _away);
+                // Their clock straight back now and then, for the ping they see.
+                if (_time - _pingAt > 0.5)
+                {
+                    _pingAt = _time;
+                    _online.Send(Online.Pong, BitConverter.GetBytes(clock));
+                }
+            }
+            else if (m[0] == Online.Skip) SkipDirected(false);
+            else if (m[0] == Online.Leave) _friendGone = true;
+        }
+        _runner.Submit2(_away);
+        if ((_online.Lost || _friendGone) && _versus)
+        {
+            // The friend left: the computer takes their side for the rest of the match.
+            _versus = false;
+            _runner.Invoke(m => m.Versus = false);
+            _hud.Note = "YOUR FRIEND LEFT · THE COMPUTER TAKES OVER";
+        }
+    }
+
+    /// <summary>Host: the newest frame to the friend, at most 30 a second, with every event since the last.</summary>
+    void SendFrame()
+    {
+        NetFeed.Fold(_netEvents, _cur);
+        if (!_versus || _time - _sentAt < 1 / 30.0) return;
+        _sentAt = _time;
+        _netOut.CopyFrom(_cur);
+        _netOut.ClearEvents();
+        NetFeed.Fold(_netOut, _netEvents);
+        _netEvents.ClearEvents();
+        _online.SendRaw(_codec.Encode(_netOut, Online.Frame, (byte)(Directed ? 1 : 0)));
+    }
+
+    /// <summary>The friend's side each frame: its controls to the host, the host's frames in,
+    /// the walk-out and replays kept in step, and the end if the host goes.</summary>
+    void OnlineGuest(InputState input)
+    {
+        var msg = _netIn.Pack(input, _time, (uint)Time.GetTicksMsec());
+        if (msg != null) _online.SendRaw(msg);
+        while (_online.TryReceive(out var m))
+        {
+            if (m.Length == 0) continue;
+            if (m[0] == Online.Frame) _feed.Add(m, _time);
+            else if (m[0] == Online.Pong && m.Length >= 5)
+            {
+                double ms = (uint)Time.GetTicksMsec() - BitConverter.ToUInt32(m, 1);
+                _pingMs = _pingMs < 0 ? ms : _pingMs + (ms - _pingMs) * 0.3;
+            }
+            else if (m[0] == Online.Skip) SkipDirected(false);
+            else if (m[0] == Online.Leave) _friendGone = true;
+        }
+        // The host's walk-out or replay is over: so is ours.
+        if (_hostDirectedWas && !_feed.HostDirected && Directed) SkipDirected(false);
+        _hostDirectedWas = _feed.HostDirected;
+        bool stalled = _feed.LastFrameAt >= 0 && _time - _feed.LastFrameAt > 1.5;
+        _hud.Note = _pingMs >= 0 ? $"ONLINE · {_pingMs:0} MS" + (stalled ? " · WAITING FOR THE HOST" : "") : "ONLINE";
+        if ((_online.Lost || _friendGone) && !_reported)
+        {
+            _hud.Note = "THE HOST LEFT";
+            Report(false);
+        }
+        // Substitutes the host made: dress them here too.
+        if (_cur.Sub != 0) GuestSubs();
+    }
+
+    /// <summary>Friend's screen: a sub came on at the host's. The frame says who (by number); the
+    /// line-ups here say what he looks like.</summary>
+    void GuestSubs()
+    {
+        foreach (var p in _match.All)
+        {
+            if (p.Id < 0 || p.Id >= MatchSnapshot.N || p.Number == _cur.Number[p.Id] || _cur.Number[p.Id] == 0) continue;
+            var on = _match.Bench[p.Team].Find(b => b.Number == _cur.Number[p.Id]);
+            if (on != null)
+            {
+                p.Name = on.Name;
+                p.Look = on.Look;
+            }
+            p.Number = _cur.Number[p.Id];
+            _players.Dress(_match, p);
+        }
+        _players.Flush();
     }
 }

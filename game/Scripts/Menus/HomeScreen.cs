@@ -230,7 +230,7 @@ public sealed partial class HomeScreen : PxCanvas
         Tap("play", body, () => _ui.App.PickGround());
         GoldButton("play", _play, "PLAY MATCH  >", Fit("PLAY MATCH  >", 32, pw - 20), () => _ui.App.PickGround());
 
-        // The stub: what's at stake, and a barcode.
+        // The stub: what's at stake, and the 1v1 key.
         Px.Bands(this, stub, new[] { Px.Hex(0x221c52), Px.Hex(0x1a1544), Px.Hex(0x131036) }, new[] { 0, 0.4f, 0.75f });
         float sx = stub.Position.X + 16, sr = stub.End.X - 14;
         Px.Text(this, Px.Small, new Vector2(sx, top + 22), "PRIZES", 8, Px.Cyan);
@@ -241,18 +241,8 @@ public sealed partial class HomeScreen : PxCanvas
             Px.TextR(this, Px.Big, sr, py, v, 20, Px.Hex(0xffe066));
             py += 25;
         }
-        var bars = new Rect2(sx, bot - 44, sr - sx, 26);
-        uint h = (uint)_ui.NextSeed * 2654435761u;
-        for (float bx = bars.Position.X; bx < bars.End.X - 2;)
-        {
-            h ^= h << 13;
-            h ^= h >> 17;
-            h ^= h << 5;
-            float bw = 1 + h % 3;
-            if ((h >> 8) % 3 != 0) DrawRect(new Rect2(bx, bars.Position.Y, bw, bars.Size.Y), new Color(Px.Ink, 0.75f));
-            bx += bw + 1;
-        }
-        Px.Text(this, Px.Small, new Vector2(sx, bot - 8), $"No {_ui.NextSeed % 1000000:000000}", 7, Px.InkDim);
+        // Play a friend: online with a code, or two controllers on one screen.
+        GhostButton("friend", new Rect2(sx - 4, bot - 50, sr - sx + 8, 38), "1V1 FRIEND", Fit("1V1 FRIEND", 18, sr - sx - 4), () => _ui.Open(new Net.VersusModal(_ui)));
 
         // Perforation with notches, then the gold edge.
         for (float py2 = top + 12; py2 < bot - 12; py2 += 9) DrawRect(new Rect2(stub.Position.X - 1, py2, 2, 5), new Color(Px.Ink, 0.4f));

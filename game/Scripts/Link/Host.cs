@@ -12,20 +12,22 @@ namespace GameNight.Link;
 
 /// <summary>
 /// The PC end of the phone controller (an autoload, so it lives across menus and matches).
-/// On a computer it listens on the home network for a phone running GameNight in controller
-/// mode, on its own thread, so a packet is taken the moment it lands rather than at the next
-/// frame. In a match the phone's buttons, a gamepad and the keyboard all play together
-/// (<see cref="Mix"/>); in the menus and the pause menu the phone is a touchpad driving the
-/// mouse. Also on a computer: fullscreen at the screen's own resolution and refresh rate
-/// (F11 or Alt+Enter for a window), Escape for back.
+/// On a computer it listens on the home network for phones running GameNight in controller
+/// mode (or the web controller), on its own thread, so a packet is taken the moment it lands
+/// rather than at the next frame. In a match the phones' buttons, gamepads and the keyboard
+/// all play together (<see cref="Mix"/>), or, in a same-screen 1v1, each for the side it was
+/// put on (<see cref="MixVersus"/>, <see cref="Controllers"/>). In the menus and the pause
+/// menu a phone is a touchpad driving the mouse. Also on a computer: fullscreen at the
+/// screen's own resolution and refresh rate (F11 or Alt+Enter for a window), Escape for back.
+/// A phone listens too, but only while a 1v1 wants a second controller (<see cref="Serve"/>).
 /// </summary>
 public sealed partial class Host : Node
 {
     public static Host Instance { get; private set; }
 
-    /// <summary>What the match is fed: the touch controls, the gamepad and the phone, together.</summary>
+    /// <summary>What the match is fed: the touch controls, the gamepads and the phones, together.</summary>
     public readonly InputState Mixed = new();
-    readonly Gamepad _pad = new();
+    readonly Dictionary<int, Gamepad> _pads = new();
     readonly Stopwatch _clock = Stopwatch.StartNew();
     readonly string _name = System.Environment.MachineName;
     readonly bool _pc = OS.HasFeature("pc");
@@ -35,20 +37,27 @@ public sealed partial class Host : Node
     System.Threading.Thread _thread;
     volatile bool _running;
 
+    /// <summary>One phone playing as a controller (two can, for a 1v1).</summary>
+    sealed class Phone
+    {
+        public readonly Wire.Pad Pad = new();
+        public IPEndPoint From;
+        public long At = -100000;
+        public ushort LastEvent, LastTackle, LastBack, LastClick;
+        public readonly List<ButtonEvent> Events = new();
+        public TackleSwipe Tackle;
+        public float Cx, Cy;
+    }
+
     // Shared with the network thread (under _gate).
     readonly object _gate = new();
-    readonly Wire.Pad _phone = new();
-    IPEndPoint _from;
-    long _phoneAt = -100000;
-    ushort _lastEvent, _lastTackle, _lastBack, _lastClick;
-    readonly List<ButtonEvent> _events = new();
-    TackleSwipe _tackle;
+    readonly Phone[] _phones = { new(), new() };
     int _backs, _clicks;
-    float _cx, _cy, _dx, _dy;
+    float _dx, _dy;
 
-    // What the phone's buttons should say, set by the match each frame.
+    // What the phones' buttons should say (per side), set by the match each frame.
     long _liveAt = -100000;
-    volatile int _mode, _picked = -1;
+    readonly int[] _mode = new int[2], _picked = { -1, -1 };
 
     Vector2 _cursor = new(-1, -1);
     bool _mouseDown;
@@ -60,8 +69,26 @@ public sealed partial class Host : Node
         Instance = this;
         ProcessMode = ProcessModeEnum.Always;
         if (!_pc) return;
-        LoadCode();
         if (!OS.HasFeature("editor")) DisplayServer.WindowSetMode(DisplayServer.WindowMode.ExclusiveFullscreen);
+        Serve(true);
+    }
+
+    /// <summary>Listen for phones (always on a computer; on a phone only while a 1v1 is set up
+    /// or played, so its own controller mode can't find itself).</summary>
+    public void Serve(bool on)
+    {
+        if (on == Listening) return;
+        if (!on)
+        {
+            if (_pc) return;
+            _running = false;
+            _udp?.Dispose();
+            _udp = null;
+            _web?.Stop();
+            _web = null;
+            return;
+        }
+        if (Code == 0) LoadCode();
         try
         {
             _udp = new UdpClient(AddressFamily.InterNetwork);
@@ -94,11 +121,27 @@ public sealed partial class Host : Node
     /// <summary>A phone is sending (within the last second).</summary>
     public bool PhoneConnected
     {
-        get { lock (_gate) return Now - _phoneAt < 1000; }
+        get
+        {
+            lock (_gate)
+                foreach (var p in _phones)
+                    if (Now - p.At < 1000) return true;
+            return false;
+        }
     }
 
-    /// <summary>The phone or a gamepad is doing the playing: the on-screen buttons can go.</summary>
-    public bool RemotePlay => PhoneConnected || _clock.Elapsed.TotalSeconds - _pad.LastUsed < 20;
+    /// <summary>A phone or a gamepad is doing the playing: the on-screen buttons can go.</summary>
+    public bool RemotePlay
+    {
+        get
+        {
+            if (PhoneConnected) return true;
+            double t = _clock.Elapsed.TotalSeconds;
+            foreach (var p in _pads.Values)
+                if (t - p.LastUsed < 20) return true;
+            return false;
+        }
+    }
 
     /// <summary>Listening for a phone (on a computer, with the port free).</summary>
     public bool Listening => _udp != null;
@@ -155,7 +198,8 @@ public sealed partial class Host : Node
         var cfg = new ConfigFile();
         cfg.SetValue("pairing", "code", Code);
         cfg.Save(CodeFile);
-        lock (_gate) _phoneAt = -100000;
+        lock (_gate)
+            foreach (var p in _phones) p.At = -100000;
     }
 
     // ---------------------------------------------------------------- network thread
@@ -201,74 +245,138 @@ public sealed partial class Host : Node
     internal int Answer(Wire.Pad rx, IPEndPoint ep, byte[] buf)
     {
         bool paired = rx.Code == Code;
-        if (paired) Take(rx, ep);
+        int slot = paired ? Take(rx, ep) : -1;
         bool live = Now - Volatile.Read(ref _liveAt) < 250;
-        return Wire.WriteStatus(buf, rx.Time, live, _mode, _picked, paired, _name);
+        int side = slot >= 0 ? Math.Max(0, SideOf("phone:" + slot)) : 0;
+        int mode, picked;
+        lock (_gate)
+        {
+            mode = _mode[side];
+            picked = _picked[side];
+        }
+        return Wire.WriteStatus(buf, rx.Time, live, mode, picked, paired && slot >= 0, _name);
     }
 
     /// <summary>A phone's packet: its state replaces the last; numbered presses, tackles, backs
-    /// and clicks not seen before are queued for the game.</summary>
-    void Take(Wire.Pad rx, IPEndPoint ep)
+    /// and clicks not seen before are queued for the game. Returns its slot (-1: two other
+    /// phones are already playing).</summary>
+    int Take(Wire.Pad rx, IPEndPoint ep)
     {
         lock (_gate)
         {
             long now = Now;
-            if (_from == null || !_from.Equals(ep) || rx.Nonce != _phone.Nonce || now - _phoneAt > 3000)
+            // The slot it already has, else a free (or long silent) one.
+            int slot = -1;
+            for (int i = 0; i < _phones.Length && slot < 0; i++)
+                if (_phones[i].From != null && _phones[i].From.Equals(ep) && now - _phones[i].At < 3000) slot = i;
+            for (int i = 0; i < _phones.Length && slot < 0; i++)
+                if (now - _phones[i].At > 3000) slot = i;
+            if (slot < 0) return -1;
+            var ph = _phones[slot];
+            if (ph.From == null || !ph.From.Equals(ep) || rx.Nonce != ph.Pad.Nonce || now - ph.At > 3000)
             {
                 // A new phone (or the same one back): nothing it did before counts again.
-                _from = new IPEndPoint(ep.Address, ep.Port);
-                _lastEvent = 0;
+                ph.From = new IPEndPoint(ep.Address, ep.Port);
+                ph.LastEvent = 0;
                 foreach (var e in rx.Events)
-                    if (Wire.Newer(e.Id, _lastEvent)) _lastEvent = (ushort)(e.Id - 1);
-                _lastTackle = rx.TackleId;
-                _lastBack = rx.BackId;
-                _lastClick = rx.ClickId;
-                _cx = rx.CursorX;
-                _cy = rx.CursorY;
-                _events.Clear();
-                _tackle = TackleSwipe.None;
+                    if (Wire.Newer(e.Id, ph.LastEvent)) ph.LastEvent = (ushort)(e.Id - 1);
+                ph.LastTackle = rx.TackleId;
+                ph.LastBack = rx.BackId;
+                ph.LastClick = rx.ClickId;
+                ph.Cx = rx.CursorX;
+                ph.Cy = rx.CursorY;
+                ph.Events.Clear();
+                ph.Tackle = TackleSwipe.None;
             }
             foreach (var e in rx.Events)
-                if (Wire.Newer(e.Id, _lastEvent))
+                if (Wire.Newer(e.Id, ph.LastEvent))
                 {
-                    _events.Add(e.E);
-                    _lastEvent = e.Id;
+                    ph.Events.Add(e.E);
+                    ph.LastEvent = e.Id;
                 }
-            if (Wire.Newer(rx.TackleId, _lastTackle))
+            if (Wire.Newer(rx.TackleId, ph.LastTackle))
             {
-                _lastTackle = rx.TackleId;
-                _tackle = rx.Tackle;
+                ph.LastTackle = rx.TackleId;
+                ph.Tackle = rx.Tackle;
             }
-            if (Wire.Newer(rx.BackId, _lastBack))
+            if (Wire.Newer(rx.BackId, ph.LastBack))
             {
-                _backs += (ushort)(rx.BackId - _lastBack);
-                _lastBack = rx.BackId;
+                _backs += (ushort)(rx.BackId - ph.LastBack);
+                ph.LastBack = rx.BackId;
             }
-            if (Wire.Newer(rx.ClickId, _lastClick))
+            if (Wire.Newer(rx.ClickId, ph.LastClick))
             {
-                _clicks += (ushort)(rx.ClickId - _lastClick);
-                _lastClick = rx.ClickId;
+                _clicks += (ushort)(rx.ClickId - ph.LastClick);
+                ph.LastClick = rx.ClickId;
             }
-            _dx += rx.CursorX - _cx;
-            _dy += rx.CursorY - _cy;
-            _cx = rx.CursorX;
-            _cy = rx.CursorY;
+            _dx += rx.CursorX - ph.Cx;
+            _dy += rx.CursorY - ph.Cy;
+            ph.Cx = rx.CursorX;
+            ph.Cy = rx.CursorY;
 
-            _phone.Nonce = rx.Nonce;
-            _phone.View = rx.View;
-            _phone.MoveX = rx.MoveX;
-            _phone.MoveY = rx.MoveY;
-            _phone.Sprint = rx.Sprint;
-            _phone.MouseDown = rx.MouseDown;
+            var p = ph.Pad;
+            p.Nonce = rx.Nonce;
+            p.View = rx.View;
+            p.MoveX = rx.MoveX;
+            p.MoveY = rx.MoveY;
+            p.Sprint = rx.Sprint;
+            p.MouseDown = rx.MouseDown;
             for (int i = 0; i < 3; i++)
             {
-                _phone.Held[i] = rx.Held[i];
-                _phone.Swipe[i] = rx.Swipe[i];
-                _phone.HoldTime[i] = rx.HoldTime[i];
+                p.Held[i] = rx.Held[i];
+                p.Swipe[i] = rx.Swipe[i];
+                p.HoldTime[i] = rx.HoldTime[i];
             }
-            _phoneAt = now;
+            ph.At = now;
+            return slot;
         }
     }
+
+    // ---------------------------------------------------------------- controllers and sides
+
+    /// <summary>A controller that can play: the keyboard (on a phone: its own screen), a gamepad, a phone.</summary>
+    public readonly record struct Controller(string Id, string Name, float StickX);
+
+    /// <summary>Same-screen 1v1: which side each controller plays for (0 home, 1 away, -1 neither).</summary>
+    readonly Dictionary<string, int> _sides = new();
+
+    public int SideOf(string id)
+    {
+        lock (_sides) return _sides.TryGetValue(id, out int s) ? s : -1;
+    }
+
+    public void SetSide(string id, int side)
+    {
+        lock (_sides) _sides[id] = Math.Clamp(side, -1, 1);
+    }
+
+    /// <summary>The controllers there are now (the keyboard or screen always), with their sticks.</summary>
+    public List<Controller> Controllers()
+    {
+        var list = new List<Controller> { new("keys", _pc ? "KEYBOARD" : "THIS PHONE", 0) };
+        foreach (var (dev, pad) in _pads) list.Add(new($"pad:{dev}", $"GAMEPAD {dev + 1}", (float)pad.Input.MoveX));
+        lock (_gate)
+            for (int i = 0; i < _phones.Length; i++)
+                if (Now - _phones[i].At < 1500) list.Add(new($"phone:{i}", $"PHONE {i + 1}", _phones[i].Pad.MoveX));
+        // Someone new: onto an empty side, if there is one.
+        lock (_sides)
+            foreach (var c in list)
+            {
+                if (_sides.ContainsKey(c.Id)) continue;
+                bool home = false, away = false;
+                foreach (var o in list)
+                    if (_sides.TryGetValue(o.Id, out int v))
+                    {
+                        home |= v == 0;
+                        away |= v == 1;
+                    }
+                _sides[c.Id] = !home ? 0 : !away ? 1 : -1;
+            }
+        return list;
+    }
+
+    /// <summary>The phones show their match controls (not the touchpad) while this is called every frame.</summary>
+    public void KeepLive() => Volatile.Write(ref _liveAt, Now);
 
     // ---------------------------------------------------------------- the game's side
 
@@ -282,52 +390,103 @@ public sealed partial class Host : Node
     {
         var h = Instance;
         if (h == null) return local;
-        h._mode = (int)mode;
-        h._picked = picked;
-        if (live) Volatile.Write(ref h._liveAt, h.Now);
-        var m = h.Mixed;
-        m.MoveX = local.MoveX;
-        m.MoveY = local.MoveY;
-        m.Sprint = local.Sprint;
-        for (int i = 0; i < 3; i++)
-        {
-            m.Held[i] = local.Held[i];
-            m.HoldTime[i] = local.HoldTime[i];
-            m.Swipe[i] = local.Swipe[i];
-        }
-        m.Events.AddRange(local.Events);
-        local.Events.Clear();
-        if (local.TackleSwipe != TackleSwipe.None) m.TackleSwipe = local.TackleSwipe;
-        local.TackleSwipe = TackleSwipe.None;
-
-        var p = h._pad.Input;
-        Add(m, p.MoveX, p.MoveY, p.Sprint, p.Held, p.HoldTime, p.Swipe);
-        if (live)
-        {
-            m.Events.AddRange(p.Events);
-            if (p.TackleSwipe != TackleSwipe.None) m.TackleSwipe = p.TackleSwipe;
-        }
-        p.Events.Clear();
-        p.TackleSwipe = TackleSwipe.None;
-
         lock (h._gate)
         {
-            var ph = h._phone;
-            if (h.Now - h._phoneAt < 300 && ph.View == Wire.View.Controls)
-            {
-                var hold = new double[3];
-                for (int i = 0; i < 3; i++) hold[i] = ph.HoldTime[i];
-                Add(m, ph.MoveX, ph.MoveY, ph.Sprint, ph.Held, hold, ph.Swipe);
-            }
-            if (live)
-            {
-                m.Events.AddRange(h._events);
-                if (h._tackle != TackleSwipe.None) m.TackleSwipe = h._tackle;
-            }
-            h._events.Clear();
-            h._tackle = TackleSwipe.None;
+            h._mode[0] = h._mode[1] = (int)mode;
+            h._picked[0] = h._picked[1] = picked;
         }
-        return m;
+        h.Gather(h.Mixed, null, local, live);
+        return h.Mixed;
+    }
+
+    /// <summary>A same-screen 1v1: each controller's input goes to the side it's on (see
+    /// <see cref="SetSide"/>); `modes` and `picked` are what each side's buttons say.</summary>
+    public static void MixVersus(InputState local, bool live, TouchControls.Mode[] modes, int[] picked, InputState home, InputState away)
+    {
+        var h = Instance;
+        if (h == null) return;
+        lock (h._gate)
+            for (int s = 0; s < 2; s++)
+            {
+                h._mode[s] = (int)modes[s];
+                h._picked[s] = picked[s];
+            }
+        h.Gather(home, away, local, live);
+    }
+
+    readonly double[] _hold = new double[3];
+
+    /// <summary>Everything that plays, into `a` (or, for a 1v1, each controller into its side's).
+    /// The sticks and held buttons are this frame's; the presses are added (whoever submits
+    /// them takes them out).</summary>
+    void Gather(InputState a, InputState b, InputState local, bool live)
+    {
+        if (live) Volatile.Write(ref _liveAt, Now);
+        Reset(a);
+        if (b != null) Reset(b);
+        InputState To(string id)
+        {
+            if (b == null) return a;
+            int s = SideOf(id);
+            return s == 0 ? a : s == 1 ? b : null;
+        }
+
+        var to = To("keys");
+        if (to != null)
+        {
+            Add(to, local.MoveX, local.MoveY, local.Sprint, local.Held, local.HoldTime, local.Swipe);
+            to.Events.AddRange(local.Events);
+            if (local.TackleSwipe != TackleSwipe.None) to.TackleSwipe = local.TackleSwipe;
+        }
+        local.Events.Clear();
+        local.TackleSwipe = TackleSwipe.None;
+
+        foreach (var (dev, pad) in _pads)
+        {
+            var p = pad.Input;
+            to = To($"pad:{dev}");
+            if (to != null)
+            {
+                Add(to, p.MoveX, p.MoveY, p.Sprint, p.Held, p.HoldTime, p.Swipe);
+                if (live)
+                {
+                    to.Events.AddRange(p.Events);
+                    if (p.TackleSwipe != TackleSwipe.None) to.TackleSwipe = p.TackleSwipe;
+                }
+            }
+            p.Events.Clear();
+            p.TackleSwipe = TackleSwipe.None;
+        }
+
+        lock (_gate)
+            for (int k = 0; k < _phones.Length; k++)
+            {
+                var ph = _phones[k];
+                to = To($"phone:{k}");
+                if (to != null && Now - ph.At < 300 && ph.Pad.View == Wire.View.Controls)
+                {
+                    for (int i = 0; i < 3; i++) _hold[i] = ph.Pad.HoldTime[i];
+                    Add(to, ph.Pad.MoveX, ph.Pad.MoveY, ph.Pad.Sprint, ph.Pad.Held, _hold, ph.Pad.Swipe);
+                }
+                if (to != null && live)
+                {
+                    to.Events.AddRange(ph.Events);
+                    if (ph.Tackle != TackleSwipe.None) to.TackleSwipe = ph.Tackle;
+                }
+                ph.Events.Clear();
+                ph.Tackle = TackleSwipe.None;
+            }
+    }
+
+    static void Reset(InputState m)
+    {
+        m.MoveX = m.MoveY = 0;
+        m.Sprint = false;
+        for (int i = 0; i < 3; i++)
+        {
+            m.Held[i] = m.Swipe[i] = false;
+            m.HoldTime[i] = 0;
+        }
     }
 
     static void Add(InputState m, double x, double y, bool sprint, bool[] held, double[] hold, bool[] swipe)
@@ -348,9 +507,20 @@ public sealed partial class Host : Node
 
     public override void _Process(double delta)
     {
-        _pad.Poll((float)delta, (TouchControls.Mode)_mode, _clock.Elapsed.TotalSeconds);
-        if (_pad.Back) GoBack();
-        if (_udp == null) return;
+        // Every gamepad plugged in, each read for its own side's buttons.
+        var joy = Godot.Input.GetConnectedJoypads();
+        foreach (int dev in joy)
+            if (!_pads.ContainsKey(dev)) _pads[dev] = new Gamepad(dev);
+        foreach (int dev in new List<int>(_pads.Keys))
+            if (!joy.Contains(dev)) _pads.Remove(dev);
+        foreach (var (dev, gp) in _pads)
+        {
+            int mode;
+            lock (_gate) mode = _mode[Math.Max(0, SideOf($"pad:{dev}"))];
+            gp.Poll((float)delta, (TouchControls.Mode)mode, _clock.Elapsed.TotalSeconds);
+            if (gp.Back) GoBack();
+        }
+        if (_udp == null || !_pc) return;
 
         int backs, clicks;
         float dx, dy;
@@ -363,8 +533,13 @@ public sealed partial class Host : Node
             dy = _dy;
             _backs = _clicks = 0;
             _dx = _dy = 0;
-            pad = Now - _phoneAt < 1000 && _phone.View == Wire.View.Pad;
-            down = pad && _phone.MouseDown;
+            pad = down = false;
+            foreach (var p in _phones)
+                if (Now - p.At < 1000 && p.Pad.View == Wire.View.Pad)
+                {
+                    pad = true;
+                    down |= p.Pad.MouseDown;
+                }
         }
         for (int i = 0; i < Math.Min(backs, 3); i++) GoBack();
         if (!pad && !_mouseDown) return;

@@ -16,6 +16,8 @@ public static class Style
     public static readonly Color Panel = new(20 / 255f, 26 / 255f, 22 / 255f, 0.78f);
     public static readonly Color PanelSolid = Hex(0x18201b);
     public static readonly Color Accent = Hex(0xffd447);
+    /// <summary>The other human's colour in a 1v1 (his ring, his marker), against Accent for side 0's.</summary>
+    public static readonly Color Rival = Hex(0x4fd8ff);
     public static readonly Color Red = Hex(0xc8393b);
 
     public static Color Hex(int rgb, float a = 1) =>

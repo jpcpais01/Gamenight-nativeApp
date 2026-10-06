@@ -52,7 +52,7 @@ public sealed partial class PlayersView
     readonly MultiMesh[] _mm = new MultiMesh[BodyMeshes.PartCount];
     readonly float[][] _buf = new float[BodyMeshes.PartCount][];
     readonly ShaderMaterial[] _mat = new ShaderMaterial[BodyMeshes.PartCount];
-    readonly MeshInstance3D _ball, _ring, _marker;
+    readonly MeshInstance3D _ball, _ring, _marker, _ring2, _marker2;
 
     // Per player, fixed for the match.
     readonly BodyShape[] _body = new BodyShape[N];
@@ -134,6 +134,12 @@ public sealed partial class PlayersView
         _ring = Geo.Instance(root, new QuadMesh { Size = new Vector2(1.28f, 1.28f), Orientation = PlaneMesh.OrientationEnum.Y }, Geo.Material("res://Shaders/ring.gdshader"));
         var gold = new StandardMaterial3D { AlbedoColor = new Color(1f, 0.83f, 0.28f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded };
         _marker = Geo.Instance(root, new CylinderMesh { TopRadius = 0.15f, BottomRadius = 0, Height = 0.28f, RadialSegments = 3, Rings = 1 }, gold);
+        // A 1v1: the other human's, in cyan.
+        var ring2 = Geo.Material("res://Shaders/ring.gdshader");
+        ring2.SetShaderParameter("color", new Vector3(0.31f, 0.85f, 1f));
+        _ring2 = Geo.Instance(root, _ring.Mesh, ring2);
+        _marker2 = Geo.Instance(root, _marker.Mesh, new StandardMaterial3D { AlbedoColor = new Color(0.31f, 0.85f, 1f), ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded });
+        _ring2.Visible = _marker2.Visible = false;
     }
 
     static Color Lin(int rgb) => new Color(((rgb >> 16) & 255) / 255f, ((rgb >> 8) & 255) / 255f, (rgb & 255) / 255f).SrgbToLinear();
@@ -436,20 +442,22 @@ public sealed partial class PlayersView
 
         _ball.Position = ShownBall(new Vector3(Mathf.Lerp(a.BallX, b.BallX, alpha), Mathf.Lerp(a.BallY, b.BallY, alpha), Mathf.Lerp(a.BallZ, b.BallZ, alpha)), dt);
 
-        // Your player: the ring (it pulses on a switch) and the arrow over his head.
-        int c = b.Controlled;
-        bool show = c >= 0 && b.Phase != Phase.Fulltime && b.DeadBallTaker < 0 && b.Phase != Phase.Goal;
-        show &= Markers;
-        _ring.Visible = _marker.Visible = show;
-        if (show)
-        {
-            float cx = Mathf.Lerp(a.X[c], b.X[c], alpha), cz = Mathf.Lerp(a.Z[c], b.Z[c], alpha);
-            float pulse = switchT < 0.3f ? 1 + (0.3f - switchT) * 2 : 1;
-            _ring.Position = new Vector3(cx, 0.02f, cz);
-            _ring.Scale = new Vector3(pulse, 1, pulse);
-            _marker.Position = new Vector3(cx, 2.3f * b.Height[c] + MathF.Sin(time * 4) * 0.05f, cz);
-            _marker.Rotation = new Vector3(0, time * 1.5f, 0);
-        }
+        // Your player: the ring (it pulses on a switch) and the arrow over his head (a 1v1: both humans').
+        bool show = b.Phase != Phase.Fulltime && b.DeadBallTaker < 0 && b.Phase != Phase.Goal && Markers;
+        Mark(_ring, _marker, show ? b.Controlled : -1, a, b, alpha, time, switchT);
+        Mark(_ring2, _marker2, show ? b.Controlled2 : -1, a, b, alpha, time, 1);
+    }
+
+    void Mark(MeshInstance3D ring, MeshInstance3D marker, int c, MatchSnapshot a, MatchSnapshot b, float alpha, float time, float switchT)
+    {
+        ring.Visible = marker.Visible = c >= 0;
+        if (c < 0) return;
+        float cx = Mathf.Lerp(a.X[c], b.X[c], alpha), cz = Mathf.Lerp(a.Z[c], b.Z[c], alpha);
+        float pulse = switchT < 0.3f ? 1 + (0.3f - switchT) * 2 : 1;
+        ring.Position = new Vector3(cx, 0.02f, cz);
+        ring.Scale = new Vector3(pulse, 1, pulse);
+        marker.Position = new Vector3(cx, 2.3f * b.Height[c] + MathF.Sin(time * 4) * 0.05f, cz);
+        marker.Rotation = new Vector3(0, time * 1.5f, 0);
     }
 
     void PosePlayer(MatchSnapshot a, MatchSnapshot b, float alpha, int id, float time, float dt, float mt,

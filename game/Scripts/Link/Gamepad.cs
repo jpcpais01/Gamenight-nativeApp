@@ -20,18 +20,16 @@ public sealed class Gamepad
     public bool Back;
 
     readonly ulong[] _downAt = new ulong[3];
+    readonly int _dev;
     bool _tackleWas, _slideWas, _startWas;
+
+    /// <summary>The pad with this device number (one per player in a 1v1).</summary>
+    public Gamepad(int dev) => _dev = dev;
 
     public void Poll(float dt, TouchControls.Mode mode, double now)
     {
         Back = false;
-        var pads = Godot.Input.GetConnectedJoypads();
-        if (pads.Count == 0)
-        {
-            Clear();
-            return;
-        }
-        int dev = pads[0];
+        int dev = _dev;
         bool B(JoyButton b) => Godot.Input.IsJoyButtonPressed(dev, b);
         float Ax(JoyAxis a) => Godot.Input.GetJoyAxis(dev, a);
 

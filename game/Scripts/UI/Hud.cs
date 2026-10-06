@@ -37,6 +37,15 @@ public sealed partial class Hud : Control
     public PixelView View;
     public bool ShowFps;
     public bool Paused;
+    /// <summary>Which side this screen's player is on (1: the friend's screen, online).</summary>
+    public int Side;
+    /// <summary>Same-screen 1v1: no single player's card in the corner.</summary>
+    public bool Versus;
+    /// <summary>Online, the friend's screen: the engine isn't here, so nothing on it is read.</summary>
+    public bool Remote;
+    /// <summary>A line of news up top (online: the ping, or that the friend left); empty for none.</summary>
+    public string Note = "";
+    string _noteShown = "";
 
     /// <summary>Training: only what's drawn over the pitch (the dead-ball aim, the power bars,
     /// stamina), no scoreboard, minimap, captions or cards.</summary>
@@ -90,13 +99,18 @@ public sealed partial class Hud : Control
     string _pcName = "";
     Role _pcRole;
 
-    // Overlays over the pitch.
-    Vector2? _head, _aim;
+    // Overlays over the pitch: the dead-ball aim, and per human his stamina and charge bar.
+    Vector2? _aim;
     bool _aimOff;
-    float _stamina = -1;
-    int _chargeBtn = -1;
-    float _chargeP, _chargeA;
-    bool _chargeDead;
+    sealed class Mark
+    {
+        public Vector2? Head;
+        public float Stamina = -1;
+        public int Btn = -1;
+        public float P, A;
+        public bool Dead;
+    }
+    readonly Mark[] _marks = { new(), new() };
 
     // Frame rate.
     string _fpsText = "";
@@ -186,7 +200,9 @@ public sealed partial class Hud : Control
     public float SafeRight => _safeR;
     public float SafeTop => _safeT;
 
-    public void Tick(MatchSnapshot a, MatchSnapshot b, float alpha, InputState input, bool attack, double delta)
+    /// <summary>`input` and `attack` are this screen's player's (side Side); a same-screen 1v1
+    /// passes the other side's as `input2`, `attack2`.</summary>
+    public void Tick(MatchSnapshot a, MatchSnapshot b, float alpha, InputState input, bool attack, double delta, InputState input2 = null, bool attack2 = false)
     {
         _now += delta;
         Insets();
@@ -195,7 +211,7 @@ public sealed partial class Hud : Control
         PlayerCard(b);
         _map.Visible = !_overlayOnly && !Paused && b.Phase != Phase.Fulltime;
         if (_map.Visible) _map.Update(a, b, alpha);
-        Overlays(a, b, alpha, input, attack, (float)delta);
+        Overlays(a, b, alpha, (float)delta, (Side, input, attack), (1 - Side, input2, attack2));
         Animate();
         Fps(delta);
     }
@@ -588,8 +604,8 @@ public sealed partial class Hud : Control
 
     void PlayerCard(MatchSnapshot b)
     {
-        bool show = b.Phase != Phase.Fulltime && b.Controlled >= 0;
-        int c = b.Controlled;
+        int c = Side == 1 ? b.Controlled2 : b.Controlled;
+        bool show = b.Phase != Phase.Fulltime && c >= 0 && !Versus;
         int st = c >= 0 ? (int)MathF.Round(b.Stamina[c] * 100) : -1;
         if (show == _pcShow && c == _pcFor && st == _pcStamina) return;
         _pcShow = show;
@@ -644,12 +660,18 @@ public sealed partial class Hud : Control
 
     // ------------------------------------------------------------------ over the pitch
 
-    void Overlays(MatchSnapshot a, MatchSnapshot b, float alpha, InputState input, bool attack, float dt)
+    void Overlays(MatchSnapshot a, MatchSnapshot b, float alpha, float dt, params (int side, InputState input, bool attack)[] humans)
     {
-        bool dirty = _head != null || _aim != null || _chargeA > 0;
-        _head = null;
+        bool dirty = _aim != null;
+        foreach (var mk in _marks) dirty |= mk.Head != null || mk.A > 0;
+        foreach (var mk in _marks) mk.Head = null;
         _aim = null;
-        if (View == null || Paused) { if (dirty) _overlay.QueueRedraw(); _chargeA = 0; return; }
+        if (View == null || Paused)
+        {
+            foreach (var mk in _marks) mk.A = 0;
+            if (dirty) _overlay.QueueRedraw();
+            return;
+        }
 
         // Dead-ball shot: the target on the goal mouth (red when it would miss).
         if (b.AimingShot && b.HasAimPoint)
@@ -658,64 +680,64 @@ public sealed partial class Hud : Control
             _aimOff = MathF.Abs(b.AimZ) > Pitch.GoalHalfWidth - 0.1 || b.AimY > Pitch.GoalHeight - 0.1;
         }
 
-        int c = b.Controlled;
-        bool ballOut = b.Phase == Phase.Fulltime;
-        if (c >= 0 && !ballOut)
+        foreach (var (side, input, attack) in humans)
         {
-            var head = new Vector3(Mathf.Lerp(a.X[c], b.X[c], alpha), 2.45f * b.Height[c], Mathf.Lerp(a.Z[c], b.Z[c], alpha));
-            _head = View.WorldToUnits(head);
-            _stamina = b.DeadBallTaker < 0 ? b.Stamina[c] : -1;
+            var mk = _marks[side];
+            int c = side == 1 ? b.Controlled2 : b.Controlled;
+            if (c >= 0 && b.Phase != Phase.Fulltime)
+            {
+                var head = new Vector3(Mathf.Lerp(a.X[c], b.X[c], alpha), 2.45f * b.Height[c], Mathf.Lerp(a.Z[c], b.Z[c], alpha));
+                mk.Head = View.WorldToUnits(head);
+                mk.Stamina = b.DeadBallTaker < 0 ? b.Stamina[c] : -1;
+            }
+            // Pass / through / shot weight while a button is held.
+            int btn = -1;
+            if (c >= 0 && attack && input != null)
+            {
+                if (input.Held[2]) btn = 2;
+                else if (input.Held[0]) btn = 0;
+                else if (input.Held[1]) btn = 1;
+            }
+            // (Held since before the last switch: it was cancelled by it.)
+            if (btn >= 0 && _match != null && !Remote && input.HoldTime[btn] > _match.Seats[side].SwitchT + 0.05) btn = -1;
+            if (btn >= 0)
+            {
+                double hold = input.HoldTime[btn];
+                bool shot = btn == 2;
+                mk.P = shot ? (float)Math.Min(1.15, hold / 0.85) / 1.15f : (float)Math.Min(1, hold / 0.6);
+                mk.Btn = btn;
+                mk.Dead = shot && _aim != null;
+            }
+            mk.A = Math.Clamp(mk.A + (btn >= 0 ? 1 : -1) * dt / 0.12f, 0, 1);
+            dirty |= mk.Head != null || mk.A > 0;
         }
-
-        // Pass / through / shot weight while a button is held.
-        int btn = -1;
-        if (attack && input != null)
-        {
-            if (input.Held[2]) btn = 2;
-            else if (input.Held[0]) btn = 0;
-            else if (input.Held[1]) btn = 1;
-        }
-        if (btn >= 0 && _match != null && input.HoldTime[btn] > _match.SwitchT + 0.05) btn = -1;
-        if (btn >= 0)
-        {
-            double hold = input.HoldTime[btn];
-            bool shot = btn == 2;
-            _chargeP = shot ? (float)Math.Min(1.15, hold / 0.85) / 1.15f : (float)Math.Min(1, hold / 0.6);
-            _chargeBtn = btn;
-            _chargeDead = shot && _aim != null;
-        }
-        _chargeA = Math.Clamp(_chargeA + (btn >= 0 ? 1 : -1) * dt / 0.12f, 0, 1);
-        if (dirty || _head != null || _aim != null || _chargeA > 0) _overlay.QueueRedraw();
+        if (dirty || _aim != null) _overlay.QueueRedraw();
     }
 
     void DrawOverlay(Painter c)
     {
         if (_aim is Vector2 am) DrawAim(c, am);
-        if (_head is Vector2 h)
+        foreach (var mk in _marks)
         {
             // Stamina: very small and thin, just over his head.
-            if (_stamina >= 0) Bar(c, new Rect2(h.X - 14, h.Y - 3, 28, 2), _stamina, null, Style.Ink);
-        }
-        if (_chargeA > 0)
-        {
-            Vector2? at = _chargeDead && _aim is Vector2 ap ? ap - new Vector2(0, 32) : _head;
-            if (at is Vector2 p)
+            if (mk.Head is Vector2 h && mk.Stamina >= 0) Bar(c, new Rect2(h.X - 14, h.Y - 3, 28, 2), mk.Stamina, null, Style.Ink);
+            if (mk.A <= 0) continue;
+            Vector2? at = mk.Dead && _aim is Vector2 ap ? ap - new Vector2(0, 32) : mk.Head;
+            if (at is not Vector2 p) continue;
+            bool shot = mk.Btn == 2;
+            float w = mk.Dead ? 70 : 44, hh = mk.Dead ? 6 : 4;
+            var r = new Rect2(p.X - w / 2, p.Y - 11, w, hh);
+            Bar(c, r, mk.P, mk.Dead ? RampDead : shot ? RampShot : RampPass, Colors.White, mk.A);
+            if (shot)
             {
-                bool shot = _chargeBtn == 2;
-                float w = _chargeDead ? 70 : 44, hh = _chargeDead ? 6 : 4;
-                var r = new Rect2(p.X - w / 2, p.Y - 11, w, hh);
-                Bar(c, r, _chargeP, _chargeDead ? RampDead : shot ? RampShot : RampPass, Colors.White, _chargeA);
-                if (shot)
+                // The tick: full power (the dead-ball gauge's sweet spot).
+                float tx = r.Position.X + w * ((mk.Dead ? 0.92f : 1f) / 1.15f);
+                if (mk.Dead)
                 {
-                    // The tick: full power (the dead-ball gauge's sweet spot).
-                    float tx = r.Position.X + w * ((_chargeDead ? 0.92f : 1f) / 1.15f);
-                    if (_chargeDead)
-                    {
-                        c.DrawRect(new Rect2(tx - 2, r.Position.Y - 1, 4, hh + 2), new Color(0, 0, 0, _chargeA));
-                        c.DrawRect(new Rect2(tx - 1, r.Position.Y, 2, hh), new Color(Style.Ink, _chargeA));
-                    }
-                    else c.DrawRect(new Rect2(tx, r.Position.Y, 1, hh), new Color(0, 0, 0, _chargeA));
+                    c.DrawRect(new Rect2(tx - 2, r.Position.Y - 1, 4, hh + 2), new Color(0, 0, 0, mk.A));
+                    c.DrawRect(new Rect2(tx - 1, r.Position.Y, 2, hh), new Color(Style.Ink, mk.A));
                 }
+                else c.DrawRect(new Rect2(tx, r.Position.Y, 1, hh), new Color(0, 0, 0, mk.A));
             }
         }
     }
@@ -736,6 +758,11 @@ public sealed partial class Hud : Control
 
     void Fps(double delta)
     {
+        if (Note != _noteShown)
+        {
+            _noteShown = Note;
+            _fps.QueueRedraw();
+        }
         if (!ShowFps)
         {
             if (_fpsText.Length > 0) { _fpsText = ""; _fps.QueueRedraw(); }
@@ -755,11 +782,16 @@ public sealed partial class Hud : Control
 
     void DrawFps(Painter c)
     {
-        if (_fpsText.Length == 0) return;
         var f = Style.Font(false, 0.5f);
         const int size = 13;
-        var r = new Rect2(14 + _safeL, 52 + _safeT, Style.Width(f, _fpsText, size) + 12, size + 8);
-        Style.Box(c, r, new Color(0, 0, 0, 0.55f), 3);
-        Style.Text(c, f, _fpsText, r, size, Style.Ink);
+        float y = 52 + _safeT;
+        foreach (var text in new[] { _fpsText, _noteShown })
+        {
+            if (text.Length == 0) continue;
+            var r = new Rect2(14 + _safeL, y, Style.Width(f, text, size) + 12, size + 8);
+            Style.Box(c, r, new Color(0, 0, 0, 0.55f), 3);
+            Style.Text(c, f, text, r, size, Style.Ink);
+            y += size + 12;
+        }
     }
 }
