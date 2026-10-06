@@ -974,34 +974,60 @@ public sealed partial class AI
         }
         // A keeper without the ball shouldn't stay human-controlled.
         // (Unless he's playing it with his feet: a pass to him from a team-mate, or the ball at his feet.)
-        var ctl = m.Controlled;
+        for (int t = 0; t < 2; t++)
+            if (m.HumanSide(t)) AutoSwitch(m.Seats[t], t);
+
+        if (m.Owner != lastOwner)
+        {
+            lastOwner = m.Owner;
+            possStart = m.Time;
+            patience = 0.35 + m.Rng.Next() * 0.9;
+        }
+
+        TeamPlay();
+
+        foreach (var p in m.Players)
+        {
+            bool isTaker = m.SetPiece != null && m.SetPiece.Taker == p;
+            // Your keeper sitting on the ball: after six seconds he plays it himself.
+            bool keeperSits = p.Role == Role.GK && m.HeldBy == p && m.SetPiece == null && p.Plan == null && m.Time - m.HeldSince > 6;
+            if (m.Piloted(p) && !isTaker && !keeperSits && m.Phase != Phase.Goal && !m.AutoPlay) continue;
+            Think(p);
+        }
+    }
+
+    /// <summary>A human's player switches by himself: off a keeper who's done with the ball,
+    /// and on defence or a loose ball to the team-mate who should take it.</summary>
+    void AutoSwitch(Seat seat, int team)
+    {
+        var ctl = seat.Controlled;
         bool keeperFeet = m.Owner == ctl || (m.PassTarget == ctl && m.LastKicker?.Team == ctl.Team);
         if (ctl.Role == Role.GK && !m.KeeperHuman && m.HeldBy != ctl && !keeperFeet && m.Phase == Phase.Play && !(m.SetPiece != null && m.SetPiece.Taker == ctl))
         {
-            var ch = Chaser[m.HumanTeam];
+            var ch = Chaser[team];
             if (ch != null && ch.Role != Role.GK) m.SetControlled(ch);
         }
         // Auto-switch on defence / loose balls to the teammate who should take the ball.
         int att = m.AttackingTeam();
-        var c = m.Controlled;
-        if (m.Phase == Phase.Play && att != m.HumanTeam && m.ShotTeam() != m.HumanTeam && m.SwitchT > 0.45 && c.Action != ActionKind.Tackle && c.Action != ActionKind.Slide)
+        var c = seat.Controlled;
+        if (m.Phase == Phase.Play && att != team && m.ShotTeam() != team && seat.SwitchT > 0.45 && c.Action != ActionKind.Tackle && c.Action != ActionKind.Slide)
         {
             var ci = Intercept[c.Id];
             double ct = ci.T >= 0 ? ci.T : 9;
             double cd = m.BallDist(c);
             // Is the stick pushing toward the ball? (Then the player clearly means to chase.)
             double toward = 0;
-            if (m.NoInputT == 0 && cd > 0.5)
+            if (seat.NoInputT == 0 && cd > 0.5)
             {
                 double bx = (m.Ball.Pos.X - c.Pos.X) / cd;
                 double bz = (m.Ball.Pos.Z - c.Pos.Z) / cd;
                 toward = c.TouchX * bx + c.TouchZ * bz;
             }
-            bool idle = m.NoInputT > 0.25;
+            bool idle = seat.NoInputT > 0.25;
             double margin = idle ? 0.25 : toward > 0.6 ? 0.9 : 0.4;
             Player? best = null;
             double bestScore = 0;
-            foreach (var q in m.Teams[m.HumanTeam].Players)
+            foreach (var q in m.Teams[team].Players)
             {
                 if (q == c || q.Role == Role.GK || q.Action == ActionKind.Stumble || q.Action == ActionKind.Fall) continue;
                 var qi = Intercept[q.Id];
@@ -1020,26 +1046,6 @@ public sealed partial class AI
                 }
             }
             if (best != null) m.SetControlled(best);
-        }
-
-        if (m.Owner != lastOwner)
-        {
-            lastOwner = m.Owner;
-            possStart = m.Time;
-            patience = 0.35 + m.Rng.Next() * 0.9;
-        }
-
-        TeamPlay();
-
-        // Your keeper sitting on the ball: after six seconds he plays it himself.
-        var gk = m.Controlled;
-        bool keeperSits = gk.Role == Role.GK && m.HeldBy == gk && m.SetPiece == null && gk.Plan == null && m.Time - m.HeldSince > 6;
-
-        foreach (var p in m.Players)
-        {
-            bool isTaker = m.SetPiece != null && m.SetPiece.Taker == p;
-            if (p == m.Controlled && !isTaker && !keeperSits && m.Phase != Phase.Goal && !m.AutoPlay) continue;
-            Think(p);
         }
     }
 
@@ -2049,7 +2055,7 @@ public sealed partial class AI
             p.LookTarget.Set(sp.X + f.x * 20, 0, sp.Z + f.z * 20);
             p.LookAt = runUp ? null : p.LookTarget;
             if (sp.Kind == SetPieceKind.Throw && m.HeldBy != p) m.CatchBall(p);
-            bool human = p.Team == m.HumanTeam && !m.AutoPlay;
+            bool human = m.HumanSide(p.Team) && !m.AutoPlay;
             // (In a real match, the other side's goal kick takes a moment longer: the camera drops
             // in behind the keeper to watch it.)
             double wait = human ? (runUp || sp.Kind == SetPieceKind.Corner || sp.Kind == SetPieceKind.GoalKick ? 20 : 7) : runUp ? 2.6 : sp.Kind == SetPieceKind.FreeKick ? 1.8 : m.AutoPlay ? 1.3 : 2.6;

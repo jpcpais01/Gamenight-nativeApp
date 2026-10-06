@@ -109,7 +109,7 @@ public sealed partial class AI
         }
         double t = m.Time - holdStart[k.Team];
         // (Yours only comes here once you've held it six seconds: he plays it straight away.)
-        bool human = k == m.Controlled && !m.AutoPlay;
+        bool human = m.Piloted(k) && !m.AutoPlay;
         // Body to the pitch, ball cradled, eyes up.
         k.Facing += M.AngleDiff(k.Facing, dir > 0 ? 0 : Math.PI) * 0.08;
         if (k.Plan != null)

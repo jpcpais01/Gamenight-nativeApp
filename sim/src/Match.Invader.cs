@@ -177,6 +177,6 @@ public sealed partial class Match
             t.Vel.Set(0, 0, 0);
         }
         t.Facing = dir > 0 ? 0 : Math.PI;
-        if (t.Team == HumanTeam) SetControlled(t);
+        if (HumanSide(t.Team)) SetControlled(t);
     }
 }

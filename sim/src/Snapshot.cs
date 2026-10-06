@@ -71,6 +71,10 @@ public sealed class MatchSnapshot
     public int Controlled = -1, Owner = -1, HeldBy = -1, PassTarget = -1, Scorer = -1;
     public int PossTeam;
     public bool HumanAttacking;
+    /// <summary>A 1v1: the other side's human's player and whether his buttons mean attack.</summary>
+    public bool Versus;
+    public int Controlled2 = -1;
+    public bool HumanAttacking2;
     /// <summary>For the buttons: the celebration is the human's to pick (Match.CelebrationOpen), the human
     /// just scored (and isn't on autoplay), the human's keeper is in goal without the ball (training in goal).</summary>
     public bool CelebrationOpen, HumanScored, KeeperButtons;
@@ -146,6 +150,7 @@ public sealed class MatchSnapshot
         Dir[0] = o.Dir[0]; Dir[1] = o.Dir[1];
         Controlled = o.Controlled; Owner = o.Owner; HeldBy = o.HeldBy; PassTarget = o.PassTarget; Scorer = o.Scorer;
         PossTeam = o.PossTeam; HumanAttacking = o.HumanAttacking;
+        Versus = o.Versus; Controlled2 = o.Controlled2; HumanAttacking2 = o.HumanAttacking2;
         CelebrationOpen = o.CelebrationOpen; HumanScored = o.HumanScored; KeeperButtons = o.KeeperButtons;
         SetPiece = o.SetPiece; SetPieceTeam = o.SetPieceTeam; SetPieceTaker = o.SetPieceTaker; SetPieceX = o.SetPieceX; SetPieceZ = o.SetPieceZ;
         SetPieceDirect = o.SetPieceDirect; HasSetPieceTarget = o.HasSetPieceTarget; SetPieceTargetX = o.SetPieceTargetX; SetPieceTargetZ = o.SetPieceTargetZ;
@@ -290,6 +295,9 @@ public sealed partial class Match
         s.Scorer = Scorer?.Id ?? -1;
         s.PossTeam = PossTeam;
         s.HumanAttacking = HumanAttacking();
+        s.Versus = Versus;
+        s.Controlled2 = Versus ? Seats[1 - HumanTeam].Controlled.Id : -1;
+        s.HumanAttacking2 = Versus && HumanAttacking(1 - HumanTeam);
         s.CelebrationOpen = CelebrationOpen;
         s.HumanScored = Phase == Phase.Goal && !AutoPlay && Scorer != null && Scorer.Team == HumanTeam;
         s.KeeperButtons = KeeperHuman && Controlled.Role == Role.GK && HeldBy != Controlled;

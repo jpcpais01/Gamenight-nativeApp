@@ -19,10 +19,14 @@ public sealed class DeliveryPreview
     double solvedAt = -1;
     string lastKey = "";
 
-    public void Update(Match m, InputState input)
+    /// <summary>`input2`: a 1v1's other side (whoever is on the ball, or taking the set piece, is shown).</summary>
+    public void Update(Match m, InputState input, InputState? input2 = null)
     {
         bool playing = !m.AutoPlay;
         var sp = m.SetPiece;
+        int team = sp?.Team ?? m.Owner?.Team ?? m.HumanTeam;
+        if (!m.HumanSide(team)) team = m.HumanTeam;
+        if (team != m.HumanTeam && input2 != null) input = input2;
         if (playing && m.AimingDelivery && sp?.Target != null)
         {
             var t = sp.Target;
@@ -46,7 +50,7 @@ public sealed class DeliveryPreview
             {
                 solvedAt = m.Time;
                 lastKey = "cross";
-                var c = m.CrossAim(input.MoveX, input.MoveY);
+                var c = m.CrossAim(input.MoveX, input.MoveY, team);
                 has = c != null;
                 if (c != null)
                 {

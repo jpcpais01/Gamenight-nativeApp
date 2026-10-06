@@ -148,6 +148,28 @@ public sealed class SteerState
 }
 
 /// <summary>
+/// One human's side of the match: the player he controls and what his buttons have going on.
+/// There is one per team; only a human side's (see Match.HumanSide) is used.
+/// </summary>
+public sealed class Seat
+{
+    public Player Controlled = null!;
+    /// <summary>PRESS / SPRINT held while the ball isn't his side's.</summary>
+    public bool PressHeld;
+    /// <summary>Seconds the stick has been idle (read by the AI for auto-switching).</summary>
+    public double NoInputT;
+    /// <summary>Seconds since the controlled player changed (UI flash).</summary>
+    public double SwitchT;
+    internal bool SprintWas;
+    internal double LastTackleTap = -10;
+    /// <summary>Sprint-swipe tackle: committed, waiting for the moment to strike.</summary>
+    internal bool LungeOn, LungeSlide;
+    internal double LungeUntil;
+    /// <summary>Pressing: how long he's been tight on the carrier (s), and when he can next go in.</summary>
+    internal double PressTight, PokeReady;
+}
+
+/// <summary>
 /// One match (or a training drill on a pitch): the whole simulation. Create it from a seed (and
 /// optionally two line-ups), then call Step once per Tick.DT with the human's input. Same seed,
 /// same line-ups, same inputs: the same match, step for step, as the PWA.
@@ -232,7 +254,6 @@ public sealed partial class Match
     public Celebration? Celebration;
     /// <summary>Your scorer's run, while the stick steers it (the first GoalSeq.Steer s of your goals).</summary>
     public readonly SteerState Steer = new SteerState();
-    bool sprintWas;
     /// <summary>Yellow cards per player id.</summary>
     public readonly int[] Cards = new int[22];
     public Foul? LastFoul;
@@ -252,20 +273,17 @@ public sealed partial class Match
     public readonly int HumanTeam = 0;
     /// <summary>When true the AI also drives the "controlled" player (attract mode / tests).</summary>
     public bool AutoPlay;
-    public Player Controlled = null!;
-    public bool PressHeld;
-    double lastTackleTap = -10;
-    /// <summary>Sprint-swipe tackle: committed, waiting for the moment to strike.</summary>
-    bool lungeOn;
-    bool lungeSlide;
-    double lungeUntil;
-    /// <summary>Pressing: how long he's been tight on the carrier (s), and when he can next go in.</summary>
-    double pressTight;
-    double pokeReady;
-    /// <summary>Seconds the stick has been idle (read by the AI for auto-switching).</summary>
-    public double NoInputT;
-    /// <summary>Seconds since the controlled player changed (UI flash).</summary>
-    public double SwitchT;
+    /// <summary>1v1: a human on each side, team 1's playing off Step's second input.</summary>
+    public bool Versus;
+    /// <summary>Each side's human (only the human sides' are used).</summary>
+    public readonly Seat[] Seats = { new Seat(), new Seat() };
+    /// <summary>The player HumanTeam's human controls.</summary>
+    public Player Controlled => Seats[HumanTeam].Controlled;
+    public double SwitchT => Seats[HumanTeam].SwitchT;
+    /// <summary>A human plays this side (the one, or either in a 1v1).</summary>
+    public bool HumanSide(int team) => team == HumanTeam || Versus;
+    /// <summary>The human of p's side controls p.</summary>
+    public bool Piloted(Player p) => HumanSide(p.Team) && Seats[p.Team].Controlled == p;
 
     public MatchEvents Events = new MatchEvents();
     MatchEvents spareEvents = new MatchEvents();
@@ -323,7 +341,8 @@ public sealed partial class Match
         All.AddRange(Players);
         MakeBenches(seed, setup);
         AI = new AI(this);
-        Controlled = Teams[HumanTeam].Players[9];
+        Seats[0].Controlled = Teams[0].Players[9];
+        Seats[1].Controlled = Teams[1].Players[9];
         StartKickoff(0);
     }
 
@@ -356,21 +375,25 @@ public sealed partial class Match
     /// Whether the human's buttons mean attack. Includes loose balls / passes in flight that our
     /// side will reach first, so pressing Pass on an incoming ball queues a pass.
     /// </summary>
-    public bool HumanAttacking()
+    public bool HumanAttacking() => HumanAttacking(HumanTeam);
+
+    /// <summary>The same for either side's human (a 1v1).</summary>
+    public bool HumanAttacking(int team)
     {
         if (Phase == Phase.Kickoff) return true;
         int att = AttackingTeam();
-        if (att == HumanTeam) return true;
+        if (att == team) return true;
         if (att >= 0) return false;
-        var mine = AI.Intercept[Controlled.Id];
+        var c = Seats[team].Controlled;
+        var mine = AI.Intercept[c.Id];
         double theirs = 99;
-        foreach (var q in Teams[1 - HumanTeam].Players)
+        foreach (var q in Teams[1 - team].Players)
         {
             var ip = AI.Intercept[q.Id];
             if (ip.T >= 0 && ip.T < theirs) theirs = ip.T;
         }
         double mt = mine.T >= 0 ? mine.T : 99;
-        return mt <= theirs + 0.25 || BallDist(Controlled) < 1.5;
+        return mt <= theirs + 0.25 || BallDist(c) < 1.5;
     }
 
     public double NearestOpponentDist(Player p)
@@ -445,7 +468,7 @@ public sealed partial class Match
         offsideFlagged = null;
         Scorer = null;
         Celebration = null;
-        lungeOn = false;
+        foreach (var s in Seats) s.LungeOn = false;
         wallUntil = -1;
         Ball.Reset(0, 0);
         foreach (var p in All)
@@ -526,8 +549,8 @@ public sealed partial class Match
         PossTeam = team;
         var taker = ByJob(team, 9);
         SetPiece = new SetPiece(SetPieceKind.Kickoff, team, 0, 0, taker);
-        if (team == HumanTeam) SetControlled(taker);
-        else SetControlled(ByJob(HumanTeam, 9));
+        for (int t = 0; t < 2; t++)
+            if (HumanSide(t)) SetControlled(t == team ? taker : ByJob(t, 9));
         Events.Whistle = 1;
     }
 
@@ -612,12 +635,12 @@ public sealed partial class Match
         Ball.Reset(x, z);
         Ball.Pos.Y = BallK.Radius;
         HeldBy = null;
-        if (kind == SetPieceKind.Corner && team == HumanTeam)
+        if (kind == SetPieceKind.Corner && HumanSide(team))
         {
             // Start the ring around the penalty spot, a little toward the far post.
             sp.Target = new XZ(goalX - dir * 9, -JsMath.Or1(JsMath.Sign(z)) * 1.5);
         }
-        else if (kind == SetPieceKind.GoalKick && team == HumanTeam)
+        else if (kind == SetPieceKind.GoalKick && HumanSide(team))
         {
             // Start the ring just short of halfway, out toward the touchline on the kick's side.
             sp.Target = new XZ(x + dir * 38, JsMath.Or1(JsMath.Sign(z)) * 12);
@@ -631,12 +654,12 @@ public sealed partial class Match
         }
         if (kind == SetPieceKind.Penalty) SetupPenalty(sp);
         else if (direct) SetupWall(sp);
-        if (team == HumanTeam) SetControlled(taker);
-        else if (sp.Wall != null && sp.Wall.Players.Contains(Controlled))
+        if (HumanSide(team)) SetControlled(taker);
+        if (HumanSide(1 - team) && sp.Wall != null && sp.Wall.Players.Contains(Seats[1 - team].Controlled))
         {
             // Defending a free kick: the wall is the AI's job; take the nearest free defender.
             var free = new List<Player>();
-            foreach (var p in Teams[HumanTeam].Players)
+            foreach (var p in Teams[1 - team].Players)
                 if (p.Role != Role.GK && !sp.Wall.Players.Contains(p)) free.Add(p);
             M.StableSort(free, (a, b) => M.Dist2D(a.Pos.X, a.Pos.Z, x, z) - M.Dist2D(b.Pos.X, b.Pos.Z, x, z));
             if (free.Count > 0) SetControlled(free[0]);
@@ -699,8 +722,7 @@ public sealed partial class Match
         get
         {
             var sp = SetPiece;
-            return sp != null && !AutoPlay && Phase == Phase.SetPiece && sp.Kind == SetPieceKind.Corner && sp.Team == HumanTeam &&
-                sp.Taker == Controlled && sp.Taker.Plan == null && sp.Taker.Action == ActionKind.None && sp.Target != null;
+            return sp != null && !AutoPlay && Phase == Phase.SetPiece && sp.Kind == SetPieceKind.Corner && Piloted(sp.Taker) && sp.Taker.Plan == null && sp.Taker.Action == ActionKind.None && sp.Target != null;
         }
     }
 
@@ -710,8 +732,7 @@ public sealed partial class Match
         get
         {
             var sp = SetPiece;
-            return sp != null && !AutoPlay && Phase == Phase.SetPiece && sp.Kind == SetPieceKind.GoalKick && sp.Team == HumanTeam &&
-                sp.Taker == Controlled && sp.Taker.Plan == null && sp.Taker.Action == ActionKind.None && sp.Target != null;
+            return sp != null && !AutoPlay && Phase == Phase.SetPiece && sp.Kind == SetPieceKind.GoalKick && Piloted(sp.Taker) && sp.Taker.Plan == null && sp.Taker.Action == ActionKind.None && sp.Target != null;
         }
     }
 
@@ -774,7 +795,7 @@ public sealed partial class Match
         get
         {
             var sp = SetPiece;
-            return sp != null && !AutoPlay && Phase == Phase.SetPiece && sp.Team == HumanTeam && sp.Taker == Controlled &&
+            return sp != null && !AutoPlay && Phase == Phase.SetPiece && Piloted(sp.Taker) &&
                 sp.Taker.Plan == null && sp.Taker.Action == ActionKind.None && (sp.Kind == SetPieceKind.Penalty || sp.Direct) && sp.AimZ.HasValue;
         }
     }
@@ -792,8 +813,8 @@ public sealed partial class Match
             if (sp == null || AutoPlay || Phase != Phase.SetPiece) return null;
             var t = sp.Taker;
             if (t.Plan != null || t.Action != ActionKind.None || t.Speed > 0.8) return null;
-            bool human = sp.Team == HumanTeam;
-            if (human && t != Controlled) return null;
+            bool human = HumanSide(sp.Team);
+            if (human && t != Seats[sp.Team].Controlled) return null;
             double dir = Teams[sp.Team].Dir;
             if (sp.Kind == SetPieceKind.GoalKick)
             {
@@ -909,18 +930,20 @@ public sealed partial class Match
         }
     }
 
+    /// <summary>The human of p's side takes p.</summary>
     public void SetControlled(Player p)
     {
-        if (Controlled == p) return;
-        if (Controlled != null)
+        var s = Seats[p.Team];
+        if (s.Controlled == p) return;
+        if (s.Controlled != null)
         {
-            var old = Controlled;
+            var old = s.Controlled;
             old.Sprinting = false;
             // A switch (manual or automatic) cancels whatever the human had loaded: a queued pass
             // or shot is dropped (unless the strike is already under way).
-            if (!AutoPlay && old.Team == HumanTeam && old.Action != ActionKind.Kick && old.Action != ActionKind.Throw) old.Plan = null;
+            if (!AutoPlay && HumanSide(old.Team) && old.Action != ActionKind.Kick && old.Action != ActionKind.Throw) old.Plan = null;
         }
-        Controlled = p;
-        SwitchT = 0;
+        s.Controlled = p;
+        s.SwitchT = 0;
     }
 }
