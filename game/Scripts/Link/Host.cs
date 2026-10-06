@@ -69,6 +69,14 @@ public sealed partial class Host : Node
         Instance = this;
         ProcessMode = ProcessModeEnum.Always;
         if (!_pc) return;
+        // The window's own icon (taskbar, Alt+Tab): the app icon, set directly so it never
+        // depends on how the export packed the .ico.
+        var icon = GD.Load<Texture2D>("res://icons/icon_192.png")?.GetImage();
+        if (icon != null)
+        {
+            if (icon.IsCompressed()) icon.Decompress();
+            DisplayServer.SetIcon(icon);
+        }
         if (!OS.HasFeature("editor")) DisplayServer.WindowSetMode(DisplayServer.WindowMode.ExclusiveFullscreen);
         Serve(true);
     }

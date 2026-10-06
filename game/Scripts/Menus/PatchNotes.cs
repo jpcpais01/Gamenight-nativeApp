@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.101", "Windows: the running game shows the GameNight icon on its taskbar button and in Alt+Tab."),
         ("0.100", "Every release now comes out with both the Android app and the Windows version together, never one without the other."),
         ("0.99", "The patch notes scroll again: swipe them on the phone, or use the mouse wheel on PC. The mouse wheel now scrolls every list in the menus."),
         ("0.98", "Windows: the download is back to the .exe and its data folder at the top of the zip, so the in-app update replaces the game properly from every older version."),
