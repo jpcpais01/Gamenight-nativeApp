@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.91", "Online 1v1 is switched on: 1V1 FRIEND → ONLINE, one of you hosts and the other types the 4-digit code."),
         ("0.90", "1V1 FRIEND on the home screen: play a friend online (one hosts and gets a 4-digit code, the other types it in; phone or PC, any mix) or on one screen with two controllers. Each human gets his own marker and the camera follows the ball."),
         ("0.89", "Update from inside the game: when a newer version is out, a gold UPDATE key appears at the bottom of the home screen. On the phone it downloads and Android asks you to confirm; on the PC it downloads, closes, swaps the files and opens again. Saves stay."),
         ("0.88", "Phone controller (app and iPhone page): the stick and buttons are a third bigger and sit further in from the edges, where your thumbs rest, and each press gives a light buzz on phones that support it."),
