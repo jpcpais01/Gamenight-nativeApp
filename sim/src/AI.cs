@@ -931,7 +931,7 @@ public sealed partial class AI
         // Any pass meant for him (into space included: it was weighted for where they meet), and
         // any ball for the player you control, he takes at the first point he safely can, rather
         // than racing ahead to let it run on to him.
-        bool yours = q == m.Controlled && q.Team == m.HumanTeam && !m.AutoPlay;
+        bool yours = m.Piloted(q) && !m.AutoPlay;
         double progress = mine || yours ? 0 : MeetProgress;
         int best = -1;
         double bestV = -1e9;
