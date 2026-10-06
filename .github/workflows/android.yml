@@ -214,6 +214,8 @@ jobs:
           echo "APP_VERSION=$name" >> $GITHUB_ENV
           echo "version=$name" >> $GITHUB_OUTPUT
           sed -i "s/^config\/version=.*/config\/version=\"$name\"/" project.godot
+          # The .exe's own version (Windows wants four numbers).
+          sed -i "s/^application\/file_version=.*/application\/file_version=\"$name.0\"/; s/^application\/product_version=.*/application\/product_version=\"$name.0\"/" export_presets.cfg
 
       - name: Online relay address
         env:
@@ -239,10 +241,11 @@ jobs:
       - name: Export for Windows
         working-directory: game
         run: |
-          mkdir -p ../build/win
-          "$GODOT" --headless --path . --export-release Windows ../build/win/GameNight.exe 2>&1 | tee ../build/export-windows.log
-          test -s ../build/win/GameNight.exe
-          cd ../build/win && zip -qr "../GameNight-$APP_VERSION-Windows.zip" . && cd ..
+          # Everything in one GameNight folder: the .exe needs the data folder beside it.
+          mkdir -p ../build/win/GameNight
+          "$GODOT" --headless --path . --export-release Windows ../build/win/GameNight/GameNight.exe 2>&1 | tee ../build/export-windows.log
+          test -s ../build/win/GameNight/GameNight.exe
+          cd ../build/win && zip -qr "../GameNight-$APP_VERSION-Windows.zip" GameNight && cd ..
           cp "GameNight-$APP_VERSION-Windows.zip" GameNight-Windows.zip
 
       - name: Upload build log
@@ -274,7 +277,7 @@ jobs:
           append_body: true
           body: |
 
-            On a Windows PC: download GameNight-${{ needs.windows.outputs.version }}-Windows.zip, unzip it and run GameNight.exe.
+            On a Windows PC: download GameNight-${{ needs.windows.outputs.version }}-Windows.zip, unzip it and run GameNight.exe in the GameNight folder (keep the folder together).
             To use the phone as the controller, tap PLAY ON PC on the phone's home screen (same Wi-Fi).
           files: |
             build/GameNight-${{ needs.windows.outputs.version }}-Windows.zip

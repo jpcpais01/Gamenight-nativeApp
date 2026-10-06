@@ -11,12 +11,13 @@ config_version=5
 [application]
 
 config/name="GameNight"
-config/version="0.94.0"
+config/version="0.95.0"
 run/main_scene="res://App.tscn"
 config/features=PackedStringArray("4.7", "C#", "Mobile")
 boot_splash/bg_color=Color(0.054902, 0.0627451, 0.0901961, 1)
 boot_splash/show_image=false
 config/icon="res://icon.svg"
+config/windows_native_icon="res://icons/icon.ico"
 run/max_fps=0
 
 [autoload]
