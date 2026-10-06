@@ -371,7 +371,8 @@ public sealed partial class AI
             aimZ = 0;
         }
         double hold = M.Clamp(power, 0, 1);
-        double depth = 2 + 14 * hold;
+        // (How far along his run they meet: kept a touch short, so it is not overhit past him.)
+        double depth = (2 + 14 * hold) * 0.95;
         // The same rule as a pass to feet (HumanReceiver): the direction first, then the distance
         // the hold asks for, then how good his ball is. Lower cost wins.
         double cone = JsMath.Cos((aimed ? 50 : 70) * Math.PI / 180);
@@ -926,8 +927,13 @@ public sealed partial class AI
         const double reach = PlayerK.Reach * 0.8;
         // A pass played to him: he comes to it, taking it at the first point he safely can at his
         // feet (not drifting off with it for a few metres more).
-        bool toHim = m.PassTarget == q && !m.PassIntoSpace && m.LastKicker?.Team == q.Team;
-        double progress = toHim ? 0 : MeetProgress;
+        bool mine = m.PassTarget == q && m.LastKicker?.Team == q.Team;
+        bool toHim = mine && !m.PassIntoSpace;
+        // Any pass meant for him (into space included: it was weighted for where they meet), and
+        // any ball for the player you control, he takes at the first point he safely can, rather
+        // than racing ahead to let it run on to him.
+        bool yours = m.Piloted(q) && !m.AutoPlay;
+        double progress = mine || yours ? 0 : MeetProgress;
         int best = -1;
         double bestV = -1e9;
         for (int i = Math.Max(0, from); i < n; i++)
