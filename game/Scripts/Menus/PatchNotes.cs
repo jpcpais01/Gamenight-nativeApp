@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.93", "Through balls are played about 5% shorter along the runner's path, so they are less often a touch too far ahead of him."),
         ("0.92", "Receivers no longer run off ahead of the ball: on a through ball he meets it where it was weighted for, and the player you control goes to a loose ball instead of racing on to wait for it."),
         ("0.91", "Online 1v1 is switched on: 1V1 FRIEND → ONLINE, one of you hosts and the other types the 4-digit code."),
         ("0.90", "1V1 FRIEND on the home screen: play a friend online (one hosts and gets a 4-digit code, the other types it in; phone or PC, any mix) or on one screen with two controllers. Each human gets his own marker and the camera follows the ball."),
