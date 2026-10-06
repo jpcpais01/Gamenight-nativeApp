@@ -5,6 +5,19 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.91", "Online 1v1 is switched on: 1V1 FRIEND → ONLINE, one of you hosts and the other types the 4-digit code."),
+        ("0.90", "1V1 FRIEND on the home screen: play a friend online (one hosts and gets a 4-digit code, the other types it in; phone or PC, any mix) or on one screen with two controllers. Each human gets his own marker and the camera follows the ball."),
+        ("0.89", "Update from inside the game: when a newer version is out, a gold UPDATE key appears at the bottom of the home screen. On the phone it downloads and Android asks you to confirm; on the PC it downloads, closes, swaps the files and opens again. Saves stay."),
+        ("0.88", "Phone controller (app and iPhone page): the stick and buttons are a third bigger and sit further in from the edges, where your thumbs rest, and each press gives a light buzz on phones that support it."),
+        ("0.87", "The scorer's big player card now rises over the new score after a goal, and your player's card sits beside his name at the bottom left. Goals after a save or a deflection now go to the man who shot, so he celebrates and the replay follows him."),
+        ("0.86", "Quieter ball: you only hear it when it is passed, shot, crossed, headed or received. Bounces, dribble touches and deflections are silent now."),
+        ("0.85", "Sound settings are volume bars now: MASTER, CROWD, MATCH (ball, whistle, nets, goal explosions) and MENUS, ten steps each in the pause menu. Slide or tap the bars; tap a name to mute it. Saved between sessions."),
+        ("0.84", "Phone controllers now pair with a 4-digit code shown on the PC (PHONE CONTROLLER on its home screen). Type it once and the phone remembers it; scanning the PC's QR code pairs by itself. NEW CODE makes every phone pair again."),
+        ("0.83", "An iPhone (or any phone) can now be the controller for GameNight on a PC, no app needed: tap PHONE CONTROLLER on the PC's home screen, scan the code with the phone's camera and turn it sideways. Same stick, buttons and swipes, and a touchpad in the menus."),
+        ("0.82", "League: SIMULATE now lets you watch your match. The real game plays out with the computer running both sides (walk-out, replays, crowd, all of it) and its result counts in the table. Skip to full time whenever you like, or still take an instant result."),
+        ("0.81", "Substitutions: SUBSTITUTIONS in the pause menu shows your eleven with their legs left and your bench of seven. Tap one of each; he comes on at the next stoppage, five changes a match. Computer managers make their own changes from the hour."),
+        ("0.80", "Play on a PC: a Windows version now comes with every release, fullscreen at your screen's resolution and refresh rate, with keyboard, mouse or a gamepad. Or use this phone as its controller: PLAY ON PC on the home screen finds the PC on your Wi-Fi."),
+        ("0.79", "Squad page rebuilt around a big floodlit pitch with your eleven. New bench of seven in a dugout under it: tap or drag to swap players between the XI and the bench. The rest of the squad, team and line ratings and auto-pick sit down the side."),
         ("0.78", "High balls to you are kept, even when pressed: he chests it, lets it drop or cushions it down with his head. He only nods it on when a team-mate close by is free to take it. Headers at goal near the box are unchanged."),
         ("0.77", "Through balls join the new passing: the stick picks the runner the same way (within 50° of it), the hold how deep, and a defender there first or across the lane counts against him, as for a pass to feet."),
         ("0.76", "Passing rebuilt, mobile-style: the stick picks the man, the hold how far. Passes go to his feet (or into his stride), crisp, and long ones are lifted. He comes to the ball, team-mates leave it, and passes and first touches are cleaner."),

@@ -273,7 +273,7 @@ public sealed partial class Match
 
     void ResolveActions(Player p)
     {
-        bool human = p == Controlled && !AutoPlay;
+        bool human = Piloted(p) && !AutoPlay;
         // Expire stale plans, and drop them if the other side has won the ball.
         if (p.Plan != null && Time > p.Plan.Expires) p.Plan = null;
         if (p.Plan != null && ((Owner != null && Owner.Team != p.Team) || (HeldBy != null && HeldBy.Team != p.Team))) p.Plan = null;
@@ -731,7 +731,7 @@ public sealed partial class Match
             JudgeOffside(p);
             PassTarget = null;
             p.TouchCooldown = keep ? 0 : 0.2;
-            if (keep && p.Team == HumanTeam) SetControlled(p);
+            if (keep && HumanSide(p.Team)) SetControlled(p);
         }
         else
         {

@@ -266,6 +266,67 @@ public sealed partial class App : Node
         StartDemo();
     }
 
+    // ---------------------------------------------------------------- 1v1
+
+    /// <summary>Play a friend online. The host picks the seed and its own ground and sends the
+    /// whole set-up; the friend plays it from the host's frames. Nothing is booked to the club.</summary>
+    public void PlayOnline(Net.Online o)
+    {
+        var req = new MatchRequest { Online = o };
+        if (o.IsHost)
+        {
+            int seed = _menus.NextSeed;
+            string ground = Grounds.All.Any(g => g.Id == _club.S.Ground) ? _club.S.Ground : Grounds.All[0].Id;
+            req.Setup = o.KickOff(seed, ground, out var k);
+            req.Seed = seed;
+            req.Ground = ground;
+            req.GoalFx = new[] { k.Home.GoalFx, k.Away.GoalFx };
+        }
+        else
+        {
+            var k = o.Match;
+            req.Setup = new MatchSetup { Teams = new[] { k.Home.Restore(), k.Away.Restore() } };
+            req.Seed = k.Seed;
+            req.Ground = Grounds.All.Any(g => g.Id == k.Ground) ? k.Ground : "big";
+            req.HostPlan = k.Plan;
+            req.HomeCrest = k.Home.Crest;
+            req.GoalFx = new[] { k.Home.GoalFx, k.Away.GoalFx };
+        }
+        req.Done = r => CallDeferred(nameof(FriendlyOver), r.Finished, r.Home, r.Away, o.IsHost ? 0 : 1);
+        Play(req);
+    }
+
+    /// <summary>Same-screen 1v1: the controllers picked on the PLAY A FRIEND card, one side each.</summary>
+    public void PlayVersus()
+    {
+        int seed = _menus.NextSeed;
+        string ground = Grounds.All.Any(g => g.Id == _club.S.Ground) ? _club.S.Ground : Grounds.All[0].Id;
+        Play(new MatchRequest
+        {
+            Setup = _club.MatchSetup(seed), Seed = seed, Ground = ground, Versus = true,
+            Done = r => CallDeferred(nameof(FriendlyOver), r.Finished, r.Home, r.Away, -1),
+        });
+    }
+
+    void FriendlyOver(bool finished, int home, int away, int side)
+    {
+        Net.Online.Current?.Dispose();
+        Link.Host.Instance?.Serve(false);
+        _playing = false;
+        _menus.NextSeed = (int)(ClubState.Now & 0xffff) + 1;
+        _menus.Visible = true;
+        _menus.Go(_menus.Home);
+        string score = $"{home}-{away}";
+        if (!finished) _menus.Toast($"Match over early · {score}");
+        else if (side < 0) _menus.Toast(home == away ? $"A {score} draw" : home > away ? $"Home side wins {score}" : $"Away side wins {score}");
+        else
+        {
+            int mine = side == 0 ? home : away, theirs = side == 0 ? away : home;
+            _menus.Toast(mine > theirs ? $"You beat your friend {score}" : mine < theirs ? $"Your friend won {score}" : $"A {score} draw with your friend");
+        }
+        StartDemo();
+    }
+
     // ---------------------------------------------------------------- training
 
     public void PickDrill() => _menus.Go(_menus.Training);
@@ -291,11 +352,44 @@ public sealed partial class App : Node
         StartDemo();
     }
 
+    // ---------------------------------------------------------------- phone as controller
+
+    Link.ControllerScreen _controller;
+    CanvasLayer _controllerLayer;
+
+    /// <summary>Home → PLAY ON PC: the phone becomes a controller for GameNight on a computer.
+    /// The menus and the match behind them stop while it's up.</summary>
+    public void OpenController()
+    {
+        if (_controller != null) return;
+        _controllerLayer = new CanvasLayer { Layer = 15 };
+        AddChild(_controllerLayer);
+        _controller = new Link.ControllerScreen { Exit = () => Callable.From(CloseController).CallDeferred() };
+        _controllerLayer.AddChild(_controller);
+        _menus.Visible = false;
+        _match?.Backdrop(false);
+    }
+
+    void CloseController()
+    {
+        if (_controller == null) return;
+        _controllerLayer.QueueFree();
+        _controller = null;
+        _controllerLayer = null;
+        _menus.Visible = true;
+        BackdropChanged();
+    }
+
     // ---------------------------------------------------------------- back
 
     public override void _Notification(int what)
     {
         if (what != NotificationWMGoBackRequest) return;
+        if (_controller != null)
+        {
+            _controller.Back();
+            return;
+        }
         if (_playing)
         {
             _match?.Back();

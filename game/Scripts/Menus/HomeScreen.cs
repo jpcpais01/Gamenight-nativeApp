@@ -230,7 +230,7 @@ public sealed partial class HomeScreen : PxCanvas
         Tap("play", body, () => _ui.App.PickGround());
         GoldButton("play", _play, "PLAY MATCH  >", Fit("PLAY MATCH  >", 32, pw - 20), () => _ui.App.PickGround());
 
-        // The stub: what's at stake, and a barcode.
+        // The stub: what's at stake, and the 1v1 key.
         Px.Bands(this, stub, new[] { Px.Hex(0x221c52), Px.Hex(0x1a1544), Px.Hex(0x131036) }, new[] { 0, 0.4f, 0.75f });
         float sx = stub.Position.X + 16, sr = stub.End.X - 14;
         Px.Text(this, Px.Small, new Vector2(sx, top + 22), "PRIZES", 8, Px.Cyan);
@@ -241,18 +241,8 @@ public sealed partial class HomeScreen : PxCanvas
             Px.TextR(this, Px.Big, sr, py, v, 20, Px.Hex(0xffe066));
             py += 25;
         }
-        var bars = new Rect2(sx, bot - 44, sr - sx, 26);
-        uint h = (uint)_ui.NextSeed * 2654435761u;
-        for (float bx = bars.Position.X; bx < bars.End.X - 2;)
-        {
-            h ^= h << 13;
-            h ^= h >> 17;
-            h ^= h << 5;
-            float bw = 1 + h % 3;
-            if ((h >> 8) % 3 != 0) DrawRect(new Rect2(bx, bars.Position.Y, bw, bars.Size.Y), new Color(Px.Ink, 0.75f));
-            bx += bw + 1;
-        }
-        Px.Text(this, Px.Small, new Vector2(sx, bot - 8), $"No {_ui.NextSeed % 1000000:000000}", 7, Px.InkDim);
+        // Play a friend: online with a code, or two controllers on one screen.
+        GhostButton("friend", new Rect2(sx - 4, bot - 50, sr - sx + 8, 38), "1V1 FRIEND", Fit("1V1 FRIEND", 18, sr - sx - 4), () => _ui.Open(new Net.VersusModal(_ui)));
 
         // Perforation with notches, then the gold edge.
         for (float py2 = top + 12; py2 < bot - 12; py2 += 9) DrawRect(new Rect2(stub.Position.X - 1, py2, 2, 5), new Color(Px.Ink, 0.4f));
@@ -491,13 +481,51 @@ public sealed partial class HomeScreen : PxCanvas
 
     void Footer(float x0, float W, float H)
     {
-        Px.Text(this, Px.Small, new Vector2(x0, H - 11), "JOYSTICK TO MOVE · PASS / THROUGH / KICK", 8, Px.InkDim);
         var notes = new Rect2(W - 16 - 120, H - 26, 120, 22);
+        float right = notes.Position.X;
+        var up = Update.Updater.Instance;
+        if (up?.Offer != null)
+        {
+            // A newer version is out: a gold key to it (the percentage while it downloads).
+            var u = new Rect2(right - 10 - 150, H - 26, 150, 22);
+            bool down = Held("update");
+            string label = up.Now == Update.Updater.Stage.Downloading ? $"UPDATING {up.Progress * 100:0}%" : "UPDATE TO V" + up.Offer;
+            Px.Frame(this, down ? u.Translated(Vector2.One * 2) : u, Px.Gold, Px.Hex(0xb37400), down ? null : Px.ShadowSoft, 2, 3);
+            Px.TextC(this, Px.Small, u.GetCenter().X + (down ? 2 : 0), u.GetCenter().Y + 4 + (down ? 2 : 0), Px.Fit(Px.Small, label, 8, u.Size.X - 10), 8, Px.Dark);
+            Tap("update", u, () => _ui.Open(new Update.UpdateModal(_ui)));
+            right = u.Position.X;
+        }
+        PhoneLink(x0, right - 60, H);
         bool held = Held("notes");
         Px.Frame(this, held ? notes.Translated(Vector2.One * 2) : notes, new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.85f), Px.Line2, held ? null : Px.ShadowSoft, 2, 3);
         Px.TextC(this, Px.Small, notes.GetCenter().X + (held ? 2 : 0), notes.GetCenter().Y + 4 + (held ? 2 : 0), "PATCH NOTES", 8, Px.Ink);
         Tap("notes", notes, () => _ui.Open(new NotesModal(_ui)));
-        Px.TextR(this, Px.Small, notes.Position.X - 12, H - 11, "V" + _ui.Version, 9, Px.Cyan);
+        Px.TextR(this, Px.Small, right - 12, H - 11, "V" + _ui.Version, 9, Px.Cyan);
+    }
+
+    /// <summary>The phone-as-controller corner: on the phone a PLAY ON PC key, on a computer how
+    /// to connect (or that a phone is).</summary>
+    void PhoneLink(float x0, float x1, float H)
+    {
+        var host = Link.Host.Instance;
+        if (host == null || !host.Listening)
+        {
+            var r = new Rect2(x0, H - 26, 130, 22);
+            bool held = Held("pc");
+            Px.Frame(this, held ? r.Translated(Vector2.One * 2) : r, new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.85f), new Color(Px.Cyan, 0.6f), held ? null : Px.ShadowSoft, 2, 3);
+            Px.TextC(this, Px.Small, r.GetCenter().X + (held ? 2 : 0), r.GetCenter().Y + 4 + (held ? 2 : 0), "PLAY ON PC", 8, Px.Cyan);
+            Tap("pc", r, () => _ui.App.OpenController());
+            Px.Text(this, Px.Small, new Vector2(r.End.X + 12, H - 11), Px.Fit(Px.Small, "PHONE AS CONTROLLER", 8, x1 - r.End.X - 12), 8, Px.InkDim);
+            return;
+        }
+        // On the PC: a key to the QR code and the steps (iPhone, any phone, or the app).
+        var k = new Rect2(x0, H - 26, 150, 22);
+        bool down = Held("phone");
+        Px.Frame(this, down ? k.Translated(Vector2.One * 2) : k, new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.85f), new Color(Px.Cyan, 0.6f), down ? null : Px.ShadowSoft, 2, 3);
+        Px.TextC(this, Px.Small, k.GetCenter().X + (down ? 2 : 0), k.GetCenter().Y + 4 + (down ? 2 : 0), "PHONE CONTROLLER", 8, Px.Cyan);
+        Tap("phone", k, () => _ui.Open(new Link.PhoneModal(_ui)));
+        string s = host.PhoneConnected ? "PHONE CONNECTED" : $"PAIRING CODE {host.Code}";
+        Px.Text(this, Px.Small, new Vector2(k.End.X + 12, H - 11), Px.Fit(Px.Small, s, 8, x1 - k.End.X - 12), 8, host.PhoneConnected ? Px.Win : Px.InkDim);
     }
 
     // ---------------------------------------------------------------- light

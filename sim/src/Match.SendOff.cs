@@ -74,7 +74,7 @@ public sealed partial class Match
             }
             if (sp.Taker == p) sp.Taker = NearestMate(p, sp.X, sp.Z);
         }
-        if (Controlled == p) SetControlled(NearestMate(p, Ball.Pos.X, Ball.Pos.Z));
+        if (Seats[p.Team].Controlled == p) SetControlled(NearestMate(p, Ball.Pos.X, Ball.Pos.Z));
         AI.Forget(p);
         Log?.Invoke($"{F1(Time)} SENT OFF T{p.Team} #{p.Index}");
     }

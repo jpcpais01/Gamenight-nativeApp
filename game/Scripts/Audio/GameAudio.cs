@@ -27,7 +27,7 @@ public sealed partial class GameAudio : Node
     readonly Godot.Vector2[] _block = new Godot.Vector2[Mixer.Block];
 
     float _crowd = -1, _placeX = 1e9f, _lift;
-    bool _muted, _suspended;
+    bool _suspended;
 
     public override void _EnterTree() => Instance = this;
 
@@ -44,6 +44,8 @@ public sealed partial class GameAudio : Node
         _pb = (AudioStreamGeneratorPlayback)_player.GetStreamPlayback();
         _mx = new Mixer(sr);
         _tape = new CrowdTape(_mx, Load("res://Audio/crowd-bed.pcm"), Load("res://Audio/crowd-goal.pcm"));
+        GameNight.UI.MatchSettings.Load();
+        ApplyVolumes();
 
         _run = true;
         _thread = new Thread(Loop) { IsBackground = true, Name = "Audio", Priority = ThreadPriority.AboveNormal };
@@ -115,15 +117,15 @@ public sealed partial class GameAudio : Node
     /// <summary>A ground with or without a crowd.</summary>
     public void SetCrowd(bool on) => Do(() => _mx.SetCrowd(on));
 
-    public bool Muted
+    /// <summary>The volume bars (MatchSettings), live. (Squared on the way in, so each step of a bar
+    /// sounds like an even step.)</summary>
+    public void ApplyVolumes()
     {
-        get => _muted;
-        set
-        {
-            _muted = value;
-            Do(() => _mx.MasterGain.Target(value ? 0 : 0.9f, _mx.Now, 0.05f));
-            Suspended = _suspended;
-        }
+        if (_mx == null) return;
+        _mx.VolMaster = GameNight.UI.MatchSettings.VolMaster / 10f;
+        _mx.VolCrowd = GameNight.UI.MatchSettings.VolCrowd / 10f;
+        _mx.VolFx = GameNight.UI.MatchSettings.VolFx / 10f;
+        _mx.VolUi = GameNight.UI.MatchSettings.VolUi / 10f;
     }
 
     /// <summary>Stopped (the pause menu, the app in the background): silence that costs nothing.</summary>
@@ -184,19 +186,6 @@ public sealed partial class GameAudio : Node
         _mx.Burst(t, 0.035 + strength * 0.03, FilterType.Highpass, 1600, 0.7f, 0.1f + strength * 0.35f, 1.6f);
     });
 
-    public void Bounce(float speed)
-    {
-        if (speed < 1.2f) return;
-        float s = MathF.Min(1, speed / 12);
-        Do(() =>
-        {
-            double t = _mx.Now;
-            var f = new Param(110).Set(110, t).Exp(45, t + 0.07);
-            var g = new Param(0).Set(0.25f * s, t).Exp(0.0001f, t + 0.1);
-            _mx.Osc(Wave.Sine, t, 0, t + 0.15, g, Bus.Master, f);
-        });
-    }
-
     /// <summary>The referee: 1 a blast, 2 two (half time), 3 three (full time).</summary>
     public void Whistle(int kind) => Do(() =>
     {
@@ -235,9 +224,17 @@ public sealed partial class GameAudio : Node
 
     // ------------------------------------------------------------------ menus & packs
 
-    public void UiTap() => Do(() => _mx.Tone(_mx.Now, 1250, 0.06, Wave.Sine, 0.12f, 900));
+    /// <summary>A menu sound: onto the menus' own volume.</summary>
+    void Menu(Action a) => Do(() =>
+    {
+        _mx.Menus = true;
+        a();
+        _mx.Menus = false;
+    });
 
-    public void Coins() => Do(() =>
+    public void UiTap() => Menu(() => _mx.Tone(_mx.Now, 1250, 0.06, Wave.Sine, 0.12f, 900));
+
+    public void Coins() => Menu(() =>
     {
         double t = _mx.Now;
         _mx.Tone(t, 1568, 0.18, Wave.Triangle, 0.16f);
@@ -245,7 +242,7 @@ public sealed partial class GameAudio : Node
     });
 
     /// <summary>Pack charging up: each tap a little higher and louder.</summary>
-    public void PackShake(int level) => Do(() =>
+    public void PackShake(int level) => Menu(() =>
     {
         double t = _mx.Now;
         _mx.Burst(t, 0.25 + level * 0.1, FilterType.Bandpass, 500 + level * 500, 1.2f, 0.25f + level * 0.12f, 1.1f);
@@ -253,7 +250,7 @@ public sealed partial class GameAudio : Node
         _mx.Tone(t, 520 + level * 200, 0.35, Wave.Sine, 0.08f, 900 + level * 300);
     });
 
-    public void PackBurst(int tier) => Do(() =>
+    public void PackBurst(int tier) => Menu(() =>
     {
         double t = _mx.Now;
         _mx.Tone(t, 110, 1.2, Wave.Sine, 0.55f, 38);
@@ -264,10 +261,10 @@ public sealed partial class GameAudio : Node
     });
 
     /// <summary>A card flying in.</summary>
-    public void Whoosh() => Do(() => _mx.Burst(_mx.Now, 0.35, FilterType.Bandpass, 1800, 0.9f, 0.18f, 1.6f));
+    public void Whoosh() => Menu(() => _mx.Burst(_mx.Now, 0.35, FilterType.Bandpass, 1800, 0.9f, 0.18f, 1.6f));
 
     /// <summary>A boot on the tunnel floor in the dark: a low thud.</summary>
-    public void Footstep() => Do(() =>
+    public void Footstep() => Menu(() =>
     {
         double t = _mx.Now;
         _mx.Tone(t, 72, 0.22, Wave.Sine, 0.32f, 48);
@@ -275,7 +272,7 @@ public sealed partial class GameAudio : Node
     });
 
     /// <summary>Walkout beat: nation / position stingers.</summary>
-    public void Stinger(int step) => Do(() =>
+    public void Stinger(int step) => Menu(() =>
     {
         double t = _mx.Now;
         _mx.Tone(t, 65, 0.7, Wave.Sine, 0.5f, 45);
@@ -286,7 +283,7 @@ public sealed partial class GameAudio : Node
     /// <summary>The card turns face up. Better cards get a bigger chord.</summary>
     public void Reveal(int tier)
     {
-        Do(() =>
+        Menu(() =>
         {
             double t = _mx.Now;
             float[][] chords =

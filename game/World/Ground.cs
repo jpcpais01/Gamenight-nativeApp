@@ -155,7 +155,8 @@ public abstract class Ground
     /// Debug: `-- --ground=id` overrides the id. With a `host` crest it's an away day (the
     /// league): side 1 are the hosts, so the stadium, the home fans and the badge are theirs;
     /// a `plan` builds "custom" to it (a league club's own stadium) instead of your club's.</summary>
-    public static Ground Create(string id, MatchSetup setup = null, Crest host = null, Build.StadiumPlan plan = null)
+    /// <summary>`home`: online on the friend's screen, the hosts' crest (they're side 0, so it isn't an away day).</summary>
+    public static Ground Create(string id, MatchSetup setup = null, Crest host = null, Build.StadiumPlan plan = null, Crest home = null)
     {
         foreach (var arg in OS.GetCmdlineUserArgs())
             if (arg.StartsWith("--ground=")) id = arg[9..];
@@ -169,11 +170,11 @@ public abstract class Ground
             "custom:preview" => new Build.BuiltGround(Club?.S.Stadium, true),
             _ => new BigStadium(),
         };
-        g.Dress(setup, host);
+        g.Dress(setup, host, home);
         return g;
     }
 
-    void Dress(MatchSetup setup, Crest host)
+    void Dress(MatchSetup setup, Crest host, Crest home)
     {
         if (setup?.Teams is { Length: 2 } t && t[0] != null && t[1] != null)
         {
@@ -194,6 +195,12 @@ public abstract class Ground
             // Away: their badge and founding year; your banners and tifos stay at home.
             Art.Crest = CrestArt.Texture(host, 256);
             Art.Founded = host.Year ?? "";
+            return;
+        }
+        if (home != null)
+        {
+            Art.Crest = CrestArt.Texture(home, 256);
+            Art.Founded = home.Year ?? "";
             return;
         }
         var club = Club?.S;

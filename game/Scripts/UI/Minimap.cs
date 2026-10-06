@@ -27,7 +27,7 @@ public sealed partial class Minimap : Control
     readonly byte[] _team = new byte[MatchSnapshot.N];
     readonly bool[] _gk = new bool[MatchSnapshot.N];
     float _bx, _bz, _by;
-    int _ctrl = -1;
+    int _ctrl = -1, _ctrl2 = -1;
 
     public Minimap()
     {
@@ -61,6 +61,7 @@ public sealed partial class Minimap : Control
         _bz = Mathf.Lerp(a.BallZ, b.BallZ, alpha);
         _by = b.BallY;
         _ctrl = b.Controlled;
+        _ctrl2 = b.Controlled2;
         QueueRedraw();
     }
 
@@ -98,6 +99,8 @@ public sealed partial class Minimap : Control
         }
         // The player you control: a gold ring, no fill.
         if (_ctrl >= 0) DrawArc(P(_x[_ctrl], _z[_ctrl]), r + 2.2f, 0, MathF.Tau, 20, Style.Accent, 1.6f, true);
+        // A 1v1: the other human's, in his colour.
+        if (_ctrl2 >= 0) DrawArc(P(_x[_ctrl2], _z[_ctrl2]), r + 2.2f, 0, MathF.Tau, 20, Style.Rival, 1.6f, true);
         // The ball, a little bigger in the air.
         var bp = P(_bx, _bz);
         float br = r * 0.8f + MathF.Min(2, _by * 0.25f);

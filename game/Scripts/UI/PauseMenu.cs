@@ -1,4 +1,5 @@
 using System;
+using GameNight.Sim;
 using Godot;
 
 namespace GameNight.UI;
@@ -33,7 +34,11 @@ public sealed partial class PauseMenu : Control
     readonly Label _title;
     readonly Button _restart;
     readonly Button _foul;
-    readonly Button _camera, _graphics, _pixels, _weather, _fps, _limit, _sound, _smooth, _leave, _report;
+    readonly PanelContainer _main, _subsCard;
+    readonly VolumeBar[] _volumes;
+    readonly SubsBoard _subs;
+    readonly Button _subsButton;
+    readonly Button _camera, _graphics, _pixels, _weather, _fps, _limit, _smooth, _leave, _report;
 
     public bool IsOpen => _menu.Visible;
 
@@ -79,7 +84,7 @@ public sealed partial class PauseMenu : Control
         _menu.AddChild(centre);
 
         // One card, two columns: what to do on the left, the settings by section on the right.
-        var panel = new PanelContainer();
+        var panel = _main = new PanelContainer();
         var bg = Flat(Style.PanelSolid, 10, new Color(Style.Ink, 0.1f), 1, 18, 16);
         bg.ShadowColor = new Color(0, 0, 0, 0.45f);
         bg.ShadowSize = 18;
@@ -103,6 +108,10 @@ public sealed partial class PauseMenu : Control
         var resume = Solid("RESUME");
         resume.Pressed += Close;
         left.AddChild(resume);
+        _subsButton = Ghost("SUBSTITUTIONS");
+        _subsButton.Visible = false;
+        _subsButton.Pressed += () => ShowSubs(true);
+        left.AddChild(_subsButton);
         _restart = Ghost("RESTART MATCH");
         _restart.Pressed += () => { Close(); Restart?.Invoke(); };
         left.AddChild(_restart);
@@ -126,9 +135,23 @@ public sealed partial class PauseMenu : Control
         _graphics = Tile("SHADOWS", () => { MatchSettings.Fast = !MatchSettings.Fast; Changed(); });
         Section(right, "PICTURE", _camera, _pixels, _smooth, _graphics);
 
+        VolumeBar Volume(string name, Func<int> get, Action<int> set)
+        {
+            var v = new VolumeBar(name, get, set);
+            v.Changed += () => GameNight.Audio.GameAudio.Instance?.ApplyVolumes();
+            v.Released += MatchSettings.Save;
+            return v;
+        }
+        _volumes = new[]
+        {
+            Volume("MASTER", () => MatchSettings.VolMaster, x => MatchSettings.VolMaster = x),
+            Volume("CROWD", () => MatchSettings.VolCrowd, x => MatchSettings.VolCrowd = x),
+            Volume("MATCH", () => MatchSettings.VolFx, x => MatchSettings.VolFx = x),
+            Volume("MENUS", () => MatchSettings.VolUi, x => MatchSettings.VolUi = x),
+        };
+        Section(right, "SOUND", _volumes);
+
         _weather = Tile("WEATHER", () => { CycleWeather?.Invoke(); Labels(); });
-        _sound = Tile("SOUND", () => { MatchSettings.Sound = !MatchSettings.Sound; Changed(); });
-        Section(right, "MATCH", _weather, _sound);
 
         _limit = Tile("FPS LIMIT", () =>
         {
@@ -145,8 +168,43 @@ public sealed partial class PauseMenu : Control
             else MatchSettings.ShowFps = MatchSettings.Profile = false;
             Changed();
         });
-        Section(right, "PERFORMANCE", _limit, _fps);
+        Section(right, "MATCH & PERFORMANCE", _weather, _limit, _fps);
         Labels();
+
+        // The substitutions card, in the same place as the menu's.
+        _subsCard = new PanelContainer { Visible = false };
+        _subsCard.AddThemeStyleboxOverride("panel", bg);
+        centre.AddChild(_subsCard);
+        _subs = new SubsBoard();
+        _subs.Done += () => ShowSubs(false);
+        _subsCard.AddChild(_subs);
+    }
+
+    /// <summary>The match whose side 0 the player manages (substitutions); null hides them (training).</summary>
+    public Match Match
+    {
+        set
+        {
+            _subs.Match = value;
+            _subsButton.Visible = value != null;
+        }
+    }
+
+    void ShowSubs(bool on)
+    {
+        _subs.Reset();
+        _main.Visible = !on;
+        _subsCard.Visible = on;
+    }
+
+    /// <summary>Online: the match doesn't stop for the menu and can't be restarted.</summary>
+    public bool Online
+    {
+        set
+        {
+            _title.Text = value ? "ONLINE" : "PAUSED";
+            _restart.Visible = !value;
+        }
     }
 
     /// <summary>Training: the left column's actions are for the drill.</summary>
@@ -176,6 +234,7 @@ public sealed partial class PauseMenu : Control
         _menu.Visible = true;
         _pause.Visible = false;
         _leave.Visible = Leave != null;
+        ShowSubs(false);
         Labels();
         Opened?.Invoke();
     }
@@ -193,7 +252,8 @@ public sealed partial class PauseMenu : Control
         // Back (Android) or Escape toggles the menu.
         if (e is InputEventKey { Pressed: true, Echo: false } k && (k.Keycode == Key.Escape || k.Keycode == Key.Back))
         {
-            if (_menu.Visible) Close();
+            if (_subsCard.Visible) ShowSubs(false);
+            else if (_menu.Visible) Close();
             else Open();
             GetViewport().SetInputAsHandled();
         }
@@ -236,7 +296,7 @@ public sealed partial class PauseMenu : Control
         Value(_smooth, MatchSettings.Smooth ? "On" : "Off");
         Value(_fps, !MatchSettings.ShowFps ? "Off" : MatchSettings.Profile ? "Detail" : "On");
         Value(_limit, MatchSettings.FpsCap.ToString());
-        Value(_sound, MatchSettings.Sound ? "On" : "Off");
+        foreach (var v in _volumes) v.QueueRedraw();
         _weather.Disabled = WeatherName == null;
         Value(_weather, WeatherName != null ? WeatherName() : "—");
         _report.Visible = MatchSettings.ShowFps && MatchSettings.Profile && SaveReport != null;
@@ -246,7 +306,7 @@ public sealed partial class PauseMenu : Control
     // ------------------------------------------------------------------ look
 
     /// <summary>A section: a small heading, then its settings two to a row.</summary>
-    static void Section(VBoxContainer into, string name, params Button[] tiles)
+    static void Section(VBoxContainer into, string name, params Control[] tiles)
     {
         if (into.GetChildCount() > 0) into.AddChild(new Control { CustomMinimumSize = new Vector2(0, 4) });
         var head = new Label { Text = name };

@@ -40,7 +40,7 @@ public sealed partial class AI
     /// <summary>How often each move was made this match (for tuning): one-twos, first-time balls, overlaps, spins, counters, traps.</summary>
     public readonly int[] Moves = new int[6];
 
-    bool Free(Player q) => q.Role != Role.GK && (q != m.Controlled || m.AutoPlay) && !q.IsBusy && run[q.Id].Until <= m.Time && m.Time >= playCool[q.Id];
+    bool Free(Player q) => q.Role != Role.GK && (!m.Piloted(q) || m.AutoPlay) && !q.IsBusy && run[q.Id].Until <= m.Time && m.Time >= playCool[q.Id];
 
     /// <summary>The team's mood from the score and the clock: chasing (0..1) when behind late, protecting (0..1) when ahead late.</summary>
     public void Mood(int team, out double chase, out double protect)
@@ -207,7 +207,7 @@ public sealed partial class AI
         if (q == null || q.Team != t || q == k || k.Role == Role.GK) return;
         // Pass and move: the passer goes for the return.
         if (b.Pos.Y > 0.8 || b.Vel.Y > 3) return;
-        if ((k == m.Controlled && !m.AutoPlay) || m.Time < playCool[k.Id]) return;
+        if ((m.Piloted(k) && !m.AutoPlay) || m.Time < playCool[k.Id]) return;
         double px = k.Pos.X * dir;
         if (px < -30) return;
         var tr = Traits[k.Id];
@@ -361,7 +361,7 @@ public sealed partial class AI
         foreach (var q in m.Teams[t].Players)
         {
             if (q.Role == Role.GK || q.Role == Role.DEF || q == m.Owner || m.PassTarget == q) continue;
-            if (q == m.Controlled && !m.AutoPlay) continue;
+            if (m.Piloted(q) && !m.AutoPlay) continue;
             if (q.IsBusy) continue;
             var r = run[q.Id];
             // Midfielders well behind the ball join only if they've the legs and the head for it.
@@ -386,7 +386,7 @@ public sealed partial class AI
     {
         var q = m.PassTarget;
         if (q == null || m.Owner != null || m.HeldBy != null || q.Role == Role.GK || q.Plan != null || q.IsBusy) return;
-        if (q == m.Controlled && !m.AutoPlay) return;
+        if (m.Piloted(q) && !m.AutoPlay) return;
         if (oneTouchKick == m.LastKickTime && oneTouchFor == q) return;
         var b = m.Ball;
         double d = m.BallDist(q);

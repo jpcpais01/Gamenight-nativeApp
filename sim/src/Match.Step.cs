@@ -7,11 +7,12 @@ public sealed partial class Match
 
     // ------------------------------------------------------------------ main step
 
-    public void Step(InputState input)
+    /// <summary>One step. `input` is HumanTeam's human; in a 1v1 (Versus) `input2` is the other side's.</summary>
+    public void Step(InputState input, InputState? input2 = null)
     {
         Time += DT;
         PhaseT += DT;
-        SwitchT += DT;
+        foreach (var s in Seats) s.SwitchT += DT;
         var ball = Ball;
         InvaderStep();
 
@@ -82,12 +83,16 @@ public sealed partial class Match
         }
 
         SendOffStep();
+        SubStep();
 
         // Set piece timer.
         if (SetPiece != null) SetPiece.T += DT;
 
         // Intents.
-        ApplyHumanInput(input);
+        Steer.On = false;
+        ApplyHumanInput(Seats[HumanTeam], input);
+        if (Versus) ApplyHumanInput(Seats[1 - HumanTeam], input2 ?? Idle);
+        else input2?.Events.Clear();
         AI.Update();
         TryStretches();
 
@@ -215,7 +220,7 @@ public sealed partial class Match
 
     /// <summary>After your goal, until a little after the camera comes round: the buttons pick the celebration.</summary>
     public bool CelebrationOpen =>
-        Phase == Phase.Goal && !AutoPlay && Celebration == null && Scorer != null && Scorer.Team == HumanTeam && PhaseT < GoalSeq.Front + 1.4;
+        Phase == Phase.Goal && !AutoPlay && Celebration == null && Scorer != null && HumanSide(Scorer.Team) && PhaseT < GoalSeq.Front + 1.4;
 
     void PickCelebration(CelebrationKind kind, double at)
     {
@@ -236,30 +241,33 @@ public sealed partial class Match
 
     // ------------------------------------------------------------------ human control
 
-    void ApplyHumanInput(InputState input)
+    /// <summary>A 1v1 side with nobody's input this step.</summary>
+    static readonly InputState Idle = new InputState();
+
+    void ApplyHumanInput(Seat seat, InputState input)
     {
-        var c = Controlled;
+        var c = seat.Controlled;
         if (AutoPlay)
         {
-            Steer.On = false;
             input.Events.Clear();
             return;
         }
         // After a goal the four buttons are celebrations (Sprint counts on the press).
-        bool sprintDown = input.Sprint && !sprintWas;
-        sprintWas = input.Sprint;
+        bool sprintDown = input.Sprint && !seat.SprintWas;
+        seat.SprintWas = input.Sprint;
         if (Phase == Phase.Goal)
         {
             // The first moments of your goal: the stick steers the scorer's run.
             double mv = JsMath.Hypot(input.MoveX, input.MoveY);
             var st = Steer;
-            st.On = mv > 0.12 && Scorer?.Team == HumanTeam && PhaseT < GoalSeq.Steer;
-            if (st.On)
+            bool mine = Scorer?.Team == c.Team;
+            if (mine) st.On = mv > 0.12 && PhaseT < GoalSeq.Steer;
+            if (mine && st.On)
             {
                 st.X = input.MoveX / mv;
                 st.Z = -input.MoveY / mv;
             }
-            if (CelebrationOpen && PhaseT > 0.25)
+            if (mine && CelebrationOpen && PhaseT > 0.25)
             {
                 CelebrationKind? pick = sprintDown ? CelebrationKind.Flip : null;
                 foreach (var ev in input.Events) if (ev.Kind == ButtonKind.Down) pick = Celebrations[ev.Btn];
@@ -269,10 +277,10 @@ public sealed partial class Match
             c.Sprinting = false;
             return;
         }
-        bool attacking = HumanAttacking();
+        bool attacking = HumanAttacking(c.Team);
         double m = JsMath.Hypot(input.MoveX, input.MoveY);
-        if (m > 0.12) NoInputT = 0;
-        else NoInputT += DT;
+        if (m > 0.12) seat.NoInputT = 0;
+        else seat.NoInputT += DT;
 
         // Training in goal: the stick moves him (idle: he takes up his own position), any button dives.
         if (KeeperHuman && c.Role == Role.GK && HeldBy != c && Phase == Phase.Play)
@@ -305,7 +313,7 @@ public sealed partial class Match
                 // Play's stopped: nothing to strike (a queued pass would go off after the restart).
                 if (Phase == Phase.Out || Phase == Phase.Halftime || Phase == Phase.Fulltime) continue;
                 // Pressed before the last player switch: cancelled by it.
-                if (ev.Hold > SwitchT + 0.05) continue;
+                if (ev.Hold > seat.SwitchT + 0.05) continue;
                 double ax = m > 0.12 ? input.MoveX / m : JsMath.Cos(c.Facing);
                 double az = m > 0.12 ? -input.MoveY / m : JsMath.Sin(c.Facing);
                 KickPlan? plan = null;
@@ -356,34 +364,34 @@ public sealed partial class Match
             }
             else
             {
-                if (ev.Btn == Btn.B && ev.Kind == ButtonKind.Down) ManualSwitch();
+                if (ev.Btn == Btn.B && ev.Kind == ButtonKind.Down) ManualSwitch(seat);
                 if (ev.Btn == Btn.A && ev.Kind == ButtonKind.Down && Phase == Phase.Play)
                 {
-                    bool dbl = Time - lastTackleTap < 0.32;
-                    lastTackleTap = Time;
-                    HumanTackle(dbl);
+                    bool dbl = Time - seat.LastTackleTap < 0.32;
+                    seat.LastTackleTap = Time;
+                    if (!seat.Controlled.IsBusy) LungeAt(seat.Controlled, dbl);
                 }
             }
         }
         // One button: going hard. Whenever the ball isn't ours, that's pressing for it.
-        PressHeld = input.Sprint && Owner?.Team != HumanTeam;
+        seat.PressHeld = input.Sprint && Owner?.Team != c.Team;
         input.Events.Clear();
         // Sliding down on Sprint commits to a tackle; sliding left commits to a slide tackle.
         if (input.TackleSwipe != TackleSwipe.None)
         {
             if (!attacking)
             {
-                if (lungeOn && input.TackleSwipe == TackleSwipe.Slide) lungeSlide = true;
+                if (seat.LungeOn && input.TackleSwipe == TackleSwipe.Slide) seat.LungeSlide = true;
                 else
                 {
-                    lungeOn = true;
-                    lungeSlide = input.TackleSwipe == TackleSwipe.Slide;
-                    lungeUntil = Time + 0.75;
+                    seat.LungeOn = true;
+                    seat.LungeSlide = input.TackleSwipe == TackleSwipe.Slide;
+                    seat.LungeUntil = Time + 0.75;
                 }
             }
             input.TackleSwipe = TackleSwipe.None;
         }
-        UpdateLunge(attacking);
+        UpdateLunge(seat, attacking);
 
         if (Phase == Phase.Halftime || Phase == Phase.Fulltime || Phase == Phase.Out)
         {
@@ -472,7 +480,7 @@ public sealed partial class Match
         }
 
         // Without the ball, he goes for it by himself (see GoForBall).
-        if (Owner != c) GoForBall(c, input, m);
+        if (Owner != c) GoForBall(seat, c, input, m);
 
         // Caught inside the distance at the other side's dead ball: an idle stick walks him out.
         var zn = GetRestartZone(c);
@@ -501,13 +509,13 @@ public sealed partial class Match
     /// does he put a foot in to take the ball. The stick is always yours: pointed roughly at
     /// his run it bends it, pointed away it takes over.
     /// </summary>
-    void GoForBall(Player c, InputState input, double m)
+    void GoForBall(Seat seat, Player c, InputState input, double m)
     {
         bool press = input.Sprint;
         var own = Owner;
         if (Phase != Phase.Play || HeldBy != null || own?.Team == c.Team || ShotTeam() == c.Team)
         {
-            pressTight = 0;
+            seat.PressTight = 0;
             return;
         }
         double tx, tz, speed;
@@ -517,8 +525,8 @@ public sealed partial class Match
         {
             // Goal-side of the ball, moving with it, under a metre off and squeezing in the
             // longer he stays tight.
-            pressTight = d < 2.2 ? pressTight + DT : 0;
-            double keep = M.Lerp(0.9, 0.4, M.Smoothstep(0.15, 0.6, pressTight));
+            seat.PressTight = d < 2.2 ? seat.PressTight + DT : 0;
+            double keep = M.Lerp(0.9, 0.4, M.Smoothstep(0.15, 0.6, seat.PressTight));
             bool onBall = AI.PressPoint(c, own, tmpV, keep);
             double pull = onBall ? 5 : 3;
             double vx = Ball.Vel.X * 0.9 + (tmpV.X - c.Pos.X) * pull;
@@ -544,17 +552,17 @@ public sealed partial class Match
             square = !onBall && v < 4.5;
             // Going in (only on PRESS): the ball shows and a foot can get to it. Kept out long
             // enough, he goes through anyway, shield or not.
-            if (press && !c.IsBusy && !lungeOn && Time > pokeReady && Ball.Pos.Y < 0.6 && d < 1.35 &&
-                (BallOpen(c, own, d) || (pressTight > 1.0 && d < 0.95)))
+            if (press && !c.IsBusy && !seat.LungeOn && Time > seat.PokeReady && Ball.Pos.Y < 0.6 && d < 1.35 &&
+                (BallOpen(c, own, d) || (seat.PressTight > 1.0 && d < 0.95)))
             {
                 LungeAt(c, false);
-                pokeReady = Time + 0.8;
-                pressTight = 0;
+                seat.PokeReady = Time + 0.8;
+                seat.PressTight = 0;
             }
         }
         else
         {
-            pressTight = 0;
+            seat.PressTight = 0;
             // A pass to a team-mate is his, unless we'd clearly get there first.
             var pt = PassTarget;
             if (pt != null && pt.Team == c.Team && pt != c)
@@ -618,9 +626,9 @@ public sealed partial class Match
     /// </summary>
     void CloseControl()
     {
-        var c = Controlled;
+        var c = Owner;
         var b = Ball;
-        if (AutoPlay || Owner != c || HeldBy != null || c.IsBusy || !b.OnGround) return;
+        if (AutoPlay || c == null || !Piloted(c) || HeldBy != null || c.IsBusy || !b.OnGround) return;
         double gap = BallDist(c);
         if (gap > 1.8) return;
         bool moving = c.WantSpeed > 0.3;
@@ -667,14 +675,14 @@ public sealed partial class Match
         if (gap > 1.0) c.WantSpeed = Math.Max(c.WantSpeed, Math.Min(c.TopSpeed, bs + 1.2));
     }
 
-    void ManualSwitch()
+    void ManualSwitch(Seat seat)
     {
-        var team = Teams[HumanTeam].Players;
+        var team = Teams[seat.Controlled.Team].Players;
         Player? best = null;
         double bestScore = 1e9;
         foreach (var p in team)
         {
-            if (p == Controlled || p.Role == Role.GK) continue;
+            if (p == seat.Controlled || p.Role == Role.GK) continue;
             var ip = AI.Intercept[p.Id];
             double score = ip.T >= 0 ? ip.T : 5 + BallDist(p) / 8;
             if (score < bestScore)
@@ -686,44 +694,37 @@ public sealed partial class Match
         if (best != null) SetControlled(best);
     }
 
-    void HumanTackle(bool slide)
-    {
-        var c = Controlled;
-        if (c.IsBusy) return;
-        LungeAt(c, slide);
-    }
-
     /// <summary>
     /// The sprint-swipe tackle is a commitment, not a button-mash: the defender keeps pressing and
     /// strikes at the right moment — the ball within reach and not tucked away behind the
     /// carrier's body (or he's simply right on it).
     /// </summary>
-    void UpdateLunge(bool attacking)
+    void UpdateLunge(Seat seat, bool attacking)
     {
-        if (!lungeOn) return;
-        var c = Controlled;
+        if (!seat.LungeOn) return;
+        var c = seat.Controlled;
         if (attacking || Phase != Phase.Play)
         {
-            lungeOn = false;
+            seat.LungeOn = false;
             return;
         }
         if (c.IsBusy) return;
         double d = BallDist(c);
         var b = Ball.Pos;
-        if (Time > lungeUntil)
+        if (Time > seat.LungeUntil)
         {
-            if (d < (lungeSlide ? 3.2 : 2.3) && b.Y < 0.7) LungeAt(c, lungeSlide);
-            lungeOn = false;
+            if (d < (seat.LungeSlide ? 3.2 : 2.3) && b.Y < 0.7) LungeAt(c, seat.LungeSlide);
+            seat.LungeOn = false;
             return;
         }
-        double reach = lungeSlide ? 2.8 : 1.5;
+        double reach = seat.LungeSlide ? 2.8 : 1.5;
         if (d > reach || b.Y > 0.7) return;
         var carrier = Owner;
         bool open = carrier == null || carrier.Team == c.Team || BallOpen(c, carrier, d);
         if (open || d < reach * 0.6)
         {
-            LungeAt(c, lungeSlide);
-            lungeOn = false;
+            LungeAt(c, seat.LungeSlide);
+            seat.LungeOn = false;
         }
     }
 

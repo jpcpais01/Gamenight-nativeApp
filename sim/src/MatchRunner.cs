@@ -23,8 +23,8 @@ public sealed class MatchRunner : IDisposable
     public readonly DeliveryPreview Preview = new DeliveryPreview();
 
     readonly object gate = new object();
-    readonly InputState staged = new InputState();
-    readonly InputState live = new InputState();
+    readonly InputState staged = new InputState(), staged2 = new InputState();
+    readonly InputState live = new InputState(), live2 = new InputState();
     readonly MatchSnapshot prev = new MatchSnapshot(), cur = new MatchSnapshot();
     MatchSnapshot work = new MatchSnapshot(), last = new MatchSnapshot();
     Action<Match>? pending;
@@ -72,22 +72,30 @@ public sealed class MatchRunner : IDisposable
     /// </summary>
     public void Submit(InputState src)
     {
-        lock (gate)
+        lock (gate) Move(src, staged);
+    }
+
+    /// <summary>A 1v1: the other side's controls, the same way.</summary>
+    public void Submit2(InputState src)
+    {
+        lock (gate) Move(src, staged2);
+    }
+
+    static void Move(InputState src, InputState dst)
+    {
+        dst.MoveX = src.MoveX;
+        dst.MoveY = src.MoveY;
+        dst.Sprint = src.Sprint;
+        for (int i = 0; i < 3; i++)
         {
-            staged.MoveX = src.MoveX;
-            staged.MoveY = src.MoveY;
-            staged.Sprint = src.Sprint;
-            for (int i = 0; i < 3; i++)
-            {
-                staged.Held[i] = src.Held[i];
-                staged.HoldTime[i] = src.HoldTime[i];
-                staged.Swipe[i] = src.Swipe[i];
-            }
-            staged.Events.AddRange(src.Events);
-            src.Events.Clear();
-            if (src.TackleSwipe != TackleSwipe.None) staged.TackleSwipe = src.TackleSwipe;
-            src.TackleSwipe = TackleSwipe.None;
+            dst.Held[i] = src.Held[i];
+            dst.HoldTime[i] = src.HoldTime[i];
+            dst.Swipe[i] = src.Swipe[i];
         }
+        dst.Events.AddRange(src.Events);
+        src.Events.Clear();
+        if (src.TackleSwipe != TackleSwipe.None) dst.TackleSwipe = src.TackleSwipe;
+        src.TackleSwipe = TackleSwipe.None;
     }
 
     /// <summary>Runs `action` on the sim thread before the next step.</summary>
@@ -163,26 +171,17 @@ public sealed class MatchRunner : IDisposable
         {
             act = pending;
             pending = null;
-            live.MoveX = staged.MoveX;
-            live.MoveY = staged.MoveY;
-            live.Sprint = staged.Sprint;
-            for (int i = 0; i < 3; i++)
-            {
-                live.Held[i] = staged.Held[i];
-                live.HoldTime[i] = staged.HoldTime[i];
-                live.Swipe[i] = staged.Swipe[i];
-            }
-            live.Events.AddRange(staged.Events);
-            staged.Events.Clear();
-            if (staged.TackleSwipe != TackleSwipe.None) live.TackleSwipe = staged.TackleSwipe;
-            staged.TackleSwipe = TackleSwipe.None;
+            Move(staged, live);
+            Move(staged2, live2);
         }
         act?.Invoke(Match);
-        Match.Step(live);
+        Match.Step(live, live2);
         AfterStep?.Invoke();
-        Preview.Update(Match, live);
+        Preview.Update(Match, live, live2);
         live.Events.Clear();
         live.TackleSwipe = TackleSwipe.None;
+        live2.Events.Clear();
+        live2.TackleSwipe = TackleSwipe.None;
         var e = Match.TakeEvents();
         Match.Write(work);
         Preview.Write(work);

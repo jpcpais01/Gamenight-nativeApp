@@ -25,6 +25,7 @@ public sealed class Mixer
     readonly float[] _bL = new float[Block], _bR = new float[Block];
     readonly float[] _e0 = new float[Block], _e1 = new float[Block];
     readonly float[] _wL = new float[Block], _wR = new float[Block];
+    readonly float[] _uL = new float[Block], _uR = new float[Block];
 
     public readonly float[] Noise;
     readonly Random _rng = new();
@@ -83,7 +84,16 @@ public sealed class Mixer
 
     public float Rand() => (float)_rng.NextDouble();
 
-    public void Add(Voice v) => _voices.Add(v);
+    public void Add(Voice v)
+    {
+        if (Menus && v.Out == Bus.Master) v.Out = Bus.Ui;
+        _voices.Add(v);
+    }
+
+    /// <summary>While set, what would go to the master bus is a menu sound (its own volume).</summary>
+    public bool Menus;
+    /// <summary>The player's volumes, 0..1: everything, the crowd, the match's own sounds, the menus'.</summary>
+    public volatile float VolMaster = 1, VolCrowd = 1, VolFx = 1, VolUi = 1;
 
     /// <summary>The ground: how big the crowd is, the reverb's tail and the far stand's echo.</summary>
     public void SetVenue(Venue v)
@@ -177,6 +187,7 @@ public sealed class Mixer
         Array.Clear(_bL); Array.Clear(_bR);
         Array.Clear(_e0); Array.Clear(_e1);
         Array.Clear(_wL); Array.Clear(_wR);
+        Array.Clear(_uL); Array.Clear(_uR);
         double t0 = Now;
         // The ends drift to where the camera has them (about a quarter of a second behind).
         const float ease = 0.035f;
@@ -196,7 +207,7 @@ public sealed class Mixer
         for (int k = _voices.Count - 1; k >= 0; k--)
         {
             var v = _voices[k];
-            if (v.Out != Bus.Master && !crowd)
+            if (v.Out != Bus.Master && v.Out != Bus.Ui && !crowd)
             {
                 if (t0 >= v.Stop) v.Done = true;
             }
@@ -211,7 +222,8 @@ public sealed class Mixer
         for (int i = 0; i < Block; i++)
         {
             double t = t0 + i * _dt;
-            float l = _mL[i], r = _mR[i];
+            float fx = VolFx * VolFx, ui = VolUi * VolUi;
+            float l = _mL[i] * fx + _uL[i] * ui, r = _mR[i] * fx + _uR[i] * ui;
             if (crowd)
             {
                 // The bed, levelled and limited.
@@ -227,11 +239,11 @@ public sealed class Mixer
                 _verb.Run(el, er, out float wl, out float wr);
                 cl += _dry * el + _wet * wl;
                 cr += _dry * er + _wet * wr;
-                float cg = CrowdGain.At(t) * _scale;
+                float cg = CrowdGain.At(t) * _scale * VolCrowd * VolCrowd;
                 l += cl * cg;
                 r += cr * cg;
             }
-            float mg = MasterGain.At(t);
+            float mg = MasterGain.At(t) * VolMaster * VolMaster;
             l *= mg;
             r *= mg;
             float comp = _master.Gain(MathF.Max(MathF.Abs(l), MathF.Abs(r)));
@@ -253,6 +265,7 @@ public sealed class Mixer
             case Bus.Bed: L = _bL; R = _bR; break;
             case Bus.End0: L = R = _e0; break;
             case Bus.End1: L = R = _e1; break;
+            case Bus.Ui: L = _uL; R = _uR; break;
             default: L = _wL; R = _wR; break;
         }
         bool mono = L == R;

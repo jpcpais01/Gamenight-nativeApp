@@ -111,6 +111,13 @@ public static class Cards
 
     // ------------------------------------------------------------------ positions
 
+    /// <summary>A card on the bench, as he'd play in his own position.</summary>
+    public static SetupPlayer Sub(Card c)
+    {
+        var sp = ToSim(c, c.Position);
+        return new SetupPlayer { Name = sp.Name, Number = sp.Number, Attrs = sp.Attrs, Look = sp.Look, Foot = sp.Foot, Role = RoleOf(c.Position), Pos = c.Position.ToString(), Source = c };
+    }
+
     public static Role RoleOf(Position p) => p switch
     {
         Position.GK => Role.GK,

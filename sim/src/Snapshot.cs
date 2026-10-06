@@ -71,6 +71,10 @@ public sealed class MatchSnapshot
     public int Controlled = -1, Owner = -1, HeldBy = -1, PassTarget = -1, Scorer = -1;
     public int PossTeam;
     public bool HumanAttacking;
+    /// <summary>A 1v1: the other side's human's player and whether his buttons mean attack.</summary>
+    public bool Versus;
+    public int Controlled2 = -1;
+    public bool HumanAttacking2;
     /// <summary>For the buttons: the celebration is the human's to pick (Match.CelebrationOpen), the human
     /// just scored (and isn't on autoplay), the human's keeper is in goal without the ball (training in goal).</summary>
     public bool CelebrationOpen, HumanScored, KeeperButtons;
@@ -111,7 +115,7 @@ public sealed class MatchSnapshot
     public int KickCount;
     /// <summary>Strongest kick this step, 0..1.</summary>
     public float KickMax;
-    public int Whistle, Goal = -1, Foul, Card, Offside;
+    public int Whistle, Goal = -1, Foul, Card, Offside, Sub;
     public float Post, Net, Bounce, Save, Tackle;
 
     public void CopyFrom(MatchSnapshot o)
@@ -146,6 +150,7 @@ public sealed class MatchSnapshot
         Dir[0] = o.Dir[0]; Dir[1] = o.Dir[1];
         Controlled = o.Controlled; Owner = o.Owner; HeldBy = o.HeldBy; PassTarget = o.PassTarget; Scorer = o.Scorer;
         PossTeam = o.PossTeam; HumanAttacking = o.HumanAttacking;
+        Versus = o.Versus; Controlled2 = o.Controlled2; HumanAttacking2 = o.HumanAttacking2;
         CelebrationOpen = o.CelebrationOpen; HumanScored = o.HumanScored; KeeperButtons = o.KeeperButtons;
         SetPiece = o.SetPiece; SetPieceTeam = o.SetPieceTeam; SetPieceTaker = o.SetPieceTaker; SetPieceX = o.SetPieceX; SetPieceZ = o.SetPieceZ;
         SetPieceDirect = o.SetPieceDirect; HasSetPieceTarget = o.HasSetPieceTarget; SetPieceTargetX = o.SetPieceTargetX; SetPieceTargetZ = o.SetPieceTargetZ;
@@ -158,7 +163,7 @@ public sealed class MatchSnapshot
         ShotTeam = o.ShotTeam; AttackingTeam = o.AttackingTeam; LastTouchTeam = o.LastTouchTeam; PenaltyPending = o.PenaltyPending;
         KickCount = o.KickCount; KickMax = o.KickMax;
         InvaderT = o.InvaderT; InvaderSeed = o.InvaderSeed;
-        Whistle = o.Whistle; Goal = o.Goal; Foul = o.Foul; Card = o.Card; Offside = o.Offside;
+        Whistle = o.Whistle; Goal = o.Goal; Foul = o.Foul; Card = o.Card; Offside = o.Offside; Sub = o.Sub;
         Post = o.Post; Net = o.Net; Bounce = o.Bounce; Save = o.Save; Tackle = o.Tackle;
     }
 
@@ -172,6 +177,7 @@ public sealed class MatchSnapshot
         Foul = Math.Max(Foul, e.Foul);
         Card = Math.Max(Card, e.Card);
         Offside = Math.Max(Offside, e.Offside);
+        Sub = Math.Max(Sub, e.Sub);
         Post = Math.Max(Post, (float)e.Post);
         Net = Math.Max(Net, (float)e.Net);
         Bounce = Math.Max(Bounce, (float)e.Bounce);
@@ -183,7 +189,7 @@ public sealed class MatchSnapshot
     {
         KickCount = 0;
         KickMax = 0;
-        Whistle = Foul = Card = Offside = 0;
+        Whistle = Foul = Card = Offside = Sub = 0;
         Goal = -1;
         Post = Net = Bounce = Save = Tackle = 0;
     }
@@ -289,6 +295,9 @@ public sealed partial class Match
         s.Scorer = Scorer?.Id ?? -1;
         s.PossTeam = PossTeam;
         s.HumanAttacking = HumanAttacking();
+        s.Versus = Versus;
+        s.Controlled2 = Versus ? Seats[1 - HumanTeam].Controlled.Id : -1;
+        s.HumanAttacking2 = Versus && HumanAttacking(1 - HumanTeam);
         s.CelebrationOpen = CelebrationOpen;
         s.HumanScored = Phase == Phase.Goal && !AutoPlay && Scorer != null && Scorer.Team == HumanTeam;
         s.KeeperButtons = KeeperHuman && Controlled.Role == Role.GK && HeldBy != Controlled;

@@ -2,6 +2,7 @@ using System;
 using Godot;
 using GameNight.Render;
 using GameNight.Sim;
+using ClubCard = GameNight.Club.Card;
 
 namespace GameNight.UI;
 
@@ -36,6 +37,15 @@ public sealed partial class Hud : Control
     public PixelView View;
     public bool ShowFps;
     public bool Paused;
+    /// <summary>Which side this screen's player is on (1: the friend's screen, online).</summary>
+    public int Side;
+    /// <summary>Same-screen 1v1: no single player's card in the corner.</summary>
+    public bool Versus;
+    /// <summary>Online, the friend's screen: the engine isn't here, so nothing on it is read.</summary>
+    public bool Remote;
+    /// <summary>A line of news up top (online: the ping, or that the friend left); empty for none.</summary>
+    public string Note = "";
+    string _noteShown = "";
 
     /// <summary>Training: only what's drawn over the pitch (the dead-ball aim, the power bars,
     /// stamina), no scoreboard, minimap, captions or cards.</summary>
@@ -68,6 +78,9 @@ public sealed partial class Hud : Control
     float _revealAt = -1;
     int _revealTeam;
     string _revealLine = "";
+    /// <summary>The scorer (player id) whose card goes up with the new score.</summary>
+    int _revealScorer = -1, _cardScorer = -1;
+    readonly Painter _big;
 
     // Caption.
     string _capTitle = "", _capSub = "";
@@ -86,13 +99,18 @@ public sealed partial class Hud : Control
     string _pcName = "";
     Role _pcRole;
 
-    // Overlays over the pitch.
-    Vector2? _head, _aim;
+    // Overlays over the pitch: the dead-ball aim, and per human his stamina and charge bar.
+    Vector2? _aim;
     bool _aimOff;
-    float _stamina = -1;
-    int _chargeBtn = -1;
-    float _chargeP, _chargeA;
-    bool _chargeDead;
+    sealed class Mark
+    {
+        public Vector2? Head;
+        public float Stamina = -1;
+        public int Btn = -1;
+        public float P, A;
+        public bool Dead;
+    }
+    readonly Mark[] _marks = { new(), new() };
 
     // Frame rate.
     string _fpsText = "";
@@ -124,6 +142,9 @@ public sealed partial class Hud : Control
         _caption = Layer(DrawCaption);
         _card = new Painter(DrawCard) { Visible = false };
         AddChild(_card);
+        _big = new Painter(DrawBig) { Visible = false };
+        AddChild(_big);
+        Menus.Px.LoadFonts();
         // The score card's numbers roll inside their cells.
         _cellHome = new Painter(p => DrawCell(p, 0)) { ClipContents = true };
         _cellAway = new Painter(p => DrawCell(p, 1)) { ClipContents = true };
@@ -144,6 +165,9 @@ public sealed partial class Hud : Control
         _held = null;
         _revealAt = -1;
         _capAt = _cardAt = -99;
+        _subsShown = 0;
+        _cards = new ClubCard[MatchSnapshot.N];
+        _cardScorer = _revealScorer = -1;
         _card.Visible = false;
         _pcFor = -2;
         _lastPhase = Phase.Kickoff;
@@ -176,7 +200,9 @@ public sealed partial class Hud : Control
     public float SafeRight => _safeR;
     public float SafeTop => _safeT;
 
-    public void Tick(MatchSnapshot a, MatchSnapshot b, float alpha, InputState input, bool attack, double delta)
+    /// <summary>`input` and `attack` are this screen's player's (side Side); a same-screen 1v1
+    /// passes the other side's as `input2`, `attack2`.</summary>
+    public void Tick(MatchSnapshot a, MatchSnapshot b, float alpha, InputState input, bool attack, double delta, InputState input2 = null, bool attack2 = false)
     {
         _now += delta;
         Insets();
@@ -185,12 +211,38 @@ public sealed partial class Hud : Control
         PlayerCard(b);
         _map.Visible = !_overlayOnly && !Paused && b.Phase != Phase.Fulltime;
         if (_map.Visible) _map.Update(a, b, alpha);
-        Overlays(a, b, alpha, input, attack, (float)delta);
+        Overlays(a, b, alpha, (float)delta, (Side, input, attack), (1 - Side, input2, attack2));
         Animate();
         Fps(delta);
     }
 
     // ------------------------------------------------------------------ events
+
+    int _subsShown;
+
+    /// <summary>A change (or two, made together): who's on, who's off.</summary>
+    void Substitutions()
+    {
+        var lines = new System.Collections.Generic.List<string>();
+        int team = 0;
+        lock (_match.SubGate)
+        {
+            for (; _subsShown < _match.Subs.Count; _subsShown++)
+            {
+                var s = _match.Subs[_subsShown];
+                var p = _match.All[s.Id];
+                _info.Surname[s.Id] = MatchInfo.Who(p);
+                _cards[s.Id] = null;
+                lines.Add($"{_info.Surname[s.Id]} on for {Surname(s.Off, p.Index)}");
+                team = s.Team;
+            }
+        }
+        if (lines.Count == 0) return;
+        _pcFor = -2;
+        Caption("SUBSTITUTION", string.Join(", ", lines) + " · " + _info.Name[team], 3, 0);
+    }
+
+    static string Surname(string name, int index) => string.IsNullOrWhiteSpace(name) ? "#" + (index + 1) : name.Trim().Split(' ')[^1];
 
     void Events(MatchSnapshot b)
     {
@@ -204,6 +256,7 @@ public sealed partial class Hud : Control
             _held = new[] { b.Score[0] - (team == 0 ? 1 : 0), b.Score[1] - (team == 1 ? 1 : 0) };
             _revealAt = (float)GoalSeq.Back + 0.6f;
             _revealTeam = team;
+            _revealScorer = b.Scorer;
             _revealLine = who + _info.Name[team] + " · " + b.ClockLabel;
         }
         // The referee's calls. (The Foul object is made before the step that reports it, and
@@ -217,6 +270,7 @@ public sealed partial class Hud : Control
             else if (f.Yellow) Caption("YELLOW CARD", $"{MatchInfo.Who(f.Offender)} · {_info.Name[f.Offender.Team]}", 2.6, 2);
             else Caption("FOUL", "Free kick · " + _info.Name[f.Victim.Team], 2, 1);
         }
+        if (b.Sub != 0) Substitutions();
         var off = _match?.LastOffside;
         if (b.Offside != 0 && off != null) Caption("OFFSIDE", "Free kick · " + _info.Name[off.Team], 2, 1);
         // Booked while advantage was played: show the card now.
@@ -241,6 +295,7 @@ public sealed partial class Hud : Control
             _cardNew[0] = b.Score[0];
             _cardNew[1] = b.Score[1];
             _cardTeam = _revealTeam;
+            _cardScorer = _revealScorer;
             _cardLine = _revealLine;
             _cardAt = _now;
             _revealAt = -1;
@@ -271,6 +326,7 @@ public sealed partial class Hud : Control
         if (_now - _capAt < Math.Min(_capDur, 3.2) + 0.1) _caption.QueueRedraw();
         double ct = _now - _cardAt;
         _card.Visible = !_overlayOnly && ct >= 0 && ct < 3.4;
+        if (!_card.Visible) _big.Visible = false;
         if (_card.Visible)
         {
             float t = (float)ct;
@@ -282,7 +338,24 @@ public sealed partial class Hud : Control
             _card.Modulate = new Color(1, 1, 1, op);
             _card.PivotOffset = _card.Size / 2;
             _card.Scale = new Vector2(s, s);
-            _card.Position = (Size - _card.Size) / 2 + new Vector2(0, y);
+            // The scorer's card stands over the score, the pair centred together.
+            bool big = _cardScorer >= 0 && CardOf(_cardScorer) != null;
+            float bh = big ? Mathf.Clamp(Size.Y * 0.44f, 130, 240) : 0, gap = big ? 14 : 0;
+            float top = (Size.Y - (bh + gap + _card.Size.Y)) / 2;
+            _card.Position = new Vector2((Size.X - _card.Size.X) / 2, top + bh + gap + y);
+            _big.Visible = big;
+            if (big)
+            {
+                // A beat after the score: up from below with a little overshoot.
+                float bt = Math.Clamp((t - 0.12f) / 0.45f, 0, 1);
+                float bo = bt < 1 ? 1 + 0.06f * MathF.Sin(bt * MathF.PI) : 1;
+                _big.Size = new Vector2(bh * 10 / 14f, bh);
+                _big.PivotOffset = _big.Size / 2;
+                _big.Scale = new Vector2(bo, bo) * (0.85f + 0.15f * Style.EaseOut(bt)) * s;
+                _big.Position = new Vector2((Size.X - _big.Size.X) / 2, top + y + 40 * (1 - Style.EaseOut(bt)));
+                _big.Modulate = new Color(1, 1, 1, op * Style.EaseOut(bt));
+                _big.QueueRedraw();
+            }
             _cellHome.QueueRedraw();
             _cellAway.QueueRedraw();
         }
@@ -492,12 +565,47 @@ public sealed partial class Hud : Control
         Style.Text(c, nf, _cardNew[side].ToString(), new Rect2(0, _rowH * (1 - e), _numW, _rowH), _numFont, fg);
     }
 
+    // ------------------------------------------------------------------ player cards
+
+    ClubCard[] _cards = new ClubCard[MatchSnapshot.N];
+
+    /// <summary>The card of whoever is in slot `id`: his own, or one made for him (a team
+    /// without cards), in his name and looks.</summary>
+    ClubCard CardOf(int id)
+    {
+        if (_match == null || id < 0 || id >= _cards.Length || id >= _match.All.Count) return null;
+        if (_cards[id] != null) return _cards[id];
+        var p = _match.All[id];
+        if (p.Source is ClubCard own) return _cards[id] = own;
+        var pos = p.Role switch
+        {
+            Role.GK => Club.Position.GK, Role.DEF => Club.Position.CB, Role.MID => Club.Position.CM,
+            _ => p.Index == 9 ? Club.Position.ST : Club.Position.LW,
+        };
+        var a = p.Attrs;
+        int ovr = (int)Math.Clamp(Math.Round(100 * (a.Pace + a.Passing + a.Shooting + a.Defending + a.Control) / 5), 45, 95);
+        var c = Club.Cards.Generate(new Rng(id * 7919 + 17), Club.Rarity.Common, pos, ovr);
+        c.Name = string.IsNullOrWhiteSpace(p.Name) ? (p.Role == Role.GK ? "Keeper" : "Player") : p.Name;
+        c.Number = p.Number > 0 ? p.Number : p.Index + 1;
+        c.Skin = Math.Max(0, Array.IndexOf(TeamData.SkinTones, p.Look.Skin));
+        c.Hair = Math.Max(0, Array.IndexOf(TeamData.HairColors, p.Look.Hair));
+        c.HairStyle = p.Look.HairStyle;
+        return _cards[id] = c;
+    }
+
+    void DrawBig(Painter c)
+    {
+        var card = CardOf(_cardScorer);
+        if (card == null) return;
+        Menus.Art.Card(c, new Rect2(Vector2.Zero, c.Size), card, _match.Teams[_match.All[_cardScorer].Team].Info.Kit, 0.8f);
+    }
+
     // ------------------------------------------------------------------ player card
 
     void PlayerCard(MatchSnapshot b)
     {
-        bool show = b.Phase != Phase.Fulltime && b.Controlled >= 0;
-        int c = b.Controlled;
+        int c = Side == 1 ? b.Controlled2 : b.Controlled;
+        bool show = b.Phase != Phase.Fulltime && c >= 0 && !Versus;
         int st = c >= 0 ? (int)MathF.Round(b.Stamina[c] * 100) : -1;
         if (show == _pcShow && c == _pcFor && st == _pcStamina) return;
         _pcShow = show;
@@ -522,6 +630,14 @@ public sealed partial class Hud : Control
         float w = Math.Max(118, Style.Width(f, _pcName, size) + 18);
         float h = 5 + size * 1.1f + 5 + 3 + 6;
         var r = new Rect2(14 + _safeL, Size.Y - 12 - _safeB - h, w, h);
+        // His card beside the tag, standing on the same line.
+        var card = CardOf(_pcFor);
+        if (card != null)
+        {
+            const float cw = 44, ch = cw * 1.4f;
+            Menus.Art.Card(c, new Rect2(r.Position.X, r.End.Y - ch, cw, ch), card, _match.Teams[_match.All[_pcFor].Team].Info.Kit);
+            r.Position += new Vector2(cw + 8, 0);
+        }
         Color bg = _pcRole switch { Role.FWD => Style.Hex(0xd6453a), Role.MID => Style.Hex(0xe8bd25), _ => Style.Hex(0x2f9e4f) };
         Color fg = _pcRole == Role.MID ? Style.Hex(0x1b1a12) : Colors.White;
         Style.Box(c, r, bg, 4, 10);
@@ -544,12 +660,18 @@ public sealed partial class Hud : Control
 
     // ------------------------------------------------------------------ over the pitch
 
-    void Overlays(MatchSnapshot a, MatchSnapshot b, float alpha, InputState input, bool attack, float dt)
+    void Overlays(MatchSnapshot a, MatchSnapshot b, float alpha, float dt, params (int side, InputState input, bool attack)[] humans)
     {
-        bool dirty = _head != null || _aim != null || _chargeA > 0;
-        _head = null;
+        bool dirty = _aim != null;
+        foreach (var mk in _marks) dirty |= mk.Head != null || mk.A > 0;
+        foreach (var mk in _marks) mk.Head = null;
         _aim = null;
-        if (View == null || Paused) { if (dirty) _overlay.QueueRedraw(); _chargeA = 0; return; }
+        if (View == null || Paused)
+        {
+            foreach (var mk in _marks) mk.A = 0;
+            if (dirty) _overlay.QueueRedraw();
+            return;
+        }
 
         // Dead-ball shot: the target on the goal mouth (red when it would miss).
         if (b.AimingShot && b.HasAimPoint)
@@ -558,64 +680,64 @@ public sealed partial class Hud : Control
             _aimOff = MathF.Abs(b.AimZ) > Pitch.GoalHalfWidth - 0.1 || b.AimY > Pitch.GoalHeight - 0.1;
         }
 
-        int c = b.Controlled;
-        bool ballOut = b.Phase == Phase.Fulltime;
-        if (c >= 0 && !ballOut)
+        foreach (var (side, input, attack) in humans)
         {
-            var head = new Vector3(Mathf.Lerp(a.X[c], b.X[c], alpha), 2.45f * b.Height[c], Mathf.Lerp(a.Z[c], b.Z[c], alpha));
-            _head = View.WorldToUnits(head);
-            _stamina = b.DeadBallTaker < 0 ? b.Stamina[c] : -1;
+            var mk = _marks[side];
+            int c = side == 1 ? b.Controlled2 : b.Controlled;
+            if (c >= 0 && b.Phase != Phase.Fulltime)
+            {
+                var head = new Vector3(Mathf.Lerp(a.X[c], b.X[c], alpha), 2.45f * b.Height[c], Mathf.Lerp(a.Z[c], b.Z[c], alpha));
+                mk.Head = View.WorldToUnits(head);
+                mk.Stamina = b.DeadBallTaker < 0 ? b.Stamina[c] : -1;
+            }
+            // Pass / through / shot weight while a button is held.
+            int btn = -1;
+            if (c >= 0 && attack && input != null)
+            {
+                if (input.Held[2]) btn = 2;
+                else if (input.Held[0]) btn = 0;
+                else if (input.Held[1]) btn = 1;
+            }
+            // (Held since before the last switch: it was cancelled by it.)
+            if (btn >= 0 && _match != null && !Remote && input.HoldTime[btn] > _match.Seats[side].SwitchT + 0.05) btn = -1;
+            if (btn >= 0)
+            {
+                double hold = input.HoldTime[btn];
+                bool shot = btn == 2;
+                mk.P = shot ? (float)Math.Min(1.15, hold / 0.85) / 1.15f : (float)Math.Min(1, hold / 0.6);
+                mk.Btn = btn;
+                mk.Dead = shot && _aim != null;
+            }
+            mk.A = Math.Clamp(mk.A + (btn >= 0 ? 1 : -1) * dt / 0.12f, 0, 1);
+            dirty |= mk.Head != null || mk.A > 0;
         }
-
-        // Pass / through / shot weight while a button is held.
-        int btn = -1;
-        if (attack && input != null)
-        {
-            if (input.Held[2]) btn = 2;
-            else if (input.Held[0]) btn = 0;
-            else if (input.Held[1]) btn = 1;
-        }
-        if (btn >= 0 && _match != null && input.HoldTime[btn] > _match.SwitchT + 0.05) btn = -1;
-        if (btn >= 0)
-        {
-            double hold = input.HoldTime[btn];
-            bool shot = btn == 2;
-            _chargeP = shot ? (float)Math.Min(1.15, hold / 0.85) / 1.15f : (float)Math.Min(1, hold / 0.6);
-            _chargeBtn = btn;
-            _chargeDead = shot && _aim != null;
-        }
-        _chargeA = Math.Clamp(_chargeA + (btn >= 0 ? 1 : -1) * dt / 0.12f, 0, 1);
-        if (dirty || _head != null || _aim != null || _chargeA > 0) _overlay.QueueRedraw();
+        if (dirty || _aim != null) _overlay.QueueRedraw();
     }
 
     void DrawOverlay(Painter c)
     {
         if (_aim is Vector2 am) DrawAim(c, am);
-        if (_head is Vector2 h)
+        foreach (var mk in _marks)
         {
             // Stamina: very small and thin, just over his head.
-            if (_stamina >= 0) Bar(c, new Rect2(h.X - 14, h.Y - 3, 28, 2), _stamina, null, Style.Ink);
-        }
-        if (_chargeA > 0)
-        {
-            Vector2? at = _chargeDead && _aim is Vector2 ap ? ap - new Vector2(0, 32) : _head;
-            if (at is Vector2 p)
+            if (mk.Head is Vector2 h && mk.Stamina >= 0) Bar(c, new Rect2(h.X - 14, h.Y - 3, 28, 2), mk.Stamina, null, Style.Ink);
+            if (mk.A <= 0) continue;
+            Vector2? at = mk.Dead && _aim is Vector2 ap ? ap - new Vector2(0, 32) : mk.Head;
+            if (at is not Vector2 p) continue;
+            bool shot = mk.Btn == 2;
+            float w = mk.Dead ? 70 : 44, hh = mk.Dead ? 6 : 4;
+            var r = new Rect2(p.X - w / 2, p.Y - 11, w, hh);
+            Bar(c, r, mk.P, mk.Dead ? RampDead : shot ? RampShot : RampPass, Colors.White, mk.A);
+            if (shot)
             {
-                bool shot = _chargeBtn == 2;
-                float w = _chargeDead ? 70 : 44, hh = _chargeDead ? 6 : 4;
-                var r = new Rect2(p.X - w / 2, p.Y - 11, w, hh);
-                Bar(c, r, _chargeP, _chargeDead ? RampDead : shot ? RampShot : RampPass, Colors.White, _chargeA);
-                if (shot)
+                // The tick: full power (the dead-ball gauge's sweet spot).
+                float tx = r.Position.X + w * ((mk.Dead ? 0.92f : 1f) / 1.15f);
+                if (mk.Dead)
                 {
-                    // The tick: full power (the dead-ball gauge's sweet spot).
-                    float tx = r.Position.X + w * ((_chargeDead ? 0.92f : 1f) / 1.15f);
-                    if (_chargeDead)
-                    {
-                        c.DrawRect(new Rect2(tx - 2, r.Position.Y - 1, 4, hh + 2), new Color(0, 0, 0, _chargeA));
-                        c.DrawRect(new Rect2(tx - 1, r.Position.Y, 2, hh), new Color(Style.Ink, _chargeA));
-                    }
-                    else c.DrawRect(new Rect2(tx, r.Position.Y, 1, hh), new Color(0, 0, 0, _chargeA));
+                    c.DrawRect(new Rect2(tx - 2, r.Position.Y - 1, 4, hh + 2), new Color(0, 0, 0, mk.A));
+                    c.DrawRect(new Rect2(tx - 1, r.Position.Y, 2, hh), new Color(Style.Ink, mk.A));
                 }
+                else c.DrawRect(new Rect2(tx, r.Position.Y, 1, hh), new Color(0, 0, 0, mk.A));
             }
         }
     }
@@ -636,6 +758,11 @@ public sealed partial class Hud : Control
 
     void Fps(double delta)
     {
+        if (Note != _noteShown)
+        {
+            _noteShown = Note;
+            _fps.QueueRedraw();
+        }
         if (!ShowFps)
         {
             if (_fpsText.Length > 0) { _fpsText = ""; _fps.QueueRedraw(); }
@@ -655,11 +782,16 @@ public sealed partial class Hud : Control
 
     void DrawFps(Painter c)
     {
-        if (_fpsText.Length == 0) return;
         var f = Style.Font(false, 0.5f);
         const int size = 13;
-        var r = new Rect2(14 + _safeL, 52 + _safeT, Style.Width(f, _fpsText, size) + 12, size + 8);
-        Style.Box(c, r, new Color(0, 0, 0, 0.55f), 3);
-        Style.Text(c, f, _fpsText, r, size, Style.Ink);
+        float y = 52 + _safeT;
+        foreach (var text in new[] { _fpsText, _noteShown })
+        {
+            if (text.Length == 0) continue;
+            var r = new Rect2(14 + _safeL, y, Style.Width(f, text, size) + 12, size + 8);
+            Style.Box(c, r, new Color(0, 0, 0, 0.55f), 3);
+            Style.Text(c, f, text, r, size, Style.Ink);
+            y += size + 12;
+        }
     }
 }

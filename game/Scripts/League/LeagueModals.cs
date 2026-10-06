@@ -809,3 +809,45 @@ public sealed partial class ClubSheet : Modal
         }
     }
 }
+
+// ==================================================================== simulate: watch or instant
+
+/// <summary>Leaving your match to the computer: watch it played out, both sides AI (the real
+/// match, its result counts), or just take the result on the numbers.</summary>
+public sealed partial class SimulateChoice : Modal
+{
+    readonly string _opp;
+    readonly Action _watch, _instant;
+
+    public SimulateChoice(Menus.Menus ui, string opp, Action watch, Action instant) : base(ui)
+    {
+        _opp = opp;
+        _watch = watch;
+        _instant = instant;
+    }
+
+    protected override Vector2 BoxSize => new(460, 214);
+
+    protected override void PaintBox(Rect2 b)
+    {
+        Kicker(b.Position + new Vector2(20, 30), "Leave it to the computer");
+        Heading(b.Position + new Vector2(20, 64), "Simulate?");
+        float y = b.Position.Y + 90;
+        foreach (var l in Px.Wrap(Px.Small, $"WATCH IT: THE REAL MATCH AGAINST {_opp.ToUpperInvariant()}, BOTH SIDES PLAYED BY THE COMPUTER, WITH A SKIP TO FULL TIME. INSTANT: SETTLED ON THE NUMBERS LIKE THE REST OF THE MATCHDAY.", 8, b.Size.X - 40))
+        {
+            Px.Text(this, Px.Small, new Vector2(b.Position.X + 20, y), l, 8, Px.InkDim);
+            y += 14;
+        }
+        float w = (b.Size.X - 60) / 2;
+        GhostButton("instant", new Rect2(b.Position.X + 20, b.End.Y - 60, w, 42), "INSTANT", 22, () =>
+        {
+            Ui.Close(this);
+            _instant();
+        });
+        GoldButton("watch", new Rect2(b.Position.X + 40 + w, b.End.Y - 60, w, 42), "WATCH IT  >", 22, () =>
+        {
+            Ui.Close(this);
+            _watch();
+        });
+    }
+}

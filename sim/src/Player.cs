@@ -162,6 +162,8 @@ public sealed class Player
     /// <summary>Shirt name / number (club line-ups).</summary>
     public string Name = "";
     public int Number;
+    /// <summary>The setup's Source for whoever is in this slot (the game's player card).</summary>
+    public object? Source;
 
     public readonly int Id;
     public readonly int Team;
@@ -171,7 +173,8 @@ public sealed class Player
     /// <summary>Formation slot in team frame (attacking +x): x,z in -1..1.</summary>
     public readonly double BaseX, BaseZ;
     public Attributes Attrs;
-    public readonly Look Look;
+    /// <summary>Changes only when a substitute takes the slot.</summary>
+    public Look Look;
 
     double accelFor = double.NaN, weightFor = double.NaN, accelMemo;
     double agileFor = double.NaN, agileMemo = 1;

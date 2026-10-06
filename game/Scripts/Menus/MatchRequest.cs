@@ -18,6 +18,9 @@ public sealed class MatchRequest
     public string Ground = "big";
     /// <summary>The computer plays both sides behind the home screen: no controls, no HUD.</summary>
     public bool Demo;
+    /// <summary>A real match the computer plays for both sides while you watch (a simulated
+    /// league fixture): walk-out, HUD, replays and sound, no controls, a skip to full time.</summary>
+    public bool Watch;
     /// <summary>The stadium builder's preview: the camera circles the ground (Main.Focus turns it).</summary>
     public bool Showcase;
     /// <summary>Called once when the match ends (full time) or is left.</summary>
@@ -30,6 +33,16 @@ public sealed class MatchRequest
     /// <summary>The hosts' own goal explosion (side 1's); null picks one at random.</summary>
     public int? HostGoalFx;
     public bool AwayDay => HostCrest != null;
+    /// <summary>Same-screen 1v1: a human on each side, each with the controllers put on it.</summary>
+    public bool Versus;
+    /// <summary>An online match: this game hosts it (runs the engine) or is the friend's (draws
+    /// the host's frames, side 1).</summary>
+    public GameNight.Net.Online Online;
+    /// <summary>Online, the friend's screen: the hosts' crest for the ground (they're side 0).</summary>
+    public GameNight.Club.Crest HomeCrest;
+    /// <summary>Each side's goal explosion, when both are known (online).</summary>
+    public int[] GoalFx;
+    public bool Guest => Online != null && !Online.IsHost;
 }
 
 public sealed class MatchOutcome
@@ -46,6 +59,8 @@ public sealed class MatchOutcome
 public sealed class GoalEvent
 {
     public int Team, Index, Minute;
+    /// <summary>Who scored (the slot may have changed hands through a substitution).</summary>
+    public string Name = "";
 }
 
 /// <summary>The grounds a match can be played at. The stadium thread adds its grounds here; the

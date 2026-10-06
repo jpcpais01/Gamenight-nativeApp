@@ -172,7 +172,7 @@ public sealed class Biquad
 
 /// <summary>Where a voice plays: a mono or stereo bus of the mix. Bowl is the stands at large
 /// (stereo, placed by the voice's own pan) through the ground's reverb.</summary>
-public enum Bus : byte { Master, Crowd, Bed, End0, End1, Bowl }
+public enum Bus : byte { Master, Crowd, Bed, End0, End1, Bowl, Ui }
 
 /// <summary>
 /// One sounding thing: a source (oscillator, noise, recording, or a custom generator), through

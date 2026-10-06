@@ -483,20 +483,20 @@ public sealed partial class LeagueScreen : PxCanvas
 
     // ---------------------------------------------------------------- running a matchday
 
-    void AskSimulate(Fixture f)
+    void AskSimulate(Fixture f) => _ui.Open(new SimulateChoice(_ui, L.Name(f.Other(You)), () => Kickoff(f, true), () => Instant()));
+
+    /// <summary>Your match settled on the numbers, like the rest of the matchday.</summary>
+    void Instant()
     {
-        _ui.Open(new ConfirmModal(_ui, "Simulate?", $"Your match against {L.Name(f.Other(You))} is settled on the numbers, like the rest of the matchday. You still earn coins for the result.", "Simulate", () =>
-        {
-            int round = L.S.Round;
-            L.Simulate();
-            var done = L.YourFixture(round);
-            Reward(done, round);
-        }));
+        int round = L.S.Round;
+        L.Simulate();
+        var done = L.YourFixture(round);
+        Reward(done, round);
     }
 
     /// <summary>Play your fixture for real: you're always the side with the controls; at home
     /// it's your ground, away it's theirs, dressed in their colours and crest.</summary>
-    public void Kickoff(Fixture f)
+    public void Kickoff(Fixture f, bool watch = false)
     {
         bool home = f.Home == You;
         // Away: the hosts' own stadium, in their colours, their fans, their celebrations.
@@ -504,7 +504,7 @@ public sealed partial class LeagueScreen : PxCanvas
             ? (Menus.Grounds.All.Any(g => g.Id == Club.S.Ground) && Club.S.Ground != "training" ? Club.S.Ground : "big")
             : "custom";
         int seed = (int)(ClubState.Now & 0xffff) + 1;
-        var req = new MatchRequest { Setup = L.Setup(f), Seed = seed, Ground = ground };
+        var req = new MatchRequest { Setup = L.Setup(f), Seed = seed, Ground = ground, Watch = watch };
         if (!home)
         {
             req.HostCrest = L.Crest(f.Home);
@@ -512,16 +512,22 @@ public sealed partial class LeagueScreen : PxCanvas
             req.HostGoalFx = Stadia.GoalFxOf(L.S.Clubs[f.Home]);
         }
         int round = f.Round;
-        _ui.App.PlayFixture(req, o => Played(round, o));
+        _ui.App.PlayFixture(req, o => Played(round, o, watch));
     }
 
-    void Played(int round, MatchOutcome o)
+    void Played(int round, MatchOutcome o, bool watch)
     {
         _ui.Go(this);
         _tab = 0;
         var f = L.YourFixture(round);
         if (f.Played || L.S.Round != round) return;
         bool home = f.Home == You;
+        // Stopped watching before the end: the numbers settle it instead.
+        if (!o.Finished && watch)
+        {
+            Instant();
+            return;
+        }
         if (!o.Finished)
         {
             L.Complete(home ? 0 : 3, home ? 3 : 0, null, true);
@@ -530,7 +536,7 @@ public sealed partial class LeagueScreen : PxCanvas
             return;
         }
         int opp = f.Other(You);
-        var goals = (o.Goals ?? new()).Select(g => new GoalNote { Club = g.Team == 0 ? You : opp, Player = L.Scorer(f, g.Team, g.Index), Minute = Math.Max(1, g.Minute) }).ToList();
+        var goals = (o.Goals ?? new()).Select(g => new GoalNote { Club = g.Team == 0 ? You : opp, Player = g.Name is { Length: > 0 } n ? n : L.Scorer(f, g.Team, g.Index), Minute = Math.Max(1, g.Minute) }).ToList();
         L.Complete(home ? o.Home : o.Away, home ? o.Away : o.Home, goals);
         Reward(f, round);
     }
@@ -602,6 +608,7 @@ public sealed partial class LeagueScreen : PxCanvas
             case "--league=draw": ui.Open(new LeagueDraw(ui)); break;
             case "--league=club": ui.Open(new ClubSheet(ui, 3)); break;
             case "--league=away": ui.League.Kickoff(lg.S.Fixtures.First(f => !f.Played && f.Away == You)); break;
+            case "--league=watch": if (lg.Next != null) ui.League.Kickoff(lg.Next, true); break;
         }
     }
 }

@@ -402,7 +402,7 @@ public sealed partial class Match
             Phase = Phase.Play;
         }
         JudgeOffside(p, true, restart);
-        if (receiver != null && receiver.Team == HumanTeam) SetControlled(receiver);
+        if (receiver != null && HumanSide(receiver.Team)) SetControlled(receiver);
     }
 
     /// <summary>
@@ -470,7 +470,7 @@ public sealed partial class Match
         if (PassTarget == p) return true;
         // A pass on its way to a team-mate is his: the others let it run.
         if (PassTarget != null && PassTarget.Team == p.Team && JsMath.Hypot(Ball.Vel.X, Ball.Vel.Z) > 4) return false;
-        if (p == Controlled) return true;
+        if (Piloted(p)) return true;
         // Caught beyond the line: leave it for someone onside.
         if (OffsideFlagged(p)) return false;
         if (AI.Chaser[p.Team] == p) return true;
@@ -565,7 +565,7 @@ public sealed partial class Match
         {
             // Head it only when he means to (or must); otherwise he takes it down. A ball dropping
             // onto him from above chest height he lets come down onto the chest.
-            if (pl == Controlled && pl.Team == HumanTeam && !AutoPlay && pl.Plan == null && !HeadsAtGoal(pl))
+            if (Piloted(pl) && !AutoPlay && pl.Plan == null && !HeadsAtGoal(pl))
             {
                 // Yours: he keeps a high ball, pressed or not. He only nods it on when a team-mate
                 // close by is free to take it; otherwise chest, let it drop, or cushion it down.
@@ -622,7 +622,6 @@ public sealed partial class Match
         JudgeOffside(p, false);
         PassTarget = null;
         if (Owner != null && Owner != p) Owner = null;
-        Events.Kicks.Add(M.Clamp(-rv / 25, 0.1, 0.6));
     }
 
     /// <summary>Direction the player wants to take the ball (from stick or AI).</summary>
@@ -659,7 +658,7 @@ public sealed partial class Match
             // what the player covers in T seconds while grass and air slow it down.
             double target = Math.Max(ps, Math.Min(p.WantSpeed, ps + 2.5) * 0.85);
             // The human's player keeps it closer: shorter touches, more of them.
-            bool human = p == Controlled && !AutoPlay;
+            bool human = Piloted(p) && !AutoPlay;
             double T = human ? (sprint ? 0.75 : target > 4 ? 0.5 : 0.4) : sprint ? 1.15 : target > 4 ? 0.8 : 0.6;
             double vEst = target + 1;
             double decel = BallK.RollDecel + 0.025 * vEst * vEst;
@@ -684,7 +683,6 @@ public sealed partial class Match
         p.TouchH = 0;
         LastTouch = p;
         JudgeOffside(p);
-        Events.Kicks.Add(0.08);
     }
 
     /// <summary>Extra reach of a leg stretched out for the ball, following the stretch's extension.</summary>
@@ -708,7 +706,7 @@ public sealed partial class Match
             if (p.Action != ActionKind.None || p.TouchCooldown > 0 || p.Plan != null || p.Role == Role.GK) continue;
             double d = BallDist(p);
             if (d < PlayerK.Reach || d > 2.4) continue;
-            if (p != Controlled && PassTarget != p && AI.Chaser[p.Team] != p) continue;
+            if (!Piloted(p) && PassTarget != p && AI.Chaser[p.Team] != p) continue;
             if (!WantsBall(p)) continue;
             if (!sampled)
             {
@@ -781,7 +779,7 @@ public sealed partial class Match
         double stretched = M.Clamp((BallDist(p) - PlayerK.Reach) / StretchReachMax, 0, 1);
         double err = rel * (0.045 + (1 - q) * 0.08 + heightPen * 0.05) * Math.Abs(1 + Rng.Gauss() * 0.5) * (1 + 1.3 * stretched);
         // Yours, taking a pass played to him: a cleaner first touch.
-        if (p.Team == HumanTeam && PassTarget == p) err *= 0.6;
+        if (HumanSide(p.Team) && PassTarget == p) err *= 0.6;
         // Taken with a man leaning into him: it doesn't sit as kindly.
         if (challenged) err *= 1.5;
         DribbleDir(p, tmpV);
@@ -805,7 +803,7 @@ public sealed partial class Match
         PassTarget = null;
         PossTeam = p.Team;
         Events.Kicks.Add(M.Clamp(rel / 30, 0.05, 0.4));
-        if (p.Team == HumanTeam) SetControlled(p);
+        if (HumanSide(p.Team)) SetControlled(p);
     }
 
     /// <summary>
@@ -897,7 +895,7 @@ public sealed partial class Match
         double dirZ;
         double speed;
         double up;
-        bool wantShot = (p.Plan?.Type == KickType.Shot || distGoal < (p == Controlled ? 13 : 16)) && distGoal < 20;
+        bool wantShot = (p.Plan?.Type == KickType.Shot || distGoal < (Piloted(p) ? 13 : 16)) && distGoal < 20;
         if (layTo != null)
         {
             // Nodded into a free team-mate's stride, weighted for his feet.
@@ -1003,9 +1001,10 @@ public sealed partial class Match
     /// The human's cross as it would go now (Pass held and slid up, on the ball in the crossing
     /// zone): where it comes down and how it's struck, before the taker's error. Null otherwise.
     /// </summary>
-    public CrossAimResult? CrossAim(double moveX, double moveY)
+    public CrossAimResult? CrossAim(double moveX, double moveY, int team = 0)
     {
-        var p = Controlled;
+        var p = Seats[team].Controlled;
+        if (!HumanSide(team)) return null;
         if (AutoPlay || Phase != Phase.Play || Owner != p || HeldBy == p) return null;
         if (!InCrossZone(p.Team, Ball.Pos.X, Ball.Pos.Z)) return null;
         // The stick as the button handler reads it.
@@ -1118,7 +1117,7 @@ public sealed partial class Match
         PossTeam = k.Team;
         Ball.Vel.Set(0, 0, 0);
         Ball.Spin.Set(0, 0, 0);
-        if (k.Team == HumanTeam) SetControlled(k);
+        if (HumanSide(k.Team)) SetControlled(k);
     }
 
     // ------------------------------------------------------------------ rules
@@ -1133,7 +1132,11 @@ public sealed partial class Match
             int side = p.X > 0 ? 1 : -1;
             int scoringTeam = Teams[0].Dir == side ? 0 : 1;
             Teams[scoringTeam].Score++;
-            Scorer = LastTouch != null && LastTouch.Team == scoringTeam ? LastTouch : ByJob(scoringTeam, 9);
+            // The last of the scoring side to touch it; past a save or a deflection, the man who
+            // shot. Only an own goal with no shot behind it goes down to their striker.
+            Scorer = LastTouch != null && LastTouch.Team == scoringTeam ? LastTouch
+                : ShotBy != null && ShotBy.Team == scoringTeam ? ShotBy
+                : ByJob(scoringTeam, 9);
             Phase = Phase.Goal;
             PhaseT = 0;
             Owner = null;
@@ -1142,7 +1145,7 @@ public sealed partial class Match
             Events.Whistle = 1;
             Celebration = null;
             // The computer's scorers pick their own (most of the time; the rest do the classic).
-            if (scoringTeam != HumanTeam || AutoPlay)
+            if (!HumanSide(scoringTeam) || AutoPlay)
             {
                 int h = (Teams[0].Score * 7 + Teams[1].Score * 13 + Scorer.Id * 5) % 6;
                 if (h < 4) PickCelebration(Celebrations[h], GoalSeq.Front - 0.3);
