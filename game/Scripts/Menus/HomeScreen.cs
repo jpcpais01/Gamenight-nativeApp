@@ -492,12 +492,25 @@ public sealed partial class HomeScreen : PxCanvas
     void Footer(float x0, float W, float H)
     {
         var notes = new Rect2(W - 16 - 120, H - 26, 120, 22);
-        PhoneLink(x0, notes.Position.X - 60, H);
+        float right = notes.Position.X;
+        var up = Update.Updater.Instance;
+        if (up?.Offer != null)
+        {
+            // A newer version is out: a gold key to it (the percentage while it downloads).
+            var u = new Rect2(right - 10 - 150, H - 26, 150, 22);
+            bool down = Held("update");
+            string label = up.Now == Update.Updater.Stage.Downloading ? $"UPDATING {up.Progress * 100:0}%" : "UPDATE TO V" + up.Offer;
+            Px.Frame(this, down ? u.Translated(Vector2.One * 2) : u, Px.Gold, Px.Hex(0xb37400), down ? null : Px.ShadowSoft, 2, 3);
+            Px.TextC(this, Px.Small, u.GetCenter().X + (down ? 2 : 0), u.GetCenter().Y + 4 + (down ? 2 : 0), Px.Fit(Px.Small, label, 8, u.Size.X - 10), 8, Px.Dark);
+            Tap("update", u, () => _ui.Open(new Update.UpdateModal(_ui)));
+            right = u.Position.X;
+        }
+        PhoneLink(x0, right - 60, H);
         bool held = Held("notes");
         Px.Frame(this, held ? notes.Translated(Vector2.One * 2) : notes, new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.85f), Px.Line2, held ? null : Px.ShadowSoft, 2, 3);
         Px.TextC(this, Px.Small, notes.GetCenter().X + (held ? 2 : 0), notes.GetCenter().Y + 4 + (held ? 2 : 0), "PATCH NOTES", 8, Px.Ink);
         Tap("notes", notes, () => _ui.Open(new NotesModal(_ui)));
-        Px.TextR(this, Px.Small, notes.Position.X - 12, H - 11, "V" + _ui.Version, 9, Px.Cyan);
+        Px.TextR(this, Px.Small, right - 12, H - 11, "V" + _ui.Version, 9, Px.Cyan);
     }
 
     /// <summary>The phone-as-controller corner: on the phone a PLAY ON PC key, on a computer how

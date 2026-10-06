@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.89", "Update from inside the game: when a newer version is out, a gold UPDATE key appears at the bottom of the home screen. On the phone it downloads and Android asks you to confirm; on the PC it downloads, closes, swaps the files and opens again. Saves stay."),
         ("0.88", "Phone controller (app and iPhone page): the stick and buttons are a third bigger and sit further in from the edges, where your thumbs rest, and each press gives a light buzz on phones that support it."),
         ("0.87", "The scorer's big player card now rises over the new score after a goal, and your player's card sits beside his name at the bottom left. Goals after a save or a deflection now go to the man who shot, so he celebrates and the replay follows him."),
         ("0.86", "Quieter ball: you only hear it when it is passed, shot, crossed, headed or received. Bounces, dribble touches and deflections are silent now."),
