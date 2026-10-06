@@ -145,18 +145,19 @@ public sealed partial class ClubScreen
         Px.Text(this, Px.Small, new Vector2(stage.Position.X + 12, stage.End.Y - 12), "YOUR GOAL EXPLOSION", 8, Px.InkDim);
         int cur = Math.Clamp(Club.S.GoalFx, 0, GoalFx.Count - 1);
         float top = 66, gap = 6;
-        float cw = (pw - gap) / 2, ch = Mathf.Min(54, (Size.Y - 14 - top - gap * 4) / 5);
+        int cols = 3, rows = (GoalFx.Count + cols - 1) / cols;
+        float cw = (pw - gap * (cols - 1)) / cols, ch = Mathf.Min(54, (Size.Y - 14 - top - gap * (rows - 1)) / rows);
         for (int i = 0; i < GoalFx.Count; i++)
         {
             int idx = i;
-            var r = new Rect2(px + i % 2 * (cw + gap), top + i / 2 * (ch + gap), cw, ch);
+            var r = new Rect2(px + i % cols * (cw + gap), top + i / cols * (ch + gap), cw, ch);
             bool on = i == cur;
             Px.Frame(this, r, on ? new Color(0.35f, 0.3f, 0.05f, 0.55f) : Panel, on ? Px.Gold : Px.Line2, null, on ? 3 : 2, 0);
             var sw = new Rect2(r.Position.X + 8, r.Position.Y + 8, 10, ch - 16);
             DrawRect(sw.Grow(1), Colors.Black);
             DrawRect(sw, Px.Hex(GoalFx.Swatches[i]));
             float tx = sw.End.X + 9, tw = r.End.X - tx - 6;
-            Px.Text(this, Px.Big, new Vector2(tx, r.Position.Y + 22), GoalFx.Names[i], 18, on ? Px.Gold : Px.Ink);
+            Px.Text(this, Px.Big, new Vector2(tx, r.Position.Y + 22), Px.Fit(Px.Big, GoalFx.Names[i], 18, tw), 18, on ? Px.Gold : Px.Ink);
             var words = Px.Wrap(Px.Small, GoalFx.Blurbs[i], 8, tw);
             for (int l = 0; l < Math.Min(2, words.Count); l++)
                 Px.Text(this, Px.Small, new Vector2(tx, r.Position.Y + 34 + l * 10), words[l], 8, Px.InkDim);

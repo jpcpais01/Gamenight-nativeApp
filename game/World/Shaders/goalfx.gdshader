@@ -13,7 +13,8 @@
 //             w = thickness + 2 * shape (0 band, 1 soft disc, 2 square band)
 //   4 chip    a solid little thing turned by w; B.x = shape (+16 = lit by the sky):
 //             0 tumbling square, 1 shard, 2 voxel, 3 coin, 4 star, 5 rock, 6 flake,
-//             7 balloon, 8 ice spike (stands on its position)
+//             7 balloon, 8 ice spike (stands on its position), 9 ghost, 10 bat (w flaps),
+//             11 mirror ball (w turns it)
 //   5 beam    from the position to position + A, size = width; hot core
 //   6 orb     a disc with a bright rim, swirling; w = time
 shader_type spatial;
@@ -60,7 +61,7 @@ void vertex() {
 			mv.xyz += normalize(-mv.xyz) * 1.2;
 		} else if (kind > 3.5 && kind < 4.5) {
 			float shape = mod(B.x, 16.0);
-			if (shape > 7.5) {
+			if (shape > 7.5 && shape < 8.5) {
 				// An ice spike stands on its foot, taller than wide.
 				q = vec2(c.x * 0.32, c.y * 0.5 + 0.5) * size;
 			} else {
@@ -184,12 +185,41 @@ void fragment() {
 			bool str = c.y < -0.5 && abs(c.x - 0.08 * sin(c.y * 9.0 + cus.w)) < 0.06;
 			if (!body && !str) discard;
 			o = str ? vec3(0.85) : length(b - vec2(-0.25, 0.28)) < 0.17 ? hot.rgb : base;
-		} else {
+		} else if (shape < 8.5) {
 			// Ice spike: a tall point, two faces.
 			float w = 0.5 * (1.0 - (c.y * 0.5 + 0.5));
 			if (abs(c.x) > w * 2.0) discard;
 			o = c.x > 0.0 ? hot.rgb : base;
 			if (abs(c.x) > w * 1.6) o *= 0.75;
+		} else if (shape < 9.5) {
+			// Ghost: a round head, a hem that ripples, two hollow eyes.
+			bool head = c.y > 0.1 && length(c - vec2(0.0, 0.1)) < 0.72;
+			bool sheet = c.y <= 0.1 && abs(c.x) < 0.72 && c.y > -0.85 + 0.16 * sin(c.x * 9.0 + cus.w * 5.0);
+			if (!head && !sheet) discard;
+			vec2 e = vec2(abs(c.x) - 0.26, c.y - 0.22);
+			o = length(e * vec2(1.0, 0.75)) < 0.13 ? hot.rgb : (c.x > 0.35 ? base * 0.8 : base);
+		} else if (shape < 10.5) {
+			// Bat: two scalloped wings beating, a little body, red eyes.
+			float ax = abs(c.x);
+			float flap = sin(cus.w) * 0.45 * ax;
+			float topEdge = 0.3 - 0.25 * ax + flap;
+			float lowEdge = -0.1 - 0.3 * ax + 0.16 * abs(sin(ax * 7.0)) + flap;
+			bool wing = ax < 1.0 && c.y < topEdge && c.y > lowEdge;
+			bool body = length(c * vec2(2.4, 1.4)) < 0.5;
+			bool ear = ax > 0.06 && ax < 0.18 && c.y > 0.25 && c.y < 0.45 - ax;
+			if (!wing && !body && !ear) discard;
+			o = body && ax > 0.05 && ax < 0.12 && c.y > 0.05 && c.y < 0.13 ? hot.rgb : base;
+		} else {
+			// Mirror ball: silver tiles catching the light as it turns, sparkling.
+			if (r > 1.0) discard;
+			float z = sqrt(1.0 - r * r);
+			vec2 sph = vec2(atan(c.x, z) + cus.w, asin(clamp(c.y, -1.0, 1.0)));
+			vec2 tile = floor(sph * vec2(4.5, 4.5));
+			float hsh = fract(sin(dot(tile + floor(cus.w * 2.0), vec2(12.9, 78.2))) * 43758.5);
+			o = base * (0.45 + 0.55 * hsh) * (0.55 + 0.45 * z);
+			if (hsh > 0.9) o = hot.rgb * 2.0;
+			vec2 g = fract(sph * 4.5);
+			if (min(g.x, g.y) < 0.12) o *= 0.5;
 		}
 		if (lit) o *= world_light(vec3(0.0, 1.0, 0.0), 1.0) + gn_flood_col * gn_flood * 0.45 + vec3(0.2);
 	} else if (kind < 5.5) {

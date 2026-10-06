@@ -6,26 +6,31 @@ namespace GameNight.Grounds;
 /// <summary>The ten goal explosions, each a short script of moments on GoalFx's building blocks.</summary>
 public sealed partial class GoalFx
 {
-    public const int Count = 10;
+    public const int Count = 14;
 
     public static readonly string[] Names =
     {
         "SUPERNOVA", "FIREWORKS", "THUNDERSTRIKE", "VOLCANO", "BLACK HOLE",
         "FROSTBITE", "PARTY CANNON", "ARCADE", "PHOENIX", "METEOR",
+        "TORNADO", "DISCO", "RAINBOW", "HAUNTED",
     };
 
     public static readonly string[] Blurbs =
     {
-        "A white-hot blast, a shockwave and a storm of sparks",
-        "Rockets from the net, bursting in your colours",
-        "Lightning strikes the goal and crawls along the frame",
-        "The goalmouth erupts: lava bombs and a column of smoke",
-        "Everything is pulled into the dark, then it lets go",
-        "Ice spikes burst from the turf, then shatter in the snow",
-        "Confetti cannons, streamers and balloons on the posts",
-        "Pixels everywhere, coins, and GOAL! in giant blocks",
-        "A firebird spirals up from the net and spreads its wings",
-        "A burning rock falls from the sky into the net",
+        "White-hot blast and a spark storm",
+        "Rockets bursting in your colours",
+        "Lightning strikes the goal",
+        "The goalmouth erupts in lava",
+        "Pulled into the dark, then boom",
+        "Ice spikes burst, then shatter",
+        "Confetti cannons and balloons",
+        "Pixels, coins and a giant GOAL!",
+        "A firebird rises from the net",
+        "A burning rock falls from the sky",
+        "A twister rips up the turf",
+        "A mirror ball lights the pitch",
+        "A rainbow, and a pot of gold",
+        "Ghosts, bats and green fire",
     };
 
     /// <summary>A colour to show each one by in the menus (sRGB hex).</summary>
@@ -33,6 +38,7 @@ public sealed partial class GoalFx
     {
         0xffb347, 0xff4fa3, 0x6fcaff, 0xff5a10, 0x9a4dff,
         0x9fe3ff, 0xffd447, 0x3ddc84, 0xff7a1a, 0xc08a5a,
+        0xa89a80, 0xff5fd0, 0x5fd0ff, 0x7dff6a,
     };
 
     static readonly Color White = new(1, 1, 1), HotWhite = new(1.1f, 1.05f, 0.92f);
@@ -62,7 +68,11 @@ public sealed partial class GoalFx
             case 6: Party(); break;
             case 7: Arcade(); break;
             case 8: Phoenix(); break;
-            default: Meteor(); break;
+            case 9: Meteor(); break;
+            case 10: Tornado(); break;
+            case 11: Disco(); break;
+            case 12: Rainbow(); break;
+            default: Haunted(); break;
         }
     }
 

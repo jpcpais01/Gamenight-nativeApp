@@ -16,7 +16,7 @@ public sealed partial class GoalFx
 
     enum K : byte { Streak, Puff, Glow, Ring, Chip, Beam, Orb }
     enum Move : byte { Fly, Flutter, Seek, Suck, Rest }
-    enum Shape : byte { Square, Shard, Voxel, Coin, Star, Rock, Flake, Balloon, Spike }
+    enum Shape : byte { Square, Shard, Voxel, Coin, Star, Rock, Flake, Balloon, Spike, Ghost, Bat, Mirror }
 
     /// <summary>One piece. A and B are the ring's axes, the beam's reach, or a seeker's target
     /// (A) and its own data (B), depending on the kind.</summary>

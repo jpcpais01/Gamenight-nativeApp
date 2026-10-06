@@ -155,6 +155,82 @@ public sealed partial class GameAudio
                 Crackle(hit + 0.2, 1.6, 24, 1500);
                 break;
             }
+
+            case 100: // Tornado: a howling wind that swirls, rumbling underneath.
+            {
+                var bp = new Biquad(FilterType.Bandpass, 400, 2.2f);
+                bp.Freq.Set(400, t).Exp(950, t + 0.9).Exp(520, t + 1.8).Exp(880, t + 2.5);
+                var g = new Param(0.0001f).Set(0.0001f, t).Exp(0.3f, t + 0.8).Exp(0.24f, t + 2.4).Exp(0.0001f, t + 3);
+                _mx.NoiseVoice(t, t + 3.1, 1, g, Bus.Master, bp);
+                var lg = new Param(0.0001f).Set(0.0001f, t).Exp(0.3f, t + 0.6).Exp(0.0001f, t + 3);
+                _mx.NoiseVoice(t, t + 3.1, 0.3f, lg, Bus.Master, new Biquad(FilterType.Lowpass, 180, 0.8f));
+                Boom(t, 0.4f);
+                break;
+            }
+            case 101: // It throws everything out.
+                _mx.Burst(t, 0.6, FilterType.Lowpass, 1200, 0.6f, 0.4f, 0.8f);
+                Crackle(t + 0.1, 1.2, 26, 1300);
+                break;
+
+            case 110: // Disco: the ball drops in.
+                _mx.Tone(t, 1200, 0.6, Wave.Sawtooth, 0.05f, 200);
+                _mx.Burst(t, 0.6, FilterType.Bandpass, 1500, 0.8f, 0.15f, 1.2f);
+                break;
+            case 111: // Four on the floor with a bass line and stabs.
+            {
+                float[] bass = { 110, 110, 131, 147, 110, 165 };
+                for (int i = 0; i < 6; i++)
+                {
+                    double b = t + i * 0.45;
+                    _mx.Tone(b, 150, 0.18, Wave.Sine, 0.45f, 45);
+                    _mx.Burst(b + 0.225, 0.05, FilterType.Highpass, 7000, 0.7f, 0.08f, 1.6f);
+                    var bg = new Param(0.0001f).Set(0.0001f, b).Exp(0.06f, b + 0.01).Exp(0.0001f, b + 0.4);
+                    _mx.Add(new Voice { Kind = Voice.Src.Osc, Wave = Wave.Sawtooth, Freq = new Param(bass[i]), Gain = bg, F1 = new Biquad(FilterType.Lowpass, 700), Out = Bus.Master, Start = b, Stop = b + 0.45 });
+                    if (i % 2 == 1)
+                        foreach (float f in new[] { 440f, 554f, 659f })
+                            _mx.Tone(b + 0.225, f, 0.18, Wave.Triangle, 0.03f);
+                }
+                break;
+            }
+            case 112: // The ball shatters.
+                Boom(t, 0.5f);
+                _mx.Burst(t, 0.5, FilterType.Highpass, 4000, 0.6f, 0.3f, 1.3f);
+                for (int i = 0; i < 14; i++) _mx.Tone(t + _mx.Rand() * 0.35, 2500 + _mx.Rand() * 2800, 0.16, Wave.Sine, 0.05f, 0, 0.002);
+                break;
+
+            case 120: // Rainbow: a harp sweeping up.
+            {
+                float[] scale = { 523, 587, 659, 784, 880, 1047, 1175, 1319, 1568, 1760, 2093, 2349, 2637, 3136 };
+                for (int i = 0; i < scale.Length; i++) _mx.Tone(t + i * 0.062, scale[i], 1.2, Wave.Triangle, 0.055f, 0, 0.004);
+                break;
+            }
+            case 121: // A shining chord at the top.
+                foreach (float f in new[] { 1047f, 1319f, 1568f, 2093f })
+                    _mx.Tone(t, f, 2, Wave.Sine, 0.05f, 0, 0.01);
+                _mx.Burst(t, 1.2, FilterType.Highpass, 6000, 0.5f, 0.06f, 1.4f);
+                break;
+            case 122: // Gold.
+                for (int i = 0; i < 7; i++)
+                {
+                    double c = t + i * 0.11 + _mx.Rand() * 0.05;
+                    _mx.Tone(c, 988, 0.07, Wave.Triangle, 0.06f);
+                    _mx.Tone(c + 0.06, 1319, 0.22, Wave.Triangle, 0.06f);
+                }
+                break;
+
+            case 130: // Haunted: a thump, a minor organ chord, a ghost's wail, bats.
+                Boom(t, 0.6f);
+                foreach (float f in new[] { 110f, 131f, 165f, 220f })
+                {
+                    var g = new Param(0.0001f).Set(0.0001f, t).Exp(0.035f, t + 0.4).Exp(0.03f, t + 2.2).Exp(0.0001f, t + 3);
+                    _mx.Add(new Voice { Kind = Voice.Src.Osc, Wave = Wave.Sawtooth, Freq = new Param(f), Gain = g, F1 = new Biquad(FilterType.Lowpass, 1400), Out = Bus.Master, Start = t, Stop = t + 3.1 });
+                }
+                Wail(t + 0.3);
+                for (int i = 0; i < 9; i++) _mx.Tone(t + 0.1 + _mx.Rand() * 1.5, 3500 + _mx.Rand() * 1500, 0.04, Wave.Sine, 0.03f, 0, 0.002);
+                break;
+            case 131:
+                Wail(t);
+                break;
         }
     });
 
@@ -174,6 +250,14 @@ public sealed partial class GameAudio
             float k = _mx.Rand();
             _mx.Burst(t + k * k * dur, 0.03, FilterType.Bandpass, freq * (0.7f + _mx.Rand() * 0.6f), 1.2f, 0.05f + _mx.Rand() * 0.08f, 1.6f);
         }
+    }
+
+    /// <summary>A ghost's wail: a rising, falling, wavering whistle.</summary>
+    void Wail(double t)
+    {
+        _mx.Tone(t, 480, 0.7, Wave.Sine, 0.06f, 820, 0.25);
+        _mx.Tone(t + 0.6, 820, 0.9, Wave.Sine, 0.05f, 420, 0.05);
+        _mx.Tone(t, 487, 1.4, Wave.Triangle, 0.02f, 610, 0.3);
     }
 
     void Thump(double t)
