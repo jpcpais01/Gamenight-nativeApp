@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.99", "The patch notes scroll again: swipe them on the phone, or use the mouse wheel on PC. The mouse wheel now scrolls every list in the menus."),
         ("0.98", "Windows: the download is back to the .exe and its data folder at the top of the zip, so the in-app update replaces the game properly from every older version."),
         ("0.97", "Accounts: tap SIGN IN by the settings cog and create one with just a username and a password. Your club, league and career are saved to it and follow you to any phone or PC where you sign in. Still plays offline."),
         ("0.96", "Settings on the home screen (the cog by your coins): the four volume bars, match camera, shadows, smooth pixels, FPS limit and FPS counter, shared with the pause menu, plus your version, a check for updates and the patch notes."),

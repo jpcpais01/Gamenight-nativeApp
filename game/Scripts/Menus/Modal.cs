@@ -167,16 +167,28 @@ public sealed partial class NotesModal : Modal
     protected override void PaintBox(Rect2 b)
     {
         Heading(b.Position + new Vector2(20, 48), "Patch notes");
-        float y = b.Position.Y + 80;
+        // The notes scroll inside the box, under the heading.
+        float top = b.Position.Y + 66, bottom = b.End.Y - 14, view = bottom - top;
+        float y = top + 14 - Scroll, start = y;
         foreach (var (v, note) in PatchNotes.All)
         {
-            Px.Text(this, Px.Big, new Vector2(b.Position.X + 20, y + 4), "v" + v, 20, Px.Cyan);
+            if (y + 4 > top && y < bottom) Px.Text(this, Px.Big, new Vector2(b.Position.X + 20, y + 4), "v" + v, 20, Px.Cyan);
             foreach (var l in Px.Wrap(Px.Small, note, 9, b.Size.X - 130))
             {
-                Px.Text(this, Px.Small, new Vector2(b.Position.X + 96, y), l, 9, Px.Ink);
+                if (y - 10 > top && y < bottom) Px.Text(this, Px.Small, new Vector2(b.Position.X + 96, y), l, 9, Px.Ink);
                 y += 16;
             }
             y += 12;
+        }
+        float height = y - start + 14;
+        // ScrollMax is measured against the whole screen: give it the box's view instead.
+        Content = height + Size.Y - view;
+        DrawRect(new Rect2(b.Position.X + 12, top, b.Size.X - 24, 1), Px.Line);
+        if (height > view)
+        {
+            float h = Mathf.Max(24, view * view / height);
+            float t = (view - h) * Mathf.Clamp(Scroll / Mathf.Max(1, height - view), 0, 1);
+            DrawRect(new Rect2(b.End.X - 10, top + t, 3, h), new Color(Px.Cyan, 0.6f));
         }
     }
 }

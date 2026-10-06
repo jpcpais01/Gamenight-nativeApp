@@ -109,6 +109,15 @@ public abstract partial class PxCanvas : Control
 
     public override void _GuiInput(InputEvent e)
     {
+        // The mouse wheel (and touchpad scroll) on a computer.
+        if (ScrollAxis != 0 && e is InputEventMouseButton { Pressed: true } wb && wb.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown or MouseButton.WheelLeft or MouseButton.WheelRight)
+        {
+            float step = 48 * (wb.Factor > 0 ? wb.Factor : 1);
+            Scroll += wb.ButtonIndex is MouseButton.WheelDown or MouseButton.WheelRight ? step : -step;
+            _vel = 0;
+            AcceptEvent();
+            return;
+        }
         if (e is InputEventMouseButton mb && mb.ButtonIndex == MouseButton.Left)
         {
             if (mb.Pressed)
