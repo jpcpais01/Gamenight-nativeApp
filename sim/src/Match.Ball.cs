@@ -305,8 +305,6 @@ public sealed partial class Match
                 double tx = receiver.Pos.X;
                 double tz = receiver.Pos.Z;
                 bool lofted = plan.Type == KickType.Lob || plan.Type == KickType.Cross || (fromHands && plan.Lofted != false) || (setPieceKind == SetPieceKind.GoalKick && plan.Lofted != false);
-                // Pass weight: AI plays a normal weight; a human tap is soft, a full hold is firm.
-                double weightK = 0.8 + 0.4 * (plan.Aimed == null ? 0.5 : plan.Power);
                 if (plan.Type == KickType.Cross || setPieceKind == SetPieceKind.Corner)
                 {
                     // Into the box toward the receiver, a bit in front of goal.
@@ -338,7 +336,7 @@ public sealed partial class Match
                         else
                         {
                             // Yours is zipped in firm, the further the firmer, the hold adding pace.
-                            double arrive = plan.Aimed == null ? M.Clamp(5.5 + dd * 0.14, 6, 11) * weightK : M.Clamp(7 + dd * 0.15, 8, 13) * (0.85 + 0.3 * M.Clamp(plan.Power, 0, 1));
+                            double arrive = plan.Aimed == null ? AI.PassArrive(dd) : M.Clamp(7 + dd * 0.15, 8, 13) * (0.85 + 0.3 * M.Clamp(plan.Power, 0, 1));
                             r = Kick.SolveGroundPass(b.Pos, ax, az, arrive);
                         }
                     }
@@ -524,7 +522,15 @@ public sealed partial class Match
                 continue;
             }
             // Close control by the owner: opponents must tackle, not just touch.
-            if (Owner != null && Owner != p && Owner.Team != p.Team && BallDist(Owner) < PlayerK.Reach) continue;
+            // (A computer challenger: a ball still about the man's feet, between strides or just
+            // taken, stays his unless the challenger is clearly nearer it, so two men don't
+            // ping-pong touches. Your own player's steals are unchanged.)
+            if (Owner != null && Owner != p && Owner.Team != p.Team)
+            {
+                double od = BallDist(Owner);
+                if (od < PlayerK.Reach) continue;
+                if ((!Piloted(p) || AutoPlay) && od < PlayerK.Reach + 0.6 && d > od - 0.3) continue;
+            }
             if (p.Plan != null && h < 1.0) continue; // the plan will strike it
             // In the air the better jumper / taller player, the one attacking the ball, and the
             // stronger body in the challenge win it.
@@ -660,6 +666,29 @@ public sealed partial class Match
             // The human's player keeps it closer: shorter touches, more of them.
             bool human = Piloted(p) && !AutoPlay;
             double T = human ? (sprint ? 0.75 : target > 4 ? 0.5 : 0.4) : sprint ? 1.15 : target > 4 ? 0.8 : 0.6;
+            // The computer's player keeps it close too once someone's near him: a long touch past a
+            // defender two yards off is a gift.
+            if (!human)
+            {
+                double hT = sprint ? 0.75 : target > 4 ? 0.5 : 0.38;
+                T = hT + (T - hT) * M.Smoothstep(2.5, 7, NearestOpponentDist(p));
+                // Never knock it where one of them gets to it first: shorten the touch until it's
+                // his, down to a nudge with the ball kept under him.
+                for (int k = 0; k < 4 && T > 0.25; k++)
+                {
+                    double reachX = p.Pos.X + dx * target * T;
+                    double reachZ = p.Pos.Z + dz * target * T;
+                    bool safe = true;
+                    foreach (var o in Teams[1 - p.Team].Players)
+                    {
+                        double od = M.Dist2D(o.Pos.X + o.Vel.X * T * 0.5, o.Pos.Z + o.Vel.Z * T * 0.5, reachX, reachZ);
+                        if (od < 1.3 + T * 2.2) { safe = false; break; }
+                    }
+                    if (safe) break;
+                    T *= 0.6;
+                }
+                T = Math.Max(T, 0.25);
+            }
             double vEst = target + 1;
             double decel = BallK.RollDecel + 0.025 * vEst * vEst;
             double touchSpeed = target + (decel * T) / 2 + 0.35;
@@ -785,6 +814,8 @@ public sealed partial class Match
         DribbleDir(p, tmpV);
         bool moving = p.WantSpeed > 0.3;
         double push = (moving ? 1.0 + p.Speed * 0.15 : 0.3) * (1 - 0.6 * stretched);
+        // The computer's receiver with a man tight on him cushions it: the touch stays his.
+        if (!(Piloted(p) && !AutoPlay)) push *= 0.45 + 0.55 * M.Smoothstep(1.5, 4, NearestOpponentDist(p));
         double ea = Rng.Next() * Math.PI * 2;
         b.Kick(p.Vel.X * 0.95 + tmpV.X * push + JsMath.Cos(ea) * err, 0, p.Vel.Z * 0.95 + tmpV.Z * push + JsMath.Sin(ea) * err, 0, 0, 0);
         if (h > 0.3)

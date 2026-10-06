@@ -32,6 +32,9 @@ public sealed partial class AI
     /// <summary>Per player: no new move before this (nobody makes the same run every ten seconds).</summary>
     readonly double[] playCool = new double[22];
     readonly double[] teamLook = { 0, 0 };
+    /// <summary>Who last passed to each player, and when (no endless square balls between the same two).</summary>
+    readonly Player?[] passFrom = new Player?[22];
+    readonly double[] passFromT = new double[22];
     double kickSeen = -10;
     double oneTouchKick = -10;
     Player? oneTouchFor;
@@ -204,6 +207,11 @@ public sealed partial class AI
             if (p2 < 0.6) stepUntil[1 - t] = m.Time + 2 + m.Rng.Next();
         }
         var q = m.PassTarget;
+        if (q != null && q.Team == t && q != k)
+        {
+            passFrom[q.Id] = k;
+            passFromT[q.Id] = m.Time;
+        }
         if (q == null || q.Team != t || q == k || k.Role == Role.GK) return;
         // Pass and move: the passer goes for the return.
         if (b.Pos.Y > 0.8 || b.Vel.Y > 3) return;

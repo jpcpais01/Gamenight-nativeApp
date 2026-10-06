@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.103", "Smarter computer teams: they press hard only high up and hold their shape deeper, mark the right men near their own goal, offer short passing angles, keep the ball closer when pressed, pass firmer and shoot when it is on. Watching AI vs AI looks like real build-up play now."),
         ("0.102", "Builder with the menu hidden: pick a camera top left. DRONE is the usual view, PITCH puts you on the grass by the centre circle looking up at the stands, AERIAL hangs high over a corner showing the ground and everything round it. Drag, slide and pinch work in all three."),
         ("0.101", "Windows: the running game shows the GameNight icon on its taskbar button and in Alt+Tab."),
         ("0.100", "Every release now comes out with both the Android app and the Windows version together, never one without the other."),

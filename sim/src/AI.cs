@@ -1102,6 +1102,8 @@ public sealed partial class AI
             MeetPoint(p, tmp);
             MoveTo(p, tmp.X, tmp.Z, true, false);
             Pace(p);
+            // His first touch goes away from the nearest man, toward their goal if it's free.
+            FirstTouchDir(p);
             // As it arrives he opens his body to it, set to take it.
             p.SquareUp = m.BallDist(p) < 6;
             p.Burst = m.BallDist(p) < 2.5;
@@ -1112,6 +1114,9 @@ public sealed partial class AI
         if (Dodge(p)) return;
         // A cross is on: attackers fill the box, defenders drop in to mark it.
         var crossCarrier = m.Owner != null && m.InCrossZone(m.Owner.Team, m.Owner.Pos.X, m.Owner.Pos.Z) ? m.Owner : null;
+        // Through the middle at the edge of their box, the attackers fill it too (the defence
+        // holds its own shape there).
+        if (crossCarrier == null && m.Owner != null && m.Owner.Team == p.Team && m.Owner.Pos.X * m.Teams[p.Team].Dir > 20) crossCarrier = m.Owner;
         bool pressing = crossCarrier != null && crossCarrier.Team != p.Team && Chaser[p.Team] == p;
         if (crossCarrier != null && crossCarrier != p && !pressing && r.Until <= m.Time)
         {
@@ -1224,11 +1229,24 @@ public sealed partial class AI
         double tx = ax;
         double tz = az;
 
+        bool support = false;
         if (attacking)
         {
-            if (m.Time >= seekAt[p.Id]) SeekSpace(p, ax, az);
-            tx += seekDX[p.Id] * dir;
-            tz += seekDZ[p.Id] * dir;
+            var c = m.Owner;
+            if (c != null && c.Team == p.Team && c != p && IsSupport(p, c))
+            {
+                // One of the men nearest the ball: show for it, at an angle, in a lane.
+                if (m.Time >= supAt[p.Id] || supFor[p.Id] != c) SupportSpot(p, c, ax, az);
+                tx = c.Pos.X + supDX[p.Id];
+                tz = c.Pos.Z + supDZ[p.Id];
+                support = true;
+            }
+            else
+            {
+                if (m.Time >= seekAt[p.Id]) SeekSpace(p, ax, az);
+                tx += seekDX[p.Id] * dir;
+                tz += seekDZ[p.Id] * dir;
+            }
         }
         else
         {
@@ -1244,7 +1262,7 @@ public sealed partial class AI
                 double bdx = m.Ball.Pos.X - a.Pos.X;
                 double bdz = m.Ball.Pos.Z - a.Pos.Z;
                 double bd = Math.Max(0.1, JsMath.Hypot(bdx, bdz));
-                double danger = 1 - M.Clamp((a.Pos.X * -dir + Pitch.HalfL) / Pitch.HalfL, 0, 1);
+                double danger = 1 - M.Clamp((a.Pos.X * dir + Pitch.HalfL) / Pitch.HalfL, 0, 1);
                 double gap = (1.4 + (1 - danger) * 2.2) * (trapUntil[p.Team] > m.Time ? 0.55 : 1);
                 double mx = a.Pos.X + (gdx / gd) * gap + (bdx / bd) * 0.9;
                 double mz = a.Pos.Z + (gdz / gd) * gap + (bdz / bd) * 0.9;
@@ -1292,8 +1310,125 @@ public sealed partial class AI
         bool behindPlay = !attacking && (p.Pos.X - m.Ball.Pos.X) * dir > 2;
         bool turnover = m.Time - possStart < 3;
         bool urgent = d > 6 + (1 - tr.Work) * 10 && (behindPlay || turnover);
+        // Getting forward to join an attack: a run, not a jog.
+        if (attacking && (gx - p.Pos.X) * dir > 9 - tr.Work * 4 && m.Ball.Pos.X * dir > -10) urgent = true;
+        if (support)
+        {
+            // Getting free is a short sharp move, not a stroll.
+            MoveTo(p, tx, tz, d > 3.5, true);
+            return;
+        }
         MoveTo(p, gx, gz, urgent, !attacking || d < 6);
         if (!urgent) p.WantSpeed *= 0.88 + tr.Work * 0.2;
+    }
+
+    readonly double[] supAt = new double[22];
+    readonly double[] supDX = new double[22];
+    readonly double[] supDZ = new double[22];
+    readonly Player?[] supFor = new Player?[22];
+    readonly Player?[] supList = new Player?[6];
+    double supListAt = -1;
+    int supListTeam = -1;
+
+    /// <summary>The three team-mates nearest the man on the ball (not on a run): they give him his options.</summary>
+    bool IsSupport(Player p, Player c)
+    {
+        if (supListAt != m.Time || supListTeam != c.Team)
+        {
+            supListAt = m.Time;
+            supListTeam = c.Team;
+            for (int i = 0; i < 3; i++) supList[i] = null;
+            var dd = new double[3] { 1e9, 1e9, 1e9 };
+            foreach (var q in m.Teams[c.Team].Players)
+            {
+                if (q == c || q.Role == Role.GK || run[q.Id].Until > m.Time) continue;
+                if (q == m.Controlled && !m.AutoPlay) continue;
+                // Past halfway the forwards stay on the last line: the midfield gives the angles.
+                if (q.Role == Role.FWD && c.Pos.X * m.Teams[c.Team].Dir > -5) continue;
+                double d = M.Dist2D(q.Pos.X, q.Pos.Z, c.Pos.X, c.Pos.Z);
+                if (d > 28) continue;
+                for (int i = 0; i < 3; i++)
+                {
+                    if (d < dd[i])
+                    {
+                        for (int j = 2; j > i; j--)
+                        {
+                            dd[j] = dd[j - 1];
+                            supList[j] = supList[j - 1];
+                        }
+                        dd[i] = d;
+                        supList[i] = q;
+                        break;
+                    }
+                }
+            }
+        }
+        return supList[0] == p || supList[1] == p || supList[2] == p;
+    }
+
+    /// <summary>
+    /// A supporting angle for the man on the ball: 7–15 m off him, open (nobody near the spot),
+    /// a clear lane to it, onside, not on top of another team-mate, reachable from where he is,
+    /// and not dragged far from the shape. Kept relative to the carrier, re-read a few times a second.
+    /// </summary>
+    void SupportSpot(Player p, Player c, double ax, double az)
+    {
+        double dir = m.Teams[p.Team].Dir;
+        double line = offside[p.Team];
+        double best = -1e9;
+        double bx = supDX[p.Id], bz = supDZ[p.Id];
+        bool had = supFor[p.Id] == c;
+        for (int i = 0; i <= 24; i++)
+        {
+            double ox, oz;
+            if (i == 24)
+            {
+                if (!had) continue;
+                ox = supDX[p.Id];
+                oz = supDZ[p.Id];
+            }
+            else
+            {
+                double ang = (i % 12) / 12.0 * Math.PI * 2 + p.Id * 0.37;
+                double r = i < 12 ? 8.5 : 13.5;
+                ox = JsMath.Cos(ang) * r;
+                oz = JsMath.Sin(ang) * r;
+            }
+            double cx = c.Pos.X + ox;
+            double cz = c.Pos.Z + oz;
+            if (Math.Abs(cz) > Pitch.HalfW - 1.5 || Math.Abs(cx) > Pitch.HalfL - 2) continue;
+            double fx = cx * dir;
+            if (fx > line - 0.8) continue;
+            double open = 99;
+            foreach (var o in m.Teams[1 - p.Team].Players) open = Math.Min(open, M.Dist2D(o.Pos.X, o.Pos.Z, cx, cz));
+            double lane = M.Clamp(LaneClearance(c.Pos.X, c.Pos.Z, cx, cz, p.Team, false), -2, 3);
+            double crowd = 0;
+            foreach (var q in m.Teams[p.Team].Players)
+            {
+                if (q == p || q.Role == Role.GK) continue;
+                double d = M.Dist2D(q.Pos.X, q.Pos.Z, cx, cz);
+                if (d < 8) crowd += (8 - d) / 8;
+            }
+            double reach = M.Dist2D(p.Pos.X, p.Pos.Z, cx, cz);
+            double shape = M.Dist2D(ax, az, cx, cz);
+            double fwd = ox * dir;
+            double sc = Math.Min(open, 7) * 0.45 + lane * 0.6 - crowd * 0.9 - reach * 0.06 - Math.Max(0, shape - 12) * 0.08
+                + fwd * (0.03 + Traits[p.Id].Creativity * 0.03);
+            // Straight behind the man on the ball, or square across our own box: no.
+            if (fwd < -6 && Math.Abs(oz) < 3) sc -= 1;
+            if (InOwnBox(p, cx, cz)) sc -= 2;
+            if (i == 24) sc += 0.5;
+            if (sc > best)
+            {
+                best = sc;
+                bx = ox;
+                bz = oz;
+            }
+        }
+        supDX[p.Id] = bx;
+        supDZ[p.Id] = bz;
+        supFor[p.Id] = c;
+        supAt[p.Id] = m.Time + 0.35 + Hash01(p.Id, m.Time * 2.1) * 0.3;
     }
 
     /// <summary>
@@ -1381,7 +1516,7 @@ public sealed partial class AI
                     double d = M.Dist2D(a.X, a.Z, q.Pos.X, q.Pos.Z);
                     if (d > zone) continue;
                     // Danger: near our goal and central.
-                    double toGoal = q.Pos.X * -dir + Pitch.HalfL;
+                    double toGoal = q.Pos.X * dir + Pitch.HalfL; // from our goal line
                     double danger = M.Clamp(1 - toGoal / 60, 0, 1) * (1 - Math.Abs(q.Pos.Z) / (Pitch.HalfW * 1.6));
                     double cost = d - danger * 8;
                     if (cost < best)
@@ -1503,7 +1638,8 @@ public sealed partial class AI
         }
         else
         {
-            x = p.BaseX * Pitch.HalfL * 0.5 + bx * 0.5 - 4;
+            // A side that likes to press holds a higher line (and leaves room in behind).
+            x = p.BaseX * Pitch.HalfL * 0.5 + bx * (0.5 + 0.12 * PressHigh(p.Team)) - 2.5 + PressHigh(p.Team) * 3;
             z = p.BaseZ * Pitch.HalfW * 0.62 + bz * 0.35;
             // Don't defend higher than the ball.
             if (p.Role == Role.DEF) x = Math.Min(x, bx - 4);
@@ -1563,22 +1699,65 @@ public sealed partial class AI
         output.Set(bx + (dx / d) * keep, 0, bz + (dz / d) * keep);
     }
 
+    /// <summary>
+    /// How close the presser stands off the carrier (m). A real side doesn't hunt the ball
+    /// everywhere: in midfield the nearest man contains a few yards off, goal-side, and lets
+    /// him play in front; near our box, or when the press is on (the man's back is turned, a
+    /// trap, his own third for a high-pressing side, chasing the game late), he gets tight.
+    /// </summary>
+    double Engage(Player p, Player carrier)
+    {
+        double dir = m.Teams[p.Team].Dir;
+        double fromOwn = m.Ball.Pos.X * dir + Pitch.HalfL; // ball from our goal line
+        Mood(p.Team, out double chase, out double protect);
+        double high = PressHigh(p.Team);
+        // Tight near our goal; off him through the middle; in his third, as high as the side presses.
+        double tight = 1 - M.Smoothstep(16, 38, fromOwn);
+        double highPress = M.Smoothstep(66, 80, fromOwn) * high;
+        double t = Math.Max(tight, highPress);
+        if (trapUntil[p.Team] > m.Time) t = 1;
+        if (JsMath.Cos(carrier.Facing) * -dir > 0.35) t = Math.Max(t, 0.7 * high + 0.2); // facing his own goal
+        t = M.Clamp(t + chase * 0.5 - protect * 0.2, 0, 1);
+        return 1.3 + (1 - t) * (2.2 - Traits[p.Id].Work * 0.6);
+    }
+
+    /// <summary>How much this side likes to press high (0..1): its players' work rate.</summary>
+    double PressHigh(int team)
+    {
+        if (pressHighAt[team] > 0) return pressHigh[team];
+        double w = 0;
+        int n = 0;
+        foreach (var q in m.Teams[team].Players)
+        {
+            if (q.Role == Role.GK) continue;
+            w += Traits[q.Id].Work;
+            n++;
+        }
+        pressHighAt[team] = 1;
+        return pressHigh[team] = M.Clamp((w / Math.Max(1, n) - 0.45) * 2.2, 0.1, 1);
+    }
+    readonly double[] pressHigh = new double[2];
+    readonly double[] pressHighAt = new double[2];
+
     void Press(Player p, Player carrier)
     {
-        bool onBall = PressPoint(p, carrier, tmp);
+        double keep = Engage(p, carrier);
+        bool onBall = PressPoint(p, carrier, tmp, keep);
         double d = m.BallDist(p);
-        MoveTo(p, tmp.X, tmp.Z, d > 4 || onBall, true);
+        MoveTo(p, tmp.X, tmp.Z, d > keep + 3 || onBall, true);
         // Closing in: square to him, ready to jockey; a loose touch is pounced on.
-        p.SquareUp = d < 6 && !onBall;
+        p.SquareUp = d < keep + 4.5 && !onBall;
         p.Burst = onBall;
-        if (d < 5 && !onBall) p.WantSpeed = Math.Min(p.WantSpeed, carrier.Speed + 1.5 + d);
+        if (d < keep + 3.5 && !onBall) p.WantSpeed = Math.Min(p.WantSpeed, carrier.Speed + 1.5 + (d - keep));
         // Tackle when close and the ball is exposed.
         if (d < 1.5 && !p.IsBusy && m.Time > tackleReady[p.Id])
         {
             tackleReady[p.Id] = m.Time + 0.9 + m.Rng.Next() * 0.8;
             // He goes in when a foot can get to it; with it tucked away, only now and then.
-            bool open = m.BallOpen(p, carrier, d);
-            if (m.Rng.Next() < (open ? 0.4 + p.Attrs.Defending * 0.3 : 0.1 + p.Attrs.Defending * 0.1))
+            // (The computer's defender jockeys while it's under the man's control: he goes in
+            // when a touch leaves it out from him, nearer the tackler than it's comfortable.)
+            bool open = m.BallOpen(p, carrier, d) && m.BallDist(carrier) > 0.8 && d < m.BallDist(carrier) + 0.9;
+            if (m.Rng.Next() < (open ? 0.4 + p.Attrs.Defending * 0.3 : 0.04 + p.Attrs.Defending * 0.06))
             {
                 double dx = m.Ball.Pos.X - p.Pos.X;
                 double dz = m.Ball.Pos.Z - p.Pos.Z;
@@ -1599,9 +1778,12 @@ public sealed partial class AI
         double dir = team.Dir;
         double gx = Pitch.HalfL * dir;
         var b = m.Ball.Pos;
-        if (m.Time >= nextDecision[p.Id] && p.SinceTouch > 0.05 && p.Plan == null)
+        // He makes his choices with the ball coming back to his feet, so whatever he picks is
+        // played with the next touch (not after chasing down the last one with a man closing).
+        bool atFeet = m.BallDist(p) < 1.15 || p.Role == Role.GK;
+        if (m.Time >= nextDecision[p.Id] && p.SinceTouch > 0.05 && p.Plan == null && atFeet)
         {
-            nextDecision[p.Id] = m.Time + 0.22 + m.Rng.Next() * 0.15;
+            nextDecision[p.Id] = m.Time + 0.2 + m.Rng.Next() * 0.15;
             double distGoal = M.Dist2D(b.X, b.Z, gx, 0);
             double pressure = m.NearestOpponentDist(p);
             double held = m.Time - possStart;
@@ -1621,7 +1803,7 @@ public sealed partial class AI
             Mood(p.Team, out double chase, out double protect);
             bool counter = Countering(p.Team);
             // Take a touch or two before deciding, unless someone is right on us (or it's a break: go).
-            if (held < patience * (1 + protect) && pressure > 2.2 && distGoal > 20 && !counter)
+            if (held < patience * (1 + protect) && KeepRisk(p) < 0.1 && pressure > 6 && distGoal > 20 && !counter)
             {
                 ChooseDribble(p, pressure);
                 Dribble(p, false);
@@ -1629,25 +1811,17 @@ public sealed partial class AI
             }
             double clear = LaneClearance(b.X, b.Z, gx, 0, p.Team, true);
 
-            // Shoot?
-            double shootP = 0;
-            if (distGoal < 16) shootP = 0.8;
-            else if (distGoal < 25 && clear > 0.4) shootP = 0.5;
-            else if (distGoal < 30 && clear > 1.5 && p.Attrs.Shooting > 0.75) shootP = 0.15;
-            // Chasing it late: have a go from further out.
-            if (chase > 0 && distGoal < 32 && clear > 0.3) shootP = Math.Max(shootP, chase * (distGoal < 25 ? 0.45 : 0.2));
-            double angle = Math.Abs(JsMath.Atan2(b.Z, Math.Abs(gx - b.X)));
-            if (angle > 1.1) shootP *= 0.2;
-            if (m.Rng.Next() < shootP)
+            // Shoot? What the chance is worth (a rough expected goal from range, angle, the men in
+            // the way and on him), weighed against the best ball he could play instead.
+            double xg = ShotValue(p);
+            if (chase > 0 && distGoal < 32) xg *= 1 + chase * 0.6;
+            // (Players want to shoot: a sight of goal is worth more to them than its bare odds.)
+            double shotEV = xg * (1.5 + 0.6 * p.Attrs.Shooting + Traits[p.Id].Creativity * 0.3) - (1 - xg) * 0.02 + m.Rng.Gauss() * 0.012;
+            // A real sight of goal: take it.
+            if ((xg > 0.2 && m.Rng.Next() < 0.85) || (xg > 0.07 && m.Rng.Next() < 0.45) || (xg > 0.035 && m.Rng.Next() < 0.25 + 0.25 * p.Attrs.Shooting)
+                || (xg > 0.015 && clear > 0.3 && m.Rng.Next() < 0.16 + 0.24 * p.Attrs.Shooting))
             {
-                double pw = M.Clamp(0.55 + distGoal / 40 + m.Rng.Gauss() * 0.12, 0.35, 1.0);
-                // He picks a corner (AimZ carries the side) and shapes up toward it.
-                double side = m.Rng.Next() < 0.5 ? -1 : 1;
-                double sx = gx - b.X, sz = side * (Pitch.GoalHalfWidth - 0.55) - b.Z;
-                double sn = Math.Max(0.1, JsMath.Hypot(sx, sz));
-                p.Plan = Plan(KickType.Shot, sx / sn, sz / sn, pw, -1, m.Time + 1);
-                p.Plan.AimZ = side;
-                Dribble(p, true);
+                Shoot(p, distGoal);
                 return;
             }
 
@@ -1661,6 +1835,9 @@ public sealed partial class AI
                     if ((gx - q.Pos.X) * dir < 18 && Math.Abs(q.Pos.Z) < 18) inBox++;
                 }
                 double crossP = inBox >= 2 ? 0.45 : inBox == 1 ? 0.25 : 0.04;
+                // At the byline there's nothing else to do with it: whip it in (or cut it back).
+                double toLine = Pitch.HalfL - b.X * dir;
+                if (toLine < 9 && inBox >= 1) crossP = Math.Max(crossP, 0.55 + (9 - toLine) * 0.05);
                 if (m.Rng.Next() < crossP)
                 {
                     double dx = gx - b.X;
@@ -1672,18 +1849,28 @@ public sealed partial class AI
                 }
             }
 
-            // Pass?
+            // Pass, play it in behind, or keep it: each option is what it's worth if it comes off,
+            // times the chance it does, less what losing it there would cost. The pick is the best
+            // of them with a little of the player's own temperament on top, so a side keeps the
+            // ball when it's on, moves it when he's closed down, and still surprises you.
+            double risk = KeepRisk(p);
+            double lose = LossCost(p.Team, b.X, b.Z);
+            double here = PosValue(p.Team, b.X, b.Z);
+            double temper = 0.012 + Traits[p.Id].Creativity * 0.02;
             Player? best = null;
-            double bestScore = -1e9;
-            bool bestThrough = false;
+            double bestEV = -1e9;
+            KickType bestType = KickType.Pass;
             foreach (var q in team.Players)
             {
                 if (q == p) continue;
-                double s = PassScore(p, q, false);
-                if (s > bestScore)
+                double ev = PassEV(p, q, lose, out bool lob);
+                if (ev < -5) continue;
+                ev += m.Rng.Gauss() * temper;
+                if (ev > bestEV)
                 {
-                    bestScore = s;
+                    bestEV = ev;
                     best = q;
+                    bestType = lob ? KickType.Lob : KickType.Pass;
                 }
             }
             // A ball into space for a runner, when there's one he'll get to first. (Looked for
@@ -1694,32 +1881,104 @@ public sealed partial class AI
                 throughLook[p.Id] = m.Time + 0.45;
                 tp = PlanThrough(p, false, null);
             }
-            // On the break, and for the man the move was made for, the ball in behind comes first;
-            // seeing a game out, it's kept safe.
-            double tBias = ThroughBias + (counter ? 0.3 : 0) - protect * 0.3 + (tp != null && IsPlayRunner(tp.Receiver) ? 0.3 : 0);
-            if (tp != null && tp.Score + tBias > bestScore)
+            if (tp != null)
             {
-                bestScore = tp.Score + tBias;
-                best = tp.Receiver;
-                bestThrough = true;
+                // On the break, and for the man the move was made for, the ball in behind comes first;
+                // seeing a game out, it's kept safe.
+                double pt = M.Clamp(0.55 + tp.Score * 0.12, 0.5, 0.85) + (counter ? 0.08 : 0) - protect * 0.1;
+                double ev = pt * (PosValue(p.Team, tp.X, tp.Z) * 1.15 + 0.02 + (IsPlayRunner(tp.Receiver) ? 0.02 : 0)) - (1 - pt) * lose + m.Rng.Gauss() * temper;
+                if (ev > bestEV)
+                {
+                    bestEV = ev;
+                    best = tp.Receiver;
+                    bestType = KickType.Through;
+                }
             }
-            double dribbleValue = DribbleValue(p);
-            double needPass = pressure < 2.2 ? 0.45 : pressure < 4 ? 0.15 : 0;
-            if (best != null && bestScore + needPass > dribbleValue + 0.55 + 0.3 * m.Rng.Next())
+            double keepEV = KeepEV(p, risk, lose + xg * 1.5) + m.Rng.Gauss() * temper * 0.6 + (counter ? 0.01 : 0);
+            if (xg > 0.012 && shotEV > bestEV && shotEV > keepEV)
+            {
+                Shoot(p, distGoal);
+                return;
+            }
+            if (best != null && bestEV > keepEV)
             {
                 double dx = best.Pos.X - b.X;
                 double dz = best.Pos.Z - b.Z;
-                double d = JsMath.Hypot(dx, dz);
-                bool lob = !bestThrough && d > 26 && LaneClearance(b.X, b.Z, best.Pos.X, best.Pos.Z, p.Team, false) < 1.5;
-                p.Plan = Plan(bestThrough ? KickType.Through : lob ? KickType.Lob : KickType.Pass, dx / d, dz / d, 0, best.Id, m.Time + 1);
+                double d = Math.Max(0.1, JsMath.Hypot(dx, dz));
+                p.Plan = Plan(bestType, dx / d, dz / d, 0, best.Id, m.Time + 1);
                 p.LookTarget.Set(best.Pos.X, 0, best.Pos.Z);
                 Dribble(p, true);
                 return;
             }
-
+            // Closed down, he decides again sooner.
+            if (risk > 0.3) nextDecision[p.Id] = m.Time + 0.12 + m.Rng.Next() * 0.08;
             ChooseDribble(p, pressure);
         }
         Dribble(p, false);
+    }
+
+    /// <summary>
+    /// A rough expected goal for a shot from where the ball is now: falls away with range, with
+    /// the angle the goal mouth shows, with a man in the line, a man on him and how well he hits it.
+    /// </summary>
+    double ShotValue(Player p)
+    {
+        double dir = m.Teams[p.Team].Dir;
+        double gx = Pitch.HalfL * dir;
+        var b = m.Ball.Pos;
+        double dist = M.Dist2D(b.X, b.Z, gx, 0);
+        if (dist > 34 || (gx - b.X) * dir < 0.5) return 0;
+        // The goal mouth's angle against an open look from the spot (about 37°).
+        double a1 = JsMath.Atan2(Pitch.GoalHalfWidth - b.Z, Math.Abs(gx - b.X));
+        double a2 = JsMath.Atan2(-Pitch.GoalHalfWidth - b.Z, Math.Abs(gx - b.X));
+        double mouth = Math.Abs(a1 - a2);
+        double xg = 1.6 * JsMath.Exp(-dist / 7) * M.Clamp(mouth / 0.65, 0.05, 1.2);
+        double clear = LaneClearance(b.X, b.Z, gx, 0, p.Team, true);
+        if (clear < 0) xg *= 0.3;
+        else if (clear < 1) xg *= 0.6;
+        double press = m.NearestOpponentDist(p);
+        if (press < 1.6) xg *= 0.65;
+        xg *= 0.7 + 0.6 * p.Attrs.Shooting;
+        return M.Clamp(xg, 0, 0.7);
+    }
+
+    void Shoot(Player p, double distGoal)
+    {
+        double dir = m.Teams[p.Team].Dir;
+        double gx = Pitch.HalfL * dir;
+        var b = m.Ball.Pos;
+        double pw = M.Clamp(0.55 + distGoal / 40 + m.Rng.Gauss() * 0.12, 0.35, 1.0);
+        // The corner away from the keeper (and now and then the other one, to keep him guessing).
+        var k = m.Teams[1 - p.Team].Players[0];
+        double side = k.Role == Role.GK ? (k.Pos.Z > b.Z * 0.3 ? -1 : 1) : m.Rng.Next() < 0.5 ? -1 : 1;
+        if (m.Rng.Next() < 0.25) side = -side;
+        double sx = gx - b.X, sz = side * (Pitch.GoalHalfWidth - 0.55) - b.Z;
+        double sn = Math.Max(0.1, JsMath.Hypot(sx, sz));
+        p.Plan = Plan(KickType.Shot, sx / sn, sz / sn, pw, -1, m.Time + 1);
+        p.Plan.AimZ = side;
+        Dribble(p, true);
+    }
+
+    void FirstTouchDir(Player p)
+    {
+        double dir = m.Teams[p.Team].Dir;
+        double dx = dir * 0.8;
+        double dz = -p.Pos.Z / Pitch.HalfW * 0.3;
+        foreach (var o in m.Teams[1 - p.Team].Players)
+        {
+            double ox = p.Pos.X - o.Pos.X;
+            double oz = p.Pos.Z - o.Pos.Z;
+            double od = JsMath.Hypot(ox, oz);
+            if (od < 6 && od > 0.01)
+            {
+                double w = (6 - od) / 6 * 2;
+                dx += ox / od * w;
+                dz += oz / od * w;
+            }
+        }
+        double n = Math.Max(0.01, JsMath.Hypot(dx, dz));
+        p.TouchX = dx / n;
+        p.TouchZ = dz / n;
     }
 
     void ChooseDribble(Player p, double pressure)
@@ -1730,6 +1989,7 @@ public sealed partial class AI
         // Dribble direction: toward goal, away from pressure, away from the touchline.
         double dx = (gx - b.X) / Math.Max(1, Math.Abs(gx - b.X));
         double dz = (-b.Z / Pitch.HalfW) * 0.5;
+        double block = 0;
         foreach (var q in m.Teams[1 - p.Team].Players)
         {
             double ox = p.Pos.X - q.Pos.X;
@@ -1740,9 +2000,26 @@ public sealed partial class AI
                 double w = JsMath.Pow((7 - od) / 7, 2) * 1.6;
                 dx += (ox / od) * w;
                 dz += (oz / od) * w;
+                // A man standing in front of him: don't run the ball into him, go round (or hold it).
+                double front = (-ox * dir) / od;
+                if (front > 0.5 && od < 6)
+                {
+                    double side = JsMath.Or1(JsMath.Sign(oz));
+                    dz += side * (6 - od) / 6 * 1.2;
+                    block = Math.Max(block, (6 - od) / 6 * front);
+                }
             }
         }
+        dribHold[p.Id] = block;
         if (Math.Abs(b.Z) > Pitch.HalfW - 4) dz -= JsMath.Sign(b.Z) * 0.8;
+        // Near their goal line: turn in toward the goal, never on over the line.
+        double toLine = Pitch.HalfL - b.X * dir;
+        if (toLine < 10)
+        {
+            double k = (10 - toLine) / 10;
+            dx *= 1 - k;
+            dz -= JsMath.Sign(b.Z) * (0.6 + k);
+        }
         // A team-mate overlapping outside him: cut in, and take his man with him.
         if (overlapCarrier[p.Team] == p && playUntil[p.Team] > m.Time) dz -= JsMath.Sign(b.Z) * 0.7;
         // Never dribble backwards into our own goal area.
@@ -1753,6 +2030,8 @@ public sealed partial class AI
         // Drive into space; on the break, run at them.
         dribSprint[p.Id] = (pressure > 5 || (Countering(p.Team) && pressure > 2.5)) && DribbleValue(p) > (Countering(p.Team) ? 0.25 : 0.45);
     }
+
+    readonly double[] dribHold = new double[22];
 
     void Dribble(Player p, bool settle)
     {
@@ -1784,6 +2063,24 @@ public sealed partial class AI
         bool sprint = dribSprint[p.Id] && !settle;
         p.Sprinting = sprint;
         p.WantSpeed = settle ? 3 : sprint ? p.TopSpeed : PlayerK.JogSpeed * 0.95;
+        // A man on him and the ball at his feet: slow it down, keep it close, body in the way.
+        if (!sprint && !settle && td < 1.1)
+        {
+            double press = m.NearestOpponentDist(p);
+            if (press < 3.5) p.WantSpeed = Math.Min(p.WantSpeed, 2.2 + press * 0.7);
+            // Someone square in front of him: hold it up, wait for the support.
+            if (dribHold[p.Id] > 0.3) p.WantSpeed = Math.Min(p.WantSpeed, 1.5 + (1 - dribHold[p.Id]) * 3);
+        }
+        // Shaping to strike a ball that's still running from his last touch: get to it first.
+        // (Slowing down with it rolling away only gives the man on him time to nick it.)
+        if (settle && td > 0.7)
+        {
+            double bs = JsMath.Hypot(m.Ball.Vel.X, m.Ball.Vel.Z);
+            p.MoveX = tbx / td;
+            p.MoveZ = tbz / td;
+            p.WantSpeed = Math.Min(p.TopSpeed, bs + td * 2.5);
+        }
+
     }
 
     double DribbleValue(Player p)
@@ -1799,6 +2096,109 @@ public sealed partial class AI
             if (Math.Abs(dz) < dx * 1.2 + 2) space = Math.Min(space, d);
         }
         return M.Clamp(space / 10, 0, 1) * 0.9;
+    }
+
+    /// <summary>
+    /// What having the ball at (x, z) is worth to `team` (0..1): little in our own half, more as
+    /// it nears their goal, most in front of it.
+    /// </summary>
+    public double PosValue(int team, double x, double z)
+    {
+        double dir = m.Teams[team].Dir;
+        double f = M.Clamp((x * dir + Pitch.HalfL) / (2 * Pitch.HalfL), 0, 1);
+        double gd = M.Dist2D(x, z, Pitch.HalfL * dir, 0);
+        return 0.01 + 0.2 * Math.Pow(f, 2.5) + 0.5 * JsMath.Exp(-gd / 9);
+    }
+
+    /// <summary>The cost of giving the ball away at (x, z): their chance from there, plus the turnover itself.</summary>
+    double LossCost(int team, double x, double z) => 0.015 + PosValue(1 - team, x, z) * 0.75;
+
+    /// <summary>
+    /// The chance (0..1) he loses it if he keeps it a moment longer: who's on him, how fast
+    /// they're coming, how many, and how well he looks after it.
+    /// </summary>
+    double KeepRisk(Player p)
+    {
+        double r = 0;
+        foreach (var o in m.Teams[1 - p.Team].Players)
+        {
+            if (o.Role == Role.GK && !InOwnBox(o, o.Pos.X, o.Pos.Z)) continue;
+            double dx = p.Pos.X - o.Pos.X;
+            double dz = p.Pos.Z - o.Pos.Z;
+            double d = Math.Max(0.1, JsMath.Hypot(dx, dz));
+            // Closing speed: how fast he's coming at him (a moment's head start for a sprinting man).
+            double close = ((o.Vel.X - p.Vel.X) * dx + (o.Vel.Z - p.Vel.Z) * dz) / d;
+            double eff = d - Math.Max(0, close) * 0.5;
+            double one = M.Clamp((4.5 - eff) / 3.5, 0, 1);
+            r = 1 - (1 - r) * (1 - one * one * 0.85);
+        }
+        double care = 1 - 0.35 * p.Attrs.Control - 0.15 * p.DuelStrength;
+        return M.Clamp(r * care, 0, 1);
+    }
+
+    /// <summary>Keeping it: where a few more touches take him, if he isn't dispossessed first.</summary>
+    double KeepEV(Player p, double risk, double lose)
+    {
+        double dir = m.Teams[p.Team].Dir;
+        var b = m.Ball.Pos;
+        double space = DribbleValue(p) / 0.9; // 0..1, open grass ahead
+        double gain = 2 + space * 7;
+        double ahead = PosValue(p.Team, b.X + dir * gain, b.Z * 0.9);
+        // Near goal the space closes as fast as he runs into it: a few more yards aren't a goal.
+        if (M.Dist2D(b.X, b.Z, Pitch.HalfL * dir, 0) < 24) ahead *= 0.7;
+        return (1 - risk) * (ahead + space * 0.01) - risk * lose;
+    }
+
+    /// <summary>
+    /// A pass to `q`: what it's worth if it comes off (where he'll have it, how much room he'll
+    /// have there), times the chance it does (from how much sooner he's on it than they are),
+    /// less the cost of it being cut out. -9: not a pass at all (offside, too short, too far).
+    /// `lob`: it has to go in the air.
+    /// </summary>
+    /// <summary>The pace the computer's ground pass arrives at over `d` metres: firm enough that it isn't there to be nicked on the way.</summary>
+    public static double PassArrive(double d) => M.Clamp(7 + d * 0.15, 8, 12);
+
+    double PassEV(Player p, Player q, double lose, out bool lob)
+    {
+        lob = false;
+        double dir = m.Teams[p.Team].Dir;
+        var b = m.Ball.Pos;
+        double tx = q.Pos.X + q.Vel.X * 0.4;
+        double tz = q.Pos.Z + q.Vel.Z * 0.4;
+        double d = M.Dist2D(b.X, b.Z, tx, tz);
+        if (d < 3.5 || d > 48) return -9;
+        if (q.Role == Role.GK && (d > 25 || m.NearestOpponentDist(q) < 9)) return -9;
+        if (q.Pos.X * dir > offside[p.Team] + 0.3) return -9;
+        double open = 99;
+        foreach (var o in m.Teams[1 - p.Team].Players) open = Math.Min(open, M.Dist2D(o.Pos.X, o.Pos.Z, tx, tz));
+        // On the ground: from the race to the ball.
+        double margin = PassMargin(p, q);
+        double pg = M.Clamp(1 / (1 + JsMath.Exp(-(margin - 0.2) / 0.12)), 0.02, 0.92);
+        // Long, it can go over them: worth it to a man in space.
+        double pl = d > 22 ? M.Clamp(0.05 + (open - 4) * 0.05, 0, 0.45) * (0.8 + 0.2 * p.Attrs.Passing) : 0;
+        double pr = pg;
+        if (pl > pg + 0.05)
+        {
+            pr = pl;
+            lob = true;
+        }
+        // Passing technique over distance.
+        pr *= 1 - Math.Max(0, d - 12) * (0.006 - 0.003 * p.Attrs.Passing);
+        // He'll have it there with this much room (a man on his back can still lay it off).
+        double room = 0.7 + 0.3 * M.Clamp(open / 6, 0, 1);
+        double val = PosValue(p.Team, tx, tz) * room;
+        // Switching it: the ball side is crowded and he's free across on the far side.
+        if (Math.Abs(tz - b.Z) > 22 && open > 7)
+        {
+            int crowd = 0;
+            foreach (var o in m.Teams[1 - p.Team].Players) if (M.Dist2D(o.Pos.X, o.Pos.Z, b.X, b.Z) < 15) crowd++;
+            if (crowd >= 4) val += 0.012 + (crowd - 4) * 0.005;
+        }
+        if (Countering(p.Team)) val += Math.Max(0, (tx - b.X) * dir) * 0.001;
+        if (q.Role == Role.GK) val -= 0.02;
+        // Straight back to the man who just gave it him, going nowhere: that's not a move.
+        if (passFrom[p.Id] == q && m.Time - passFromT[p.Id] < 5 && (tx - b.X) * dir < 4) val -= 0.02;
+        return pr * val - (1 - pr) * lose;
     }
 
     /// <summary>Minimum clearance (m) of opponents from the lane, scaled by how much time they have.</summary>
@@ -1874,7 +2274,7 @@ public sealed partial class AI
         if (D < 1) return 9;
         double kx = (tx - b.X) / D;
         double kz = (tz - b.Z) / D;
-        double v0 = Kick.RollPaceFor(D, M.Clamp(5.5 + D * 0.14, 6, 11));
+        double v0 = Kick.RollPaceFor(D, PassArrive(D));
         int n = 0;
         for (; n < Samples; n++)
         {
