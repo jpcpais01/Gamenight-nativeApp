@@ -52,6 +52,13 @@ public partial class Main : Node
     /// <summary>The walk-out before kick-off (the stadium reads Cutscene.Hang for the giant tifo).</summary>
     public readonly Cutscene Cutscene = new();
     Letterbox _letterbox;
+    /// <summary>Watching an AI game: the tag and the skip key.</summary>
+    WatchBar _watchBar;
+    /// <summary>Running the rest of a watched match flat out; a chunk of steps is on the engine thread.</summary>
+    bool _skipping;
+    volatile bool _chunkBusy;
+    /// <summary>Goals scored while skipping (written on the engine thread).</summary>
+    readonly System.Collections.Concurrent.ConcurrentQueue<GoalEvent> _skipGoals = new();
     /// <summary>Debug: `-- --screenshot=out.png` saves the screen after a few seconds and quits.</summary>
     string _shotPath;
     double _time, _shotAt = 6;
@@ -88,6 +95,16 @@ public partial class Main : Node
         AddChild(_controls);
         _letterbox = new Letterbox();
         AddChild(_letterbox);
+        if (Request?.Watch == true)
+        {
+            // Nothing to steer: the controls go (still there, unseen and untouchable), the skip key comes.
+            _controls.Modulate = new Color(1, 1, 1, 0);
+            _controls.ProcessMode = ProcessModeEnum.Disabled;
+            _watchBar = new WatchBar();
+            _watchBar.Skip += () => _skipping = true;
+            AddChild(_watchBar);
+            MoveChild(_watchBar, _letterbox.GetIndex());
+        }
         _prof = new Profiler { Visible = false };
         AddChild(_prof);
         _prof.Watch(_view.Viewport, GetViewport());
@@ -145,7 +162,7 @@ public partial class Main : Node
         _pause.WeatherName = () => Atmosphere.Names[(int)_ground.Atmosphere.Weather];
         _pause.CycleWeather = () => Atmosphere.Names[(int)_ground.Atmosphere.Cycle()];
         _pause.SaveReport = SaveReport;
-        if (Request?.Demo != true && Request?.Drill == null)
+        if (Request?.Demo != true && Request?.Watch != true && Request?.Drill == null)
         {
             _pause.Foul = () => _runner?.Invoke(m => m.DebugFoul());
             _pause.Invader = () => _runner?.Invoke(m => m.DebugInvader(0.3));
@@ -175,6 +192,12 @@ public partial class Main : Node
         }
 
         NewMatch();
+        if (_watchBar != null)
+        {
+            _players.Markers = false;
+            // Debug: `-- --skip` runs a watched match straight to full time.
+            if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--skip") >= 0) _skipping = _watchBar.Skipping = true;
+        }
         // Debug: `-- --pause` opens the pause menu straight away.
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--pause") >= 0) _pause.Open();
     }
@@ -189,9 +212,12 @@ public partial class Main : Node
         _invader.Clear(null);
         _goalLog.Clear();
         _logged = 0;
+        _skipping = false;
+        if (_watchBar != null) _watchBar.Skipping = false;
+        while (_skipGoals.TryDequeue(out _)) { }
         _match = Request != null ? new Match(Request.Seed, Request.Setup) : new Match(seed: DateTime.Now.Ticks % 2147483647);
         PickExplosions();
-        if (Request?.Demo == true) _match.AutoPlay = true;
+        if (Request?.Demo == true || Request?.Watch == true) _match.AutoPlay = true;
         // Names and kits are read before the match's own thread starts.
         _players.SetMatch(_match);
         _hud.SetMatch(_match);
@@ -290,7 +316,7 @@ public partial class Main : Node
         _goalFx.Clear();
         Cutscene.Cancel();
         _players.Snap();
-        _players.Markers = true;
+        _players.Markers = Request?.Watch != true;
         _hud.Visible = Request?.Demo != true;
         _controls.Visible = !_pause.IsOpen;
         _letterbox.Close();
@@ -329,12 +355,40 @@ public partial class Main : Node
         }
     }
 
+    /// <summary>Skipping a watched match: the engine runs the rest in chunks of steps between
+    /// frames (so the score ticks on screen), keeping a note of every goal for the table.</summary>
+    void Skip()
+    {
+        _watchBar.Visible = !Directed;
+        if (!_skipping || _chunkBusy || _cur.Phase == Phase.Fulltime) return;
+        if (Directed) EndDirected();
+        _chunkBusy = true;
+        _runner.Invoke(m =>
+        {
+            var none = new InputState();
+            int total = m.Teams[0].Score + m.Teams[1].Score;
+            // About a minute of match per chunk.
+            for (int i = 0; i < 1200 && m.Phase != Phase.Fulltime; i++)
+            {
+                m.Step(none);
+                m.TakeEvents();
+                int now = m.Teams[0].Score + m.Teams[1].Score;
+                if (now > total && m.Scorer != null)
+                    _skipGoals.Enqueue(new GoalEvent { Team = m.Scorer.Team, Index = m.Scorer.Index, Minute = Math.Max(1, m.DisplayMinute) });
+                total = now;
+            }
+            _chunkBusy = false;
+        });
+    }
+
     /// <summary>Tells the menus the match is over (full time, or left from the pause menu).</summary>
     void Report(bool finished)
     {
         if (_reported || Request?.Done == null) return;
         _reported = true;
         _runner.Paused = true;
+        while (_skipGoals.TryDequeue(out var g)) _goalLog.Add(g);
+        _goalLog.Sort((a, b) => a.Minute.CompareTo(b.Minute));
         Request.Done(new MatchOutcome { Finished = finished, Home = _cur.Score[0], Away = _cur.Score[1], DrillBest = _drill?.Best ?? 0, Goals = _goalLog });
     }
 
@@ -391,6 +445,7 @@ public partial class Main : Node
         _controls.Tick(dt);
         _runner.Submit(_controls.Input);
         _runner.Read(_prev, _cur, out float alpha);
+        if (_watchBar != null) Skip();
 
         if (_view.Fit())
         {
@@ -425,7 +480,7 @@ public partial class Main : Node
             if (Request?.Demo != true && Request?.Drill == null)
             {
                 _replay.Record(_cur);
-                if (_replay.Start(_cur, GoalSeq.Cut)) Direct(true);
+                if (!_skipping && _replay.Start(_cur, GoalSeq.Cut)) Direct(true);
             }
         }
         _delivery.Update(_cur);
@@ -522,7 +577,8 @@ public partial class Main : Node
     void LogGoal()
     {
         int total = _cur.Score[0] + _cur.Score[1];
-        if (total <= _logged || _cur.Phase != Phase.Goal || _cur.Scorer < 0) return;
+        // (Skipping to full time, the engine keeps its own note of the goals.)
+        if (_skipping || total <= _logged || _cur.Phase != Phase.Goal || _cur.Scorer < 0) return;
         _logged = total;
         var p = _match.All.Find(x => x.Id == _cur.Scorer);
         if (p == null) return;

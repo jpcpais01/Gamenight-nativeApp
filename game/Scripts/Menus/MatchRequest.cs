@@ -18,6 +18,9 @@ public sealed class MatchRequest
     public string Ground = "big";
     /// <summary>The computer plays both sides behind the home screen: no controls, no HUD.</summary>
     public bool Demo;
+    /// <summary>A real match the computer plays for both sides while you watch (a simulated
+    /// league fixture): walk-out, HUD, replays and sound, no controls, a skip to full time.</summary>
+    public bool Watch;
     /// <summary>The stadium builder's preview: the camera circles the ground (Main.Focus turns it).</summary>
     public bool Showcase;
     /// <summary>Called once when the match ends (full time) or is left.</summary>
