@@ -50,6 +50,7 @@ public sealed partial class Match
         // The computer's player looks again if the run he picked has gone; with no runner left,
         // he plays it to feet instead.
         ThroughPlan? through = null;
+        PassIntoSpace = false;
         if (plan.Type == KickType.Through && plan.Aimed != null)
             through = AI.AimedThrough(p, plan.DirX, plan.DirZ, plan.Aimed == true, plan.Power, plan.Lofted == true);
         else if (plan.Type == KickType.Through)
@@ -242,6 +243,7 @@ public sealed partial class Match
             if (tp != null)
             {
                 receiver = tp.Receiver;
+                PassIntoSpace = true;
                 r = lofted
                     ? Kick.ThroughLob(b.Pos, tp.LandX, tp.LandZ)
                     : Kick.GroundKick(tp.Dx, tp.Dz, tp.V0);
@@ -265,9 +267,11 @@ public sealed partial class Match
             receiver =
                 plan.TargetId >= 0
                     ? All[plan.TargetId]
-                    : plan.Aimed == false
+                    : plan.Aimed == false && setPieceKind != null
                         ? AI.BestReceiver(p, false)
-                        : AI.PickReceiver(p, plan.DirX, plan.DirZ, false, plan.Aimed == true ? AI.AimCone : 0.35, plan.Aimed == true ? plan.Power : null);
+                    : plan.Aimed != null
+                        ? AI.HumanReceiver(p, plan.DirX, plan.DirZ, plan.Aimed == true, plan.Power)
+                        : AI.PickReceiver(p, plan.DirX, plan.DirZ, false, 0.35, null);
             bool lob = plan.Type == KickType.Lob;
             // Nobody to feet where the stick points: into the path of a team-mate who gets there
             // first along it (the through-ball planner, held to the stick).
@@ -275,6 +279,7 @@ public sealed partial class Match
             if (space != null)
             {
                 receiver = space.Receiver;
+                PassIntoSpace = true;
                 var r = lob
                     ? Kick.ThroughLob(b.Pos, space.LandX, space.LandZ)
                     : Kick.GroundKick(space.Dx, space.Dz, space.V0);
@@ -308,23 +313,34 @@ public sealed partial class Match
                     tx = M.Clamp(tx, opp - team.Dir * 14, opp - team.Dir * 5);
                     tz = M.Clamp(tz, -8, 8);
                 }
-                var r = lofted ? Kick.SolveLofted(b.Pos, tx, tz, 30, 25, 0) : Kick.SolveGroundPass(b.Pos, tx, tz, 7);
-                for (int i = 0; i < 2; i++)
+                bool yours = plan.Aimed != null && (plan.Type == KickType.Pass || plan.Type == KickType.Lob) && !fromHands &&
+                             setPieceKind != SetPieceKind.Corner && setPieceKind != SetPieceKind.GoalKick;
+                KickResult r;
+                if (yours)
                 {
-                    double lt = Math.Min(r.Time, 2.5) * 0.85;
-                    double ax = receiver.Pos.X + receiver.Vel.X * lt;
-                    double az = receiver.Pos.Z + receiver.Vel.Z * lt;
-                    double dd = M.Dist2D(b.Pos.X, b.Pos.Z, ax, az);
-                    if (lofted)
+                    r = HumanPass(b.Pos, receiver, plan.Type == KickType.Lob);
+                    lofted = r.Vel.Y > 0;
+                }
+                else
+                {
+                    r = lofted ? Kick.SolveLofted(b.Pos, tx, tz, 30, 25, 0) : Kick.SolveGroundPass(b.Pos, tx, tz, 7);
+                    for (int i = 0; i < 2; i++)
                     {
-                        double angle = setPieceKind == SetPieceKind.GoalKick ? 34 : fromHands && SetPiece?.Kind == SetPieceKind.Throw ? 18 : M.Clamp(16 + dd * 0.45, 20, 38);
-                        r = Kick.SolveLofted(b.Pos, ax, az, angle, 25, 0);
-                    }
-                    else
-                    {
-                        // Yours is zipped in firm, the further the firmer, the hold adding pace.
-                        double arrive = plan.Aimed == null ? M.Clamp(5.5 + dd * 0.14, 6, 11) * weightK : M.Clamp(7 + dd * 0.15, 8, 13) * (0.85 + 0.3 * M.Clamp(plan.Power, 0, 1));
-                        r = Kick.SolveGroundPass(b.Pos, ax, az, arrive);
+                        double lt = Math.Min(r.Time, 2.5) * 0.85;
+                        double ax = receiver.Pos.X + receiver.Vel.X * lt;
+                        double az = receiver.Pos.Z + receiver.Vel.Z * lt;
+                        double dd = M.Dist2D(b.Pos.X, b.Pos.Z, ax, az);
+                        if (lofted)
+                        {
+                            double angle = setPieceKind == SetPieceKind.GoalKick ? 34 : fromHands && SetPiece?.Kind == SetPieceKind.Throw ? 18 : M.Clamp(16 + dd * 0.45, 20, 38);
+                            r = Kick.SolveLofted(b.Pos, ax, az, angle, 25, 0);
+                        }
+                        else
+                        {
+                            // Yours is zipped in firm, the further the firmer, the hold adding pace.
+                            double arrive = plan.Aimed == null ? M.Clamp(5.5 + dd * 0.14, 6, 11) * weightK : M.Clamp(7 + dd * 0.15, 8, 13) * (0.85 + 0.3 * M.Clamp(plan.Power, 0, 1));
+                            r = Kick.SolveGroundPass(b.Pos, ax, az, arrive);
+                        }
                     }
                 }
                 vel = r.Vel;
@@ -342,10 +358,13 @@ public sealed partial class Match
         double relBall = JsMath.Hypot(b.Vel.X - p.Vel.X, b.Vel.Z - p.Vel.Z);
         double ballPen = M.Clamp(relBall / 12, 0, 1);
         double weak = p.KickWeak ? 1.35 : 1; // the weaker foot is less precise
-        double sd = @base * (1.3 - skill) * weak * techErr * (1 + bodyPen * 2.2 + runPen * 0.7 + press * 0.9 + ballPen * 0.9);
+        // Your passes go where you meant them, near enough: a mobile game's passing is sure-footed.
+        bool sure = plan.Aimed != null && (plan.Type == KickType.Pass || plan.Type == KickType.Through || plan.Type == KickType.Lob);
+        double sd = @base * (1.3 - skill) * weak * techErr * (1 + bodyPen * (sure ? 1.2 : 2.2) + runPen * 0.7 + press * 0.9 + ballPen * 0.9) * (sure ? 0.6 : 1);
         double yawErr = Rng.Gauss() * sd;
         double pitchErr = Rng.Gauss() * sd * (plan.Type == KickType.Shot ? 0.6 : 0.35) + techLift * (1.2 - skill);
-        double speedErr = 1 + Rng.Gauss() * sd * 0.8;
+        // (A lifted pass carries twice its pace error in length: yours is struck truer.)
+        double speedErr = 1 + Rng.Gauss() * sd * (sure && vel.Y > 0 ? 0.4 : 0.8);
         double hs = JsMath.Hypot(vel.X, vel.Z);
         double yaw = kickYaw + yawErr;
         double pitch = JsMath.Atan2(vel.Y, hs) + pitchErr;
@@ -386,6 +405,57 @@ public sealed partial class Match
         if (receiver != null && receiver.Team == HumanTeam) SetControlled(receiver);
     }
 
+    /// <summary>
+    /// Your pass to a team-mate, mobile-style. To his feet when he's standing or coming to you;
+    /// when he's running away from you, into his path (where he'll be as it gets there, 5 m at
+    /// most). Paced by the distance alone: crisp, never a rocket. Over 30 m (or slid up) it's lifted,
+    /// to drop just in front of him.
+    /// </summary>
+    KickResult HumanPass(V3 from, Player q, bool lob)
+    {
+        double rx = q.Pos.X - from.X;
+        double rz = q.Pos.Z - from.Z;
+        double rd = Math.Max(0.5, JsMath.Hypot(rx, rz));
+        bool lead = q.Speed > 3 && (q.Vel.X * rx + q.Vel.Z * rz) / rd > 1.5;
+        bool lift = lob || rd > 30;
+        double t = 0;
+        KickResult r = null!;
+        for (int i = 0; i < 3; i++)
+        {
+            double lx = lead ? q.Vel.X * t : 0;
+            double lz = lead ? q.Vel.Z * t : 0;
+            double ln = JsMath.Hypot(lx, lz);
+            if (ln > 5)
+            {
+                lx *= 5 / ln;
+                lz *= 5 / ln;
+            }
+            double ax = M.Clamp(q.Pos.X + lx, -Pitch.HalfL + 1, Pitch.HalfL - 1);
+            double az = M.Clamp(q.Pos.Z + lz, -Pitch.HalfW + 1, Pitch.HalfW - 1);
+            double D = Math.Max(0.5, M.Dist2D(from.X, from.Z, ax, az));
+            if (lift)
+            {
+                // Coming down a few metres in front of him, so he takes it off the bounce, not on his head.
+                double k = Math.Max(D - 4, D * 0.85) / D;
+                r = Kick.SolveLofted(from, from.X + (ax - from.X) * k, from.Z + (az - from.Z) * k, lob ? M.Clamp(16 + D * 0.45, 20, 38) : M.Clamp(14 + D * 0.35, 18, 32), 25, 0);
+                t = r.Time + 0.3;
+            }
+            else
+            {
+                double v0 = 19;
+                t = D / 12;
+                if (Kick.RollingPass(D, 0.25 + D / 15, out var rp))
+                {
+                    v0 = rp.V0;
+                    t = rp.T;
+                }
+                r = Kick.GroundKick((ax - from.X) / D, (az - from.Z) / D, v0);
+            }
+            if (!lead) break;
+        }
+        return r;
+    }
+
     // ------------------------------------------------------------------ ball contact
 
     bool WantsBall(Player p)
@@ -398,6 +468,8 @@ public sealed partial class Match
         if (p.Plan != null) return true;
         if (Owner != null && Owner.Team == p.Team) return false;
         if (PassTarget == p) return true;
+        // A pass on its way to a team-mate is his: the others let it run.
+        if (PassTarget != null && PassTarget.Team == p.Team && JsMath.Hypot(Ball.Vel.X, Ball.Vel.Z) > 4) return false;
         if (p == Controlled) return true;
         // Caught beyond the line: leave it for someone onside.
         if (OffsideFlagged(p)) return false;
@@ -697,6 +769,8 @@ public sealed partial class Match
         // Taken on an outstretched leg: a toe-poke, not a cushioned touch.
         double stretched = M.Clamp((BallDist(p) - PlayerK.Reach) / StretchReachMax, 0, 1);
         double err = rel * (0.045 + (1 - q) * 0.08 + heightPen * 0.05) * Math.Abs(1 + Rng.Gauss() * 0.5) * (1 + 1.3 * stretched);
+        // Yours, taking a pass played to him: a cleaner first touch.
+        if (p.Team == HumanTeam && PassTarget == p) err *= 0.6;
         DribbleDir(p, tmpV);
         bool moving = p.WantSpeed > 0.3;
         double push = (moving ? 1.0 + p.Speed * 0.15 : 0.3) * (1 - 0.6 * stretched);

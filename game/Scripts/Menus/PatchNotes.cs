@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.76", "Passing rebuilt, mobile-style: the stick picks the man, the hold how far. Passes go to his feet (or into his stride), crisp, and long ones are lifted. He comes to the ball, team-mates leave it, and passes and first touches are cleaner."),
         ("0.75", "A new pause menu: one card with Resume, Restart and Leave on the left and the settings on the right in sections (Picture, Match, Performance), each a tile that shows its value and moves on with a tap. In training it offers Restart drill and End training."),
         ("0.74", "Going for the ball, the stick now only counts when it points toward the ball: full nudge straight at it, fading to nothing at 45° off. Point it anywhere else and he ignores it and keeps going for the ball."),
         ("0.73", "New training ground: the five drills as cards with little live scenes, your best streak and bronze, silver and gold medals to chase; drills return here when you leave. Reworked squad page: floodlit tactics board, team and line ratings, faces in the player list, centred on wide screens."),

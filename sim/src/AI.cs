@@ -918,14 +918,21 @@ public sealed partial class AI
     {
         double dir = m.Teams[q.Team].Dir;
         const double reach = PlayerK.Reach * 0.8;
+        // A pass played to him: he comes to it, taking it at the first point he safely can at his
+        // feet (not drifting off with it for a few metres more).
+        bool toHim = m.PassTarget == q && !m.PassIntoSpace && m.LastKicker?.Team == q.Team;
+        double progress = toHim ? 0 : MeetProgress;
         int best = -1;
         double bestV = -1e9;
         for (int i = Math.Max(0, from); i < n; i++)
         {
             double t = i * SampleDT;
-            if (t > tOpp - margin) break;
+            // (A pass to him is his to fight for: a man closing only costs, as below.)
+            if (t > tOpp - margin && !toHim) break;
             if (Math.Abs(xs[i]) > Pitch.HalfL - 0.5 || Math.Abs(zs[i]) > Pitch.HalfW - 0.5) break;
             if (ys[i] > PlayHeight(q, xs[i], zs[i])) continue;
+            // (and at his feet: a lifted pass he lets drop, rather than heading it on)
+            if (toHim && ys[i] > 0.8) continue;
             if (i > from)
             {
                 // Cheap bound first: RunTime is never under react + distance / top speed.
@@ -933,7 +940,7 @@ public sealed partial class AI
                 if (dd >= 0.3 && react + dd / (q.TopSpeed + 0.5) > t + 0.05) continue;
                 if (RunTime(q, xs[i], zs[i], react, reach) > t) continue;
             }
-            double v = xs[i] * dir * MeetProgress - t * MeetWait - Math.Max(0, MeetClose - (tOpp - t)) * MeetContest;
+            double v = xs[i] * dir * progress - t * MeetWait - Math.Max(0, MeetClose - (tOpp - t)) * MeetContest;
             if (Math.Abs(t - prev) < 0.2) v += 0.6;
             if (v > bestV)
             {
@@ -1935,6 +1942,46 @@ public sealed partial class AI
             if (s > bestS)
             {
                 bestS = s;
+                best = q;
+            }
+        }
+        return best;
+    }
+
+    /// <summary>
+    /// Who your pass is for, mobile-style: the direction first, then the distance. Everyone is judged
+    /// where he'll be a moment from now. He has to be within 50° of the stick (70° of the way you're
+    /// facing with the stick idle); then each 12° off it, each 12 m from the distance the hold asks
+    /// for (a tap ~6 m, a full hold ~40 m), a defender who can cut the lane (1.5, up to 7.5 the
+    /// sooner he'd be there) and the keeper (2, unless it's a back pass) all count against him.
+    /// The lowest wins.
+    /// </summary>
+    public Player? HumanReceiver(Player p, double dirX, double dirZ, bool aimed, double hold)
+    {
+        var b = m.Ball.Pos;
+        double dir = m.Teams[p.Team].Dir;
+        double cone = JsMath.Cos((aimed ? 50 : 70) * Math.PI / 180);
+        double want = 6 + 34 * M.Clamp(hold, 0, 1);
+        Player? best = null;
+        double bestC = 1e9;
+        foreach (var q in m.Teams[p.Team].Players)
+        {
+            if (q == p) continue;
+            double dx = q.Pos.X + q.Vel.X * 0.4 - b.X;
+            double dz = q.Pos.Z + q.Vel.Z * 0.4 - b.Z;
+            double d = JsMath.Hypot(dx, dz);
+            if (d < 2 || d > 60) continue;
+            double align = (dx * dirX + dz * dirZ) / d;
+            if (align < cone) continue;
+            double off = Math.Abs(JsMath.Atan2(dx * dirZ - dz * dirX, dx * dirX + dz * dirZ)) * 180 / Math.PI;
+            double c = off / 12 + Math.Abs(d - want) / 12;
+            // A defender who'd get there first: the further first, the worse.
+            double margin = PassMargin(p, q);
+            if (margin < 0.1) c += 1.5 + M.Clamp(0.1 - margin, 0, 2) * 3;
+            if (q.Role == Role.GK && dirX * dir > -0.7) c += 2;
+            if (c < bestC)
+            {
+                bestC = c;
                 best = q;
             }
         }

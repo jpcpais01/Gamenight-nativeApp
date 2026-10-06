@@ -217,6 +217,8 @@ public sealed partial class Match
     /// <summary>When the ball went into the keeper's hands (the six-second rule).</summary>
     public double HeldSince;
     public Player? PassTarget;
+    /// <summary>The pass to PassTarget is into space ahead of him (a through ball), not to him.</summary>
+    public bool PassIntoSpace;
     /// <summary>Team that last had controlled possession (for team shape).</summary>
     public int PossTeam;
     public SetPiece? SetPiece;
