@@ -1925,10 +1925,11 @@ public sealed partial class AI
             double open = 99;
             foreach (var o in m.Teams[1 - p.Team].Players) open = Math.Min(open, M.Dist2D(o.Pos.X, o.Pos.Z, q.Pos.X, q.Pos.Z));
             double s = align * 3 + M.Clamp(open / 6, 0, 1) * 0.6 - d / 35;
-            // A full charge looks for the man further on (a tap or a normal pass: the nearer one).
-            if (power != null) s += M.Clamp((power.Value - 0.5) * 2, 0, 1) * Math.Min(d, 35) / 20;
+            // Your pass, as in the big football games: the hold says how far. A tap looks for the
+            // nearer man, a full charge for the one further on.
+            if (power != null) s += (M.Clamp(power.Value, 0, 1) - 0.5) * 2 * Math.Min(d, 40) / 20;
             // Of the ones the stick points at, one he can actually get it to.
-            if (!through && align > 0.7 && PassMargin(p, q) < 0.1) s -= 1.2;
+            if (!through && (align > 0.7 || power != null) && PassMargin(p, q) < 0.1) s -= 1.2;
             if (through && q.Role == Role.FWD) s += 0.3;
             if (q.Role == Role.GK) s -= 0.8;
             if (s > bestS)

@@ -322,7 +322,9 @@ public sealed partial class Match
                     }
                     else
                     {
-                        r = Kick.SolveGroundPass(b.Pos, ax, az, M.Clamp(5.5 + dd * 0.14, 6, 11) * weightK);
+                        // Yours is zipped in firm, the further the firmer, the hold adding pace.
+                        double arrive = plan.Aimed == null ? M.Clamp(5.5 + dd * 0.14, 6, 11) * weightK : M.Clamp(7 + dd * 0.15, 8, 13) * (0.85 + 0.3 * M.Clamp(plan.Power, 0, 1));
+                        r = Kick.SolveGroundPass(b.Pos, ax, az, arrive);
                     }
                 }
                 vel = r.Vel;
