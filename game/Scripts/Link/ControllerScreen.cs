@@ -58,6 +58,10 @@ public sealed partial class ControllerScreen : PxCanvas
         _controls.Visible = false;
         _controls.SetProcessInput(false);
         AddChild(_controls);
+        // Bigger than in a match, for a phone held like a pad: the whole layout drawn at Zoom.
+        _controls.SetAnchorsPreset(LayoutPreset.TopLeft);
+        Resized += FitControls;
+        FitControls();
         try
         {
             _udp = new UdpClient(0, AddressFamily.InterNetwork) { EnableBroadcast = true };
@@ -76,6 +80,17 @@ public sealed partial class ControllerScreen : PxCanvas
     }
 
     public override void _ExitTree() => _udp?.Dispose();
+
+    /// <summary>The controls' scale in controller mode: buttons, stick and their distances from
+    /// the edges all grow together, so they sit where the thumbs rest.</summary>
+    const float Zoom = 1.35f;
+
+    void FitControls()
+    {
+        _controls.Scale = new Vector2(Zoom, Zoom);
+        _controls.Position = Vector2.Zero;
+        _controls.Size = Size / Zoom;
+    }
 
     bool Connected => _now - _statusAt < 1.5;
 
@@ -180,7 +195,12 @@ public sealed partial class ControllerScreen : PxCanvas
     {
         if (_udp == null || _target == null) return;
         var input = _controls.Input;
-        foreach (var e in input.Events) _ring.Add((_now, new Wire.NumberedEvent { Id = _nextEvent++, E = e }));
+        foreach (var e in input.Events)
+        {
+            _ring.Add((_now, new Wire.NumberedEvent { Id = _nextEvent++, E = e }));
+            // A light tap under the thumb on every press.
+            if (e.Kind == Sim.ButtonKind.Down) Godot.Input.VibrateHandheld(12, 0.5f);
+        }
         input.Events.Clear();
         // Every press goes out again and again for half a second, in case a packet is lost.
         _ring.RemoveAll(r => _now - r.At > 0.5);
