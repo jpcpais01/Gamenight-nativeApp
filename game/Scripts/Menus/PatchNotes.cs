@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.73", "New training ground: the five drills as cards with little live scenes, your best streak and bronze, silver and gold medals to chase; drills return here when you leave. Reworked squad page: floodlit tactics board, team and line ratings, faces in the player list, centred on wide screens."),
         ("0.72", "Going for the ball: the stick barely bends your player's run now (only pulling right back takes over), and it's the same with or without PRESS/SPRINT. Holding it only adds the final tackle."),
         ("0.71", "Training shows the aim again: free kicks and penalties in training have the target on the goal and the power bar, like in a match."),
         ("0.70", "Passing works like EA FC: the hold now sets how far your pass goes, so a tap finds the nearer man and a long hold the one further on. Your passes are struck firmer, the further the firmer, and steer away from team-mates a defender is blocking."),

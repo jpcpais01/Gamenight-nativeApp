@@ -14,6 +14,7 @@ public sealed partial class Menus : Control
     public readonly App App;
     public readonly HomeScreen Home;
     public readonly SquadScreen Squad;
+    public readonly TrainingScreen Training;
     public readonly StoreScreen Store;
     public readonly ClubScreen ClubStudio;
     public readonly StadiumScreen Stadium;
@@ -36,6 +37,7 @@ public sealed partial class Menus : Control
         MouseFilter = MouseFilterEnum.Ignore;
         Home = Add(new HomeScreen(this));
         Squad = Add(new SquadScreen(this));
+        Training = Add(new TrainingScreen(this));
         Store = Add(new StoreScreen(this));
         ClubStudio = Add(new ClubScreen(this));
         Stadium = Add(new StadiumScreen(this));

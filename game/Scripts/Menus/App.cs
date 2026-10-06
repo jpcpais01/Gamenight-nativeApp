@@ -268,19 +268,9 @@ public sealed partial class App : Node
 
     // ---------------------------------------------------------------- training
 
-    public void PickDrill()
-    {
-        var items = Drill.All.Select(d => (d.Name, d.About, _club.DrillBest(d.Id) > 0 ? $"BEST STREAK {_club.DrillBest(d.Id)}" : "NO STREAK YET")).ToList();
-        OptionsModal box = null;
-        box = new OptionsModal(_menus, "At the training ground", "Training", items, i =>
-        {
-            _menus.Close(box);
-            StartDrill(Drill.All[i].Id);
-        }, hint: "PAUSE TO RESTART OR LEAVE A DRILL");
-        _menus.Open(box);
-    }
+    public void PickDrill() => _menus.Go(_menus.Training);
 
-    void StartDrill(DrillKind kind)
+    public void StartDrill(DrillKind kind)
     {
         int seed = (int)(ClubState.Now & 0xffff) + 1;
         Play(new MatchRequest
@@ -297,7 +287,7 @@ public sealed partial class App : Node
         _club.SaveDrillBest((DrillKind)kind, best);
         _playing = false;
         _menus.Visible = true;
-        _menus.Go(_menus.Home);
+        _menus.Go(_menus.Training);
         StartDemo();
     }
 
