@@ -40,6 +40,7 @@ public sealed partial class PixelView : Control
         {
             _smooth = value;
             Viewport.Scaling3DScale = value ? 2 : 1;
+            RenderingServer.GlobalShaderParameterSet("gn_ss", value ? 2f : 1f);
         }
     }
     Vector2I _lastScreen;

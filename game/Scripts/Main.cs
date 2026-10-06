@@ -298,6 +298,7 @@ public partial class Main : Node
         _camera.BaseDist = MatchCamera.Presets[Math.Clamp(MatchSettings.Camera, 0, 2)];
         _view.TargetHeight = MatchSettings.Pixels > 0 ? MatchSettings.Pixels : 270;
         _view.Smooth = MatchSettings.Smooth;
+        _camera.Snap = !MatchSettings.Smooth;
         _hud.ShowFps = MatchSettings.ShowFps;
         _prof.On = MatchSettings.ShowFps && MatchSettings.Profile && Request?.Demo != true;
         if (GameAudio.Instance != null) GameAudio.Instance.Muted = !MatchSettings.Sound;
