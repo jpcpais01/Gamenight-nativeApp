@@ -7,6 +7,8 @@ name: Android APK
 on:
   push:
     branches: [main]
+    # The landing page (site/) is deployed by Vercel; it needs no new game build.
+    paths-ignore: ['site/**']
   workflow_dispatch:
 
 permissions:
