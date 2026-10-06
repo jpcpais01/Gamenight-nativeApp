@@ -19,7 +19,6 @@ import android.view.Display;
 import android.view.WindowManager;
 
 import androidx.activity.EdgeToEdge;
-import androidx.core.content.ContextCompat;
 import androidx.core.splashscreen.SplashScreen;
 
 import java.io.File;
@@ -63,7 +62,12 @@ public class GodotApp extends GodotActivity {
 		super.onCreate(savedInstanceState);
 		requestHighestRefreshRate();
 		instance = this;
-		ContextCompat.registerReceiver(this, installReceiver, new IntentFilter(INSTALLED), ContextCompat.RECEIVER_NOT_EXPORTED);
+		IntentFilter filter = new IntentFilter(INSTALLED);
+		if (Build.VERSION.SDK_INT >= 26) {
+			registerReceiver(installReceiver, filter, Build.VERSION.SDK_INT >= 33 ? Context.RECEIVER_NOT_EXPORTED : 0);
+		} else {
+			registerReceiver(installReceiver, filter);
+		}
 
 		Godot godot = getGodot();
 		if (godot != null && godot.getDisableGodotSplash()) {
