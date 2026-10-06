@@ -31,6 +31,7 @@ public sealed partial class Host : Node
     readonly bool _pc = OS.HasFeature("pc");
 
     UdpClient _udp;
+    WebLink _web;
     System.Threading.Thread _thread;
     volatile bool _running;
 
@@ -70,6 +71,7 @@ public sealed partial class Host : Node
             _running = true;
             _thread = new System.Threading.Thread(Listen) { IsBackground = true, Name = "PhoneLink", Priority = ThreadPriority.AboveNormal };
             _thread.Start();
+            _web = new WebLink(this);
         }
         catch (Exception e)
         {
@@ -83,6 +85,7 @@ public sealed partial class Host : Node
     {
         _running = false;
         _udp?.Dispose();
+        _web?.Stop();
     }
 
     long Now => _clock.ElapsedMilliseconds;
@@ -124,6 +127,9 @@ public sealed partial class Host : Node
         }
     }
 
+    /// <summary>The controller web page's address, for any phone's browser ("" if not serving).</summary>
+    public string WebAddress => _web?.Serving == true && Address != "" ? $"http://{Address}:{WebLink.Port}" : "";
+
     // ---------------------------------------------------------------- network thread
 
     void Listen()
@@ -153,15 +159,22 @@ public sealed partial class Host : Node
                 }
                 else if (Wire.ReadPad(b, b.Length, rx))
                 {
-                    Take(rx, ep);
-                    bool live = Now - Volatile.Read(ref _liveAt) < 250;
-                    int n = Wire.WriteStatus(buf, rx.Time, live, _mode, _picked, _name);
+                    int n = Answer(rx, ep, buf);
                     _udp.Send(buf, n, ep);
                 }
             }
             catch (SocketException) { }
             catch (ObjectDisposedException) { return; }
         }
+    }
+
+    /// <summary>A controller's packet (from the app, or the web page on any phone): taken in,
+    /// and the STATUS answer written into `buf` (its length returned). Any thread.</summary>
+    internal int Answer(Wire.Pad rx, IPEndPoint ep, byte[] buf)
+    {
+        Take(rx, ep);
+        bool live = Now - Volatile.Read(ref _liveAt) < 250;
+        return Wire.WriteStatus(buf, rx.Time, live, _mode, _picked, _name);
     }
 
     /// <summary>A phone's packet: its state replaces the last; numbered presses, tackles, backs
