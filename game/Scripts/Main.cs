@@ -389,7 +389,11 @@ public partial class Main : Node
         float dt = (float)delta;
         _prof.Begin();
         _controls.Tick(dt);
-        _runner.Submit(_controls.Input);
+        // The keyboard, a gamepad and a phone used as a controller play alongside the touch controls.
+        bool live = Request?.Demo != true && _controls.Visible && !_pause.IsOpen && !Directed && !_invaderShown;
+        var input = Link.Host.Mix(_controls.Input, live, _controls.Current, _controls.Picked);
+        _controls.SelfModulate = Link.Host.Instance?.RemotePlay == true ? Colors.Transparent : Colors.White;
+        _runner.Submit(input);
         _runner.Read(_prev, _cur, out float alpha);
 
         if (_view.Fit())
@@ -453,7 +457,7 @@ public partial class Main : Node
 
         bool attack = _cur.HumanAttacking;
         _controls.SetMode(ButtonMode(_cur, attack, out int picked), picked);
-        _hud.Tick(_prev, _cur, alpha, _controls.Input, attack, delta);
+        _hud.Tick(_prev, _cur, alpha, input, attack, delta);
         _drillHud?.Tick();
         if (_prewarm > 0) Prewarm(--_prewarm == 0);
         _pause.FoulShown = !Directed;

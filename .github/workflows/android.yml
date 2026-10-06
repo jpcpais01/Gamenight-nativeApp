@@ -1,6 +1,7 @@
-# Builds a signed release APK on every push to main and publishes it as a GitHub Release.
-# The newest one is always at:
+# Builds a signed release APK on every push to main and publishes it as a GitHub Release; the
+# Windows build (a zip with GameNight.exe) is added to the same release. The newest are always at:
 #   https://github.com/jpcpais01/Gamenight-nativeApp/releases/latest/download/GameNight.apk
+#   https://github.com/jpcpais01/Gamenight-nativeApp/releases/latest/download/GameNight-Windows.zip
 name: Android APK
 
 on:
@@ -150,3 +151,101 @@ jobs:
             build/GameNight-${{ env.APP_VERSION }}.apk
             build/GameNight.apk
           make_latest: true
+
+  # The PC version: the same project exported for Windows, zipped (GameNight.exe and its .NET
+  # files). Built alongside the APK, then added to the APK's release once that exists.
+  windows:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Cache Godot and its Windows templates
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/godot
+          key: godot-${{ env.GODOT_TAG }}-mono-windows
+
+      - name: Download Godot (.NET) and the Windows export templates
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/godot && cd ~/godot
+          base=https://github.com/godotengine/godot/releases/download/$GODOT_TAG
+          curl -sSL -o editor.zip "$base/Godot_v${GODOT_TAG}_mono_linux_x86_64.zip"
+          unzip -q editor.zip && rm editor.zip
+          curl -sSL -o templates.tpz "$base/Godot_v${GODOT_TAG}_mono_export_templates.tpz"
+          mkdir templates
+          unzip -q -j templates.tpz 'templates/windows_*_x86_64.exe' 'templates/version.txt' -d templates
+          rm templates.tpz
+
+      - name: Install Godot
+        run: |
+          echo "GODOT=$(ls ~/godot/Godot_v${GODOT_TAG}_mono_linux_x86_64/Godot_v${GODOT_TAG}_mono_linux.x86_64)" >> $GITHUB_ENV
+          mkdir -p ~/.local/share/godot/export_templates/$GODOT_TEMPLATES
+          cp ~/godot/templates/* ~/.local/share/godot/export_templates/$GODOT_TEMPLATES/
+
+      - name: Version
+        id: version
+        working-directory: game
+        run: |
+          base=$(sed -n 's/^config\/version="\(.*\)"/\1/p' project.godot)
+          name="${base%.*}.${{ github.run_number }}"
+          echo "APP_VERSION=$name" >> $GITHUB_ENV
+          echo "version=$name" >> $GITHUB_OUTPUT
+          sed -i "s/^config\/version=.*/config\/version=\"$name\"/" project.godot
+
+      - name: Import and build C#
+        working-directory: game
+        run: |
+          timeout 600 "$GODOT" --headless --path . --import || true
+          dotnet build GameNight.csproj -c ExportRelease
+
+      - name: Export for Windows
+        working-directory: game
+        run: |
+          mkdir -p ../build/win
+          "$GODOT" --headless --path . --export-release Windows ../build/win/GameNight.exe 2>&1 | tee ../build/export-windows.log
+          test -s ../build/win/GameNight.exe
+          cd ../build/win && zip -qr "../GameNight-$APP_VERSION-Windows.zip" . && cd ..
+          cp "GameNight-$APP_VERSION-Windows.zip" GameNight-Windows.zip
+
+      - name: Upload build log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: export-log-windows
+          path: build/export-windows.log
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: build/GameNight-*Windows.zip
+          compression-level: 0
+
+  windows-release:
+    needs: [apk, windows]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows
+          path: build
+
+      - name: Add the Windows build to the release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.windows.outputs.version }}
+          append_body: true
+          body: |
+
+            On a Windows PC: download GameNight-${{ needs.windows.outputs.version }}-Windows.zip, unzip it and run GameNight.exe.
+            To use the phone as the controller, tap PLAY ON PC on the phone's home screen (same Wi-Fi).
+          files: |
+            build/GameNight-${{ needs.windows.outputs.version }}-Windows.zip
+            build/GameNight-Windows.zip

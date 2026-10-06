@@ -291,11 +291,44 @@ public sealed partial class App : Node
         StartDemo();
     }
 
+    // ---------------------------------------------------------------- phone as controller
+
+    Link.ControllerScreen _controller;
+    CanvasLayer _controllerLayer;
+
+    /// <summary>Home → PLAY ON PC: the phone becomes a controller for GameNight on a computer.
+    /// The menus and the match behind them stop while it's up.</summary>
+    public void OpenController()
+    {
+        if (_controller != null) return;
+        _controllerLayer = new CanvasLayer { Layer = 15 };
+        AddChild(_controllerLayer);
+        _controller = new Link.ControllerScreen { Exit = () => Callable.From(CloseController).CallDeferred() };
+        _controllerLayer.AddChild(_controller);
+        _menus.Visible = false;
+        _match?.Backdrop(false);
+    }
+
+    void CloseController()
+    {
+        if (_controller == null) return;
+        _controllerLayer.QueueFree();
+        _controller = null;
+        _controllerLayer = null;
+        _menus.Visible = true;
+        BackdropChanged();
+    }
+
     // ---------------------------------------------------------------- back
 
     public override void _Notification(int what)
     {
         if (what != NotificationWMGoBackRequest) return;
+        if (_controller != null)
+        {
+            _controller.Back();
+            return;
+        }
         if (_playing)
         {
             _match?.Back();
