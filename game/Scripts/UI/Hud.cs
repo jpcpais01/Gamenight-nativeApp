@@ -37,6 +37,20 @@ public sealed partial class Hud : Control
     public bool ShowFps;
     public bool Paused;
 
+    /// <summary>Training: only what's drawn over the pitch (the dead-ball aim, the power bars,
+    /// stamina), no scoreboard, minimap, captions or cards.</summary>
+    public bool OverlayOnly
+    {
+        get => _overlayOnly;
+        set
+        {
+            _overlayOnly = value;
+            _board.Visible = _player.Visible = _caption.Visible = !value;
+            if (value) _map.Visible = _card.Visible = false;
+        }
+    }
+    bool _overlayOnly;
+
     MatchInfo _info;
     Match _match;
     readonly Painter _board, _caption, _player, _overlay, _fps;
@@ -169,7 +183,7 @@ public sealed partial class Hud : Control
         Events(b);
         Scoreboard(b);
         PlayerCard(b);
-        _map.Visible = !Paused && b.Phase != Phase.Fulltime;
+        _map.Visible = !_overlayOnly && !Paused && b.Phase != Phase.Fulltime;
         if (_map.Visible) _map.Update(a, b, alpha);
         Overlays(a, b, alpha, input, attack, (float)delta);
         Animate();
@@ -256,7 +270,7 @@ public sealed partial class Hud : Control
         // Captions and the score card animate; everything else redraws on change.
         if (_now - _capAt < Math.Min(_capDur, 3.2) + 0.1) _caption.QueueRedraw();
         double ct = _now - _cardAt;
-        _card.Visible = ct >= 0 && ct < 3.4;
+        _card.Visible = !_overlayOnly && ct >= 0 && ct < 3.4;
         if (_card.Visible)
         {
             float t = (float)ct;

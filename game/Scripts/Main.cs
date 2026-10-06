@@ -160,7 +160,8 @@ public partial class Main : Node
         }
         if (Request?.Drill != null)
         {
-            _hud.Visible = false;
+            // The drill has its own board; the match HUD stays for the aim and the power bars.
+            _hud.OverlayOnly = true;
             _drillHud = new DrillHud();
             AddChild(_drillHud);
             MoveChild(_drillHud, _hud.GetIndex());
@@ -287,7 +288,7 @@ public partial class Main : Node
         Cutscene.Cancel();
         _players.Snap();
         _players.Markers = true;
-        _hud.Visible = Request?.Drill == null && Request?.Demo != true;
+        _hud.Visible = Request?.Demo != true;
         _controls.Visible = !_pause.IsOpen;
         _letterbox.Close();
         if (_runner != null) _runner.Paused = _pause.IsOpen;

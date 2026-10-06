@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.71", "Training shows the aim again: free kicks and penalties in training have the target on the goal and the power bar, like in a match."),
         ("0.70", "Passing works like EA FC: the hold now sets how far your pass goes, so a tap finds the nearer man and a long hold the one further on. Your passes are struck firmer, the further the firmer, and steer away from team-mates a defender is blocking."),
         ("0.69", "Stadiums sit properly in their surroundings: a city superblock downtown, a stone square in the old town, a hedged field in the countryside, a valley road in the Alps, no more oval ring road. Three new areas: an Alentejo hill town, a Norwegian fjord and a tropical bay with a hillside favela."),
         ("0.68", "League away days done right: every league club has its own stadium, in its colours and the same on every visit, with its own goal explosion. The home end now cheers the hosts: its songs, roars, PA scorer call, the crowd shot after a goal and the walk-out all follow the real home side."),
