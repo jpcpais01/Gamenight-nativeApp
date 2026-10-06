@@ -36,9 +36,10 @@ canvas{position:fixed;left:0;top:0;width:100%;height:100%}
 const cv = document.getElementById('c'), g = cv.getContext('2d'), safeEl = document.getElementById('safe');
 const LABELS = [['PASS','THROUGH','KICK','SPRINT'],['TACKLE','SWITCH','','PRESS'],['WHIP','SHORT','FLOAT','SPRINT'],
   ['DRIVE','SHORT','FLOAT','SPRINT'],['DIVE','DIVE','DIVE','QUICK\nSTEP'],['KNEE\nSLIDE','AERO\nPLANE','SIUU','BACK\nFLIP']];
-const OFF = [[183,61],[159,149],[77,181],[78,78]], RAD = [35,35,37,54];
+// The app's layout, drawn 1.35x bigger (Z) for a phone held like a pad.
+const OFF = [[183,61],[159,149],[77,181],[78,78]], RAD = [35,35,37,54], Z = 1.35;
 const INK = '#f4efe3', ACCENT = '#ffd159', GOLD = '#ffd447', CYAN = '#5ef2ff';
-let W = 0, H = 0, S = 1, inset = {l:0, r:0, t:0, b:0};
+let W = 0, H = 0, S = 1, C = 1, inset = {l:0, r:0, t:0, b:0};
 const now = () => performance.now();
 
 // What the PC said last.
@@ -62,12 +63,12 @@ function resize() {
   W = innerWidth; H = innerHeight;
   cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
   g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  S = Math.min(W / 860, H / 400);
+  S = Math.min(W / 860, H / 400); C = S * Z;
   const cs = getComputedStyle(safeEl);
   inset = {l: parseFloat(cs.paddingLeft) || 0, r: parseFloat(cs.paddingRight) || 0, t: parseFloat(cs.paddingTop) || 0, b: parseFloat(cs.paddingBottom) || 0};
   joyHome();
 }
-function joyHome() { joyC = {x: inset.l + Math.max(110 * S, W * 0.12), y: H - Math.max(100 * S, H * 0.26)}; knob = {x:0, y:0}; }
+function joyHome() { joyC = {x: inset.l + Math.max(110 * C, W * 0.14), y: H - Math.max(100 * C, H * 0.3)}; knob = {x:0, y:0}; }
 addEventListener('resize', resize);
 resize();
 
@@ -129,13 +130,14 @@ function send() {
 }
 
 // ------------------------------------------------------------------ the controls
-const btnC = i => ({x: W - inset.r - OFF[i][0] * S, y: H - inset.b - OFF[i][1] * S});
+const btnC = i => ({x: W - inset.r - OFF[i][0] * C, y: H - inset.b - OFF[i][1] * C});
 const shown = i => !(i === 2 && mode === 1);
 const inRect = (r, p) => r && p.x >= r.x && p.y >= r.y && p.x <= r.x + r.w && p.y <= r.y + r.h;
 
 function press(i) {
   if (held[i]) return;
   held[i] = true; holdT[i] = 0; downAt[i] = now();
+  if (navigator.vibrate) navigator.vibrate(12);
   events.push({id: nextId++, btn: i, up: 0, sw: 0, hold: 0, t: now()});
 }
 function release(i) {
@@ -152,7 +154,7 @@ function releaseAll() {
 }
 function joyMove(p) {
   let dx = p.x - joyC.x, dy = p.y - joyC.y, len = Math.hypot(dx, dy);
-  const R = 56 * S;
+  const R = 56 * C;
   if (len > R) { joyC.x += dx / len * (len - R); joyC.y += dy / len * (len - R); dx = dx / len * R; dy = dy / len * R; len = R; }
   knob = {x: dx, y: dy};
   const m = Math.min(1, len / R), mm = m < 0.12 ? 0 : (m - 0.12) / 0.88, n = Math.max(1e-6, len);
@@ -169,7 +171,7 @@ function down(id, p) {
     let hit = -1, best = 1e9;
     for (let i = 0; i < 4; i++) {
       const c = btnC(i), dd = Math.hypot(p.x - c.x, p.y - c.y);
-      if (shown(i) && dd < (RAD[i] + 8) * S && dd < best) { best = dd; hit = i; }
+      if (shown(i) && dd < (RAD[i] + 8) * C && dd < best) { best = dd; hit = i; }
     }
     if (hit >= 0 && hit < 3) { roles.set(id, hit); startY[hit] = p.y; press(hit); }
     else if (hit === 3) { roles.set(id, 'sprint'); sprintDown = true; sprintStart = p; sprintSwipe = 0; }
@@ -194,10 +196,10 @@ function move(id, p) {
   if (r === undefined) return;
   if (r === 'joy') joyMove(p);
   else if (r === 'sprint' && mode === 1) {
-    const dn = p.y - sprintStart.y, left = sprintStart.x - p.x, k = 28 * S;
+    const dn = p.y - sprintStart.y, left = sprintStart.x - p.x, k = 28 * C;
     const stage = left > k && left > dn ? 2 : dn > k ? 1 : 0;
     if (stage > sprintSwipe) { sprintSwipe = stage; tackleId++; tackle = stage; }
-  } else if (r === 0 || r === 1) swipe[r] = startY[r] - p.y > 26 * S;
+  } else if (r === 0 || r === 1) swipe[r] = startY[r] - p.y > 26 * C;
 }
 function up(id) {
   if (id === padId) { if (!padMoved && now() - padAt < 350) clickId++; padId = null; }
@@ -283,14 +285,14 @@ function draw(sec) {
   label(W / 2, pauseRect.y + pauseRect.h / 2, 'PAUSE', 20 * S, GOLD);
 
   const a = joyId !== null ? 1 : 0.55;
-  circle(joyC.x, joyC.y, 64 * S, `rgba(20,26,22,${0.18 * a})`, `rgba(244,239,227,${0.28 * a})`, 2);
-  circle(joyC.x + knob.x, joyC.y + knob.y, 28 * S, `rgba(244,239,227,${0.85 * a})`);
+  circle(joyC.x, joyC.y, 64 * C, `rgba(20,26,22,${0.18 * a})`, `rgba(244,239,227,${0.28 * a})`, 2);
+  circle(joyC.x + knob.x, joyC.y + knob.y, 28 * C, `rgba(244,239,227,${0.85 * a})`);
 
   const labels = LABELS[mode], defend = mode === 1, cel = mode === 5;
   for (let i = 0; i < 4; i++) {
     if (!shown(i)) continue;
-    const isDown = i < 3 ? held[i] : sprintDown, c = btnC(i), r = RAD[i] * S * (isDown ? 0.92 : 1);
-    const size = (i === 3 ? 17 : i === 1 ? 12 : i === 2 ? 14 : 13) * S * 1.25;
+    const isDown = i < 3 ? held[i] : sprintDown, c = btnC(i), r = RAD[i] * C * (isDown ? 0.92 : 1);
+    const size = (i === 3 ? 17 : i === 1 ? 12 : i === 2 ? 14 : 13) * C * 1.25;
     let fill = 'rgba(20,26,22,0.55)';
     if (cel) fill = picked === i ? '#e0a31c' : picked >= 0 ? 'rgba(120,80,10,0.25)' : `rgba(220,153,41,${0.45 + 0.2 * Math.sin(sec * 5.7 + i)})`;
     else if (i === 2 && !defend) fill = 'rgba(200,57,59,0.6)';
@@ -298,15 +300,15 @@ function draw(sec) {
     if (isDown) fill = 'rgba(244,239,227,0.32)';
     circle(c.x, c.y, r, fill, cel ? 'rgba(255,227,140,0.95)' : i === 2 && !defend ? 'rgba(255,219,209,0.6)' : i === 3 ? 'rgba(244,239,227,0.55)' : 'rgba(244,239,227,0.4)', 2);
     if (i < 2 && swipe[i]) { g.beginPath(); g.arc(c.x, c.y, r - 4, -Math.PI * 0.85, -Math.PI * 0.15); g.strokeStyle = ACCENT; g.lineWidth = 3; g.stroke(); }
-    label(c.x, c.y + (defend && i === 3 ? -6 * S : 0), labels[i], size, cel && picked === i ? '#3b2100' : INK);
-    if (defend && i === 3) label(c.x, c.y + 13 * S, '▼ TACKLE · ◀ SLIDE', 10 * S, INK);
+    label(c.x, c.y + (defend && i === 3 ? -6 * C : 0), labels[i], size, cel && picked === i ? '#3b2100' : INK);
+    if (defend && i === 3) label(c.x, c.y + 13 * C, '▼ TACKLE · ◀ SLIDE', 10 * C, INK);
   }
   if (!defend && !cel && held[2]) {
-    const c = btnC(2), p = Math.min(1, holdT[2] / 0.85), r = (RAD[2] + 5) * S;
+    const c = btnC(2), p = Math.min(1, holdT[2] / 0.85), r = (RAD[2] + 5) * C;
     g.lineWidth = 5; g.strokeStyle = 'rgba(255,255,255,0.12)'; g.beginPath(); g.arc(c.x, c.y, r, 0, Math.PI * 2); g.stroke();
     g.strokeStyle = ACCENT; g.beginPath(); g.arc(c.x, c.y, r, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p); g.stroke();
   }
-  if (cel && picked < 0) label(W - inset.r - 140 * S, H - 240 * S, 'C E L E B R A T E', 15 * S, '#ffe08a');
+  if (cel && picked < 0) label(W - inset.r - 140 * C, H - 240 * C, 'C E L E B R A T E', 15 * C, '#ffe08a');
 }
 function key(k) {
   if (k === 'DEL') { entry = entry.slice(0, -1); return; }
