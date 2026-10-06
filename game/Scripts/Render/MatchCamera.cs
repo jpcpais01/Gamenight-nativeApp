@@ -92,6 +92,8 @@ public sealed class MatchCamera
     // Directed shots: weight (0 off, 1 on) and where each one stands and looks.
     float _pov, _front, _cine;
     int _lastCrowd;
+    /// <summary>An away day: the home end (left) is team 1's, so team 0's goals cut to the right.</summary>
+    public bool Away;
     Vector3 _povPos, _povLook, _frontPos, _frontLook;
 
     public MatchCamera(Camera3D camera)
@@ -243,7 +245,7 @@ public sealed class MatchCamera
         UpdateFront(a, b, alpha, dt);
         // Half time, full time: a slow crane across the bowl. A goal: the scoring end's fans.
         int crowd = b.Phase == Phase.Goal && b.Scorer >= 0 && b.PhaseT >= GoalSeq.Crowd && b.PhaseT < GoalSeq.Back
-            ? (b.Team[b.Scorer] == 0 ? -1 : 1) : 0;
+            ? (b.Team[b.Scorer] == (Away ? 1 : 0) ? -1 : 1) : 0;
         bool cinematic = b.Phase is Phase.Halftime or Phase.Fulltime;
         if (crowd != 0) _lastCrowd = crowd;
         else if (cinematic) _lastCrowd = 0;

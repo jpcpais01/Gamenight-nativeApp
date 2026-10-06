@@ -499,11 +499,18 @@ public sealed partial class LeagueScreen : PxCanvas
     public void Kickoff(Fixture f)
     {
         bool home = f.Home == You;
+        // Away: the hosts' own stadium, in their colours, their fans, their celebrations.
         string ground = home
             ? (Menus.Grounds.All.Any(g => g.Id == Club.S.Ground) && Club.S.Ground != "training" ? Club.S.Ground : "big")
-            : L.S.Clubs[f.Home].Venue;
+            : "custom";
         int seed = (int)(ClubState.Now & 0xffff) + 1;
-        var req = new MatchRequest { Setup = L.Setup(f), Seed = seed, Ground = ground, HostCrest = home ? null : L.Crest(f.Home) };
+        var req = new MatchRequest { Setup = L.Setup(f), Seed = seed, Ground = ground };
+        if (!home)
+        {
+            req.HostCrest = L.Crest(f.Home);
+            req.HostPlan = L.PlanOf(f.Home);
+            req.HostGoalFx = Stadia.GoalFxOf(L.S.Clubs[f.Home]);
+        }
         int round = f.Round;
         _ui.App.PlayFixture(req, o => Played(round, o));
     }

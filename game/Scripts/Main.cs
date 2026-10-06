@@ -66,7 +66,9 @@ public partial class Main : Node
         _view = new PixelView();
         AddChild(_view);
         World.Build(_view.WorldRoot);
-        _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup, Request?.HostCrest).AddTo(_view.WorldRoot);
+        _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup, Request?.HostCrest, Request?.HostPlan).AddTo(_view.WorldRoot);
+        // An away day: the stands' home end is the other side's, for the crowd's sound too.
+        Sound.Terraces.Flip = Request?.AwayDay == true;
         Acoustics();
         _players = new PlayersView(_view.WorldRoot);
         _officials = new Officials(_view.WorldRoot);
@@ -116,6 +118,7 @@ public partial class Main : Node
         Cutscene.OnCaption = _letterbox.Caption;
         Cutscene.OnSubtitle = _letterbox.Subtitle;
         Cutscene.OnBeat = WalkOutCrowd;
+        Cutscene.Away = _camera.Away = Request?.AwayDay == true;
         Cutscene.OnJump = _players.Snap;
         _replay.OnRewind = () =>
         {
@@ -343,7 +346,7 @@ public partial class Main : Node
         var old = _ground;
         old.Root.GetParent()?.RemoveChild(old.Root);
         old.Root.QueueFree();
-        _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup, Request?.HostCrest).AddTo(_view.WorldRoot);
+        _ground = Ground.Create(Request?.Ground ?? "big", Request?.Setup, Request?.HostCrest, Request?.HostPlan).AddTo(_view.WorldRoot);
         _view.Camera.Far = _ground.ViewRange;
         Acoustics();
     }
@@ -472,13 +475,14 @@ public partial class Main : Node
         _goalFx.Fire(_fxStyle[team], f.BallX, f.BallY, f.BallZ, shirt, trim);
     }
 
-    /// <summary>Your club's chosen explosion for your side (team 0); the other side gets another at random.</summary>
+    /// <summary>Your club's chosen explosion for your side (team 0); the other side gets its own
+    /// (a league host's) or another at random.</summary>
     void PickExplosions()
     {
         var rng = new Random((int)(DateTime.Now.Ticks & 0x7fffffff));
         bool mine = Request != null && Request.Demo != true && Ground.Club != null;
         _fxStyle[0] = mine ? Math.Clamp(Ground.Club.S.GoalFx, 0, GoalFx.Count - 1) : rng.Next(GoalFx.Count);
-        _fxStyle[1] = (_fxStyle[0] + 1 + rng.Next(GoalFx.Count - 1)) % GoalFx.Count;
+        _fxStyle[1] = Request?.HostGoalFx is int host ? Math.Clamp(host, 0, GoalFx.Count - 1) : (_fxStyle[0] + 1 + rng.Next(GoalFx.Count - 1)) % GoalFx.Count;
         // Debug: `-- --goalfx=N` puts style N on both sides.
         foreach (var a in OS.GetCmdlineUserArgs())
             if (a.StartsWith("--goalfx=") && int.TryParse(a[9..], out int n)) _fxStyle[0] = _fxStyle[1] = Math.Clamp(n, 0, GoalFx.Count - 1);

@@ -91,9 +91,10 @@ public struct Pyro
 /// The terraces on a big European night (the PWA's src/ui/terraces.ts): who's singing what,
 /// when the pyro goes up. One director, read by everything that makes the atmosphere: the
 /// choir and drums (audio), and for the stadium the fans bouncing on the beat, arms up for the
-/// Viking clap, flares, smoke and confetti. The home end (team 0's fans) is behind the left
-/// goal, the away end behind the right. It keeps its own clock (stopped while paused) and is
-/// driven by the match snapshot, on the game thread.
+/// Viking clap, flares, smoke and confetti. The home end is behind the left goal, the away end
+/// behind the right; everything here is by end (0 home, 1 away). The home side is team 0,
+/// except on an away day (<see cref="Flip"/>), when it's team 1. It keeps its own clock
+/// (stopped while paused) and is driven by the match snapshot, on the game thread.
 /// </summary>
 public sealed class Terraces
 {
@@ -141,6 +142,11 @@ public sealed class Terraces
 
     /// <summary>Director time (seconds); stops when the game does.</summary>
     public double T;
+    /// <summary>An away day: the match's team 0 (yours) is the away end's.</summary>
+    public bool Flip;
+
+    /// <summary>The end that supports a team (and the team an end supports: the same swap).</summary>
+    public int End(int team) => team < 0 ? team : Flip ? 1 - team : team;
     public Singing Singing;
     public readonly List<Pyro> Pyro = new();
     /// <summary>Smoothed for the visuals: how hard each end is singing (0..1).</summary>
@@ -149,7 +155,7 @@ public sealed class Terraces
     public float Beat, Arms;
     /// <summary>Confetti and ticker tape thrown from an end (drained by whoever draws it).</summary>
     public readonly List<(int end, float amount)> Confetti = new();
-    /// <summary>How close each team is to scoring, 0..1 (its end roars louder as it rises).</summary>
+    /// <summary>How close each end's team is to scoring, 0..1 (that end roars louder as it rises).</summary>
     public readonly float[] Danger = new float[2];
     /// <summary>How hard each end is singing right now (the song, ducked under a big attack).</summary>
     public readonly float[] Voice = { 1, 1 };
@@ -219,8 +225,9 @@ public sealed class Terraces
                 if (m.SetPiece is SetPieceKind k && m.SetPieceTeam == team && (k == SetPieceKind.Penalty || k == SetPieceKind.Corner || m.SetPieceDirect))
                     want = MathF.Max(want, k == SetPieceKind.Penalty ? 0.9f : 0.6f);
             }
-            float d = Danger[team];
-            Danger[team] += (want - d) * (1 - MathF.Exp(-dt * (want > d ? 3 : 1.1f)));
+            int e = End(team);
+            float d = Danger[e];
+            Danger[e] += (want - d) * (1 - MathF.Exp(-dt * (want > d ? 3 : 1.1f)));
         }
         // An end stops singing to roar its team on; the other end goes quiet with nerves.
         for (int end = 0; end < 2; end++)
@@ -242,8 +249,8 @@ public sealed class Terraces
             {
                 float close = 1 - Smooth(4, 14, MathF.Abs(bz));
                 Add(React.Ooh, -1, 0, 0.6f + 0.4f * close);
-                Add(React.Groan, _shotTeam, 0.5, 0.7f + 0.3f * close);
-                Add(React.Applause, _shotTeam, 1.5, 0.45f + 0.2f * close, 2.6f);
+                Add(React.Groan, End(_shotTeam), 0.5, 0.7f + 0.3f * close);
+                Add(React.Applause, End(_shotTeam), 1.5, 0.45f + 0.2f * close, 2.6f);
             }
             _shotTeam = -1;
         }
@@ -282,7 +289,7 @@ public sealed class Terraces
         if (Singing != null && t > Singing.Until) Singing = null;
         if (Singing == null && t >= _next && m.Phase != Phase.Halftime && m.Phase != Phase.Fulltime)
         {
-            int end = Rnd() < (m.AttackingTeam == 1 ? 0.45f : 0.75f) ? 0 : 1;
+            int end = Rnd() < (End(m.AttackingTeam) == 1 ? 0.45f : 0.75f) ? 0 : 1;
             if (t < _quiet[end]) end = 1 - end;
             if (t >= _quiet[end])
             {
@@ -322,22 +329,22 @@ public sealed class Terraces
     {
         Hush = MathF.Max(0, Hush - dt / 12);
         // An attack that built and came to nothing (no shot): "aww".
-        for (int team = 0; team < 2; team++)
+        for (int end = 0; end < 2; end++)
         {
-            float d = Danger[team];
-            if (d > _peak[team]) _peak[team] = d;
+            float d = Danger[end];
+            if (d > _peak[end]) _peak[end] = d;
             if (d < 0.3f)
             {
-                if (_peak[team] > 0.75f && t - _shotAt > 4 && m.Phase == Phase.Play) Add(React.Aww, team, 0, _peak[team]);
-                _peak[team] = 0;
+                if (_peak[end] > 0.75f && t - _shotAt > 4 && m.Phase == Phase.Play) Add(React.Aww, end, 0, _peak[end]);
+                _peak[end] = 0;
             }
         }
-        // Time-wasting: their keeper sitting on the ball, or a slow restart of theirs.
-        int held = m.HeldBy;
-        bool theirs = held >= 0 && m.Team[held] == 1;
+        // Time-wasting: the visitors' keeper sitting on the ball, or a slow restart of theirs.
+        int held = m.HeldBy, visitors = End(1);
+        bool theirs = held >= 0 && m.Team[held] == visitors;
         if (!theirs) _heldSince = -1;
         else if (_heldSince < 0) _heldSince = t;
-        bool slow = (theirs && t - _heldSince > 3) || (m.Phase == Phase.SetPiece && m.SetPieceTeam == 1 && m.PhaseT > 4.5f);
+        bool slow = (theirs && t - _heldSince > 3) || (m.Phase == Phase.SetPiece && m.SetPieceTeam == visitors && m.PhaseT > 4.5f);
         if (slow && _jeeredFor < 0)
         {
             Add(React.Jeer, 0, 0, 0.6f, 4);
@@ -356,7 +363,7 @@ public sealed class Terraces
         if ((m.Phase == Phase.Halftime || m.Phase == Phase.Fulltime) && _lastPhase != m.Phase)
         {
             bool full = m.Phase == Phase.Fulltime;
-            int lead = m.Score[0] - m.Score[1];
+            int lead = m.Score[End(0)] - m.Score[End(1)];
             float k = full ? 1 : 0.7f;
             for (int end = 0; end < 2; end++)
             {
@@ -470,7 +477,7 @@ public sealed class Terraces
         double t = T;
         if (e.Goal >= 0)
         {
-            int end = e.Goal, other = 1 - end;
+            int end = End(e.Goal), other = 1 - end;
             Add(React.Erupt, end, 0, 1);
             // Ours: the PA gives the scorer's name and the end roars it back. Theirs: the PA says
             // it flatly, the home end sits stunned, then claps its team back into it.
@@ -491,6 +498,8 @@ public sealed class Terraces
         }
         // The end whose team was pulled up lets the referee hear it, and the other end's
         // loudest let him know it was a foul...
+        foulTeam = End(foulTeam);
+        offsideTeam = End(offsideTeam);
         if (e.Foul == 1 && foulTeam >= 0)
         {
             Add(React.Boo, foulTeam, 0.15, 1);
@@ -509,7 +518,7 @@ public sealed class Terraces
         // A save: the ground gasps, the keeper's end applauds him, the shooter's end groans.
         if (e.Save > 0.5f)
         {
-            int shooter = _shotTeam >= 0 ? _shotTeam : e.LastTouchTeam >= 0 ? 1 - e.LastTouchTeam : 1;
+            int shooter = End(_shotTeam >= 0 ? _shotTeam : e.LastTouchTeam >= 0 ? 1 - e.LastTouchTeam : 1);
             Add(React.Ooh, -1, 0, 1);
             Add(React.Groan, shooter, 0.6, 0.6f);
             Add(React.Applause, 1 - shooter, 1.1, 0.85f, 3.5f);
@@ -517,9 +526,9 @@ public sealed class Terraces
         }
         if (e.Post > 0) Add(React.Ooh, -1, 0, 1);
         // A crunching, clean tackle: the tackler's end gets up for it.
-        if (e.Tackle >= 1 && e.LastTouchTeam >= 0 && Rnd() < (e.LastTouchTeam == 0 ? 0.55f : 0.3f))
+        if (e.Tackle >= 1 && e.LastTouchTeam >= 0 && Rnd() < (End(e.LastTouchTeam) == 0 ? 0.55f : 0.3f))
         {
-            int end = e.LastTouchTeam;
+            int end = End(e.LastTouchTeam);
             Add(React.Cheer, end, 0.15, end == 0 ? 0.7f : 0.5f);
             Add(React.Applause, end, 0.4, 0.5f, 2.2f);
         }
@@ -541,7 +550,7 @@ public sealed class Terraces
     /// <summary>A song to suit the game: cruising, they mock ("olé"); behind, they dig in.</summary>
     void StartSong(int end, MatchSnapshot m)
     {
-        int lead = m.Score[end] - m.Score[1 - end];
+        int lead = m.Score[End(end)] - m.Score[End(1 - end)];
         Chant Pick(params string[] names)
         {
             string name = names[(int)(Rnd() * names.Length) % names.Length];

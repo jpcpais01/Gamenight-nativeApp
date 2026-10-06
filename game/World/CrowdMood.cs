@@ -57,7 +57,8 @@ public sealed class CrowdMood
         _lastPhase = s.Phase;
 
         // Up out of their seats as their team closes in; they stay up a moment after a chance.
-        float d0 = terraces?.Danger[0] ?? 0, d1 = terraces?.Danger[1] ?? 0;
+        // (The terraces work by end; these are by team.)
+        float d0 = terraces?.Danger[Flip ? 1 : 0] ?? 0, d1 = terraces?.Danger[Flip ? 0 : 1] ?? 0;
         float hold = _gaspTeam >= 0 && t - _gaspAt < 2.5 ? 1 : 0;
         float w0 = MathF.Max(Smooth(0.3f, 0.85f, d0), _gaspTeam == 0 ? hold : 0);
         float w1 = MathF.Max(Smooth(0.3f, 0.85f, d1), _gaspTeam == 1 ? hold : 0);
@@ -69,7 +70,7 @@ public sealed class CrowdMood
         // the home end hushed after an away goal; whether the song is the jumping one.
         if (terraces != null)
         {
-            int h = Flip ? 1 : 0, a = 1 - h;
+            const int h = 0, a = 1;
             RenderingServer.GlobalShaderParameterSet("gn_react_home", new Vector4(terraces.Clapping[h], terraces.Jeering[h], terraces.Heads[h], terraces.Fists[h]));
             RenderingServer.GlobalShaderParameterSet("gn_react_away", new Vector4(terraces.Clapping[a], terraces.Jeering[a], terraces.Heads[a], terraces.Fists[a]));
         }

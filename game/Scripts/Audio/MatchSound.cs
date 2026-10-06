@@ -37,7 +37,7 @@ public sealed class MatchSound
             if (s.Post > 0) audio.Post(s.Post);
             if (s.Net > 0) audio.Net(s.Net);
             // Full until the players walk back, then fading (theirs: only the away end, briefly).
-            if (s.Goal >= 0) audio.Goal(drill ? 1.5f : (float)GoalSeq.Back, drill ? 0 : s.Goal);
+            if (s.Goal >= 0) audio.Goal(drill ? 1.5f : (float)GoalSeq.Back, drill ? 0 : Terraces.End(s.Goal));
             bool pen = !drill && PenaltyNoise(s);
             // After their goal the home crowd is stunned: the bed sinks, then comes back.
             float hush = 1 - 0.6f * Terraces.Hush;
