@@ -61,6 +61,12 @@ public sealed partial class Updater : Node
         }
     }
 
+    /// <summary>Ask for the latest release now (the settings' CHECK FOR UPDATES).</summary>
+    public void CheckNow()
+    {
+        if (Now is Stage.None or Stage.Available) Check();
+    }
+
     void Check()
     {
         _next = Every;

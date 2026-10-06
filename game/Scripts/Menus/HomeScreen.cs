@@ -175,6 +175,27 @@ public sealed partial class HomeScreen : PxCanvas
         float lw = Px.Width(Px.Big, "GAMENIGHT", 34);
         Px.Text(this, Px.Small, new Vector2(x0 + lw + 10, y - 4), "FOOTBALL · 11 v 11", 8, Px.InkDim);
         Coins(x1, 14, Club.S.Coins);
+        // Settings: a cog left of the coins.
+        float cw = Px.Width(Px.Big, Px.Thousands(Club.S.Coins), 26) + 44;
+        var g = new Rect2(x1 - cw - 44, 14, 34, 34);
+        bool held = Held("settings");
+        var gr = held ? g.Translated(Vector2.One * 2) : g;
+        Px.Frame(this, gr, new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.9f), Px.Line2, held ? null : Px.Shadow, 2, 3);
+        Cog(gr.GetCenter(), 11);
+        Tap("settings", g, () => _ui.Open(new SettingsModal(_ui)));
+    }
+
+    void Cog(Vector2 c, float r)
+    {
+        var pts = new Vector2[32];
+        for (int i = 0; i < 32; i++)
+        {
+            float a = i / 32f * Mathf.Tau;
+            float rr = (i / 2) % 2 == 0 ? r : r * 0.74f;
+            pts[i] = c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * rr;
+        }
+        DrawColoredPolygon(pts, Px.Ink);
+        DrawColoredPolygon(Px.Ellipse(c, r * 0.36f, r * 0.36f, 12), Px.Hex(0x100e2c));
     }
 
     // ---------------------------------------------------------------- tonight's match
