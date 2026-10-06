@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.67", "Steady pitch lines: a line never draws thinner than a pixel (far ones go a touch paler instead), and with smooth pixels the camera glides freely rather than stepping pixel by pixel, so lines no longer flicker or jitter as it pans."),
         ("0.66", "Steadier picture in motion: every pixel is now four samples blended, so pitch lines, nets and the crowd no longer flicker as the camera moves, and edges look cleaner, still pixel art. SMOOTH PIXELS in the pause menu turns it off if your phone needs the speed."),
         ("0.65", "New stadium builder: the ground from above on the left, and a drawer of tabs below (stands, colour, around) with stand cards you swipe or page through. Five new sets: Nest, Arch, Neon, Adobe and Meadow."),
         ("0.64", "Long chipped through balls (past 50 m) are timed to the runner properly too."),

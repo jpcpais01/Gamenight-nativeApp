@@ -38,6 +38,9 @@ public sealed class MatchCamera
     public int PixelHeight = 270;
     /// <summary>Sub-pixel remainder of the snap, in art pixels.</summary>
     public float SubPixelX, SubPixelY;
+    /// <summary>Snap to whole art pixels (one sample per pixel). Off with smooth pixels: the snap
+    /// only holds the plane the camera looks at still, so everything nearer or farther judders.</summary>
+    public bool Snap = true;
     /// <summary>Point on the pitch the broadcast view frames.</summary>
     public float FocusX => _tx;
     public float FocusZ => _tz;
@@ -319,8 +322,8 @@ public sealed class MatchCamera
         // Snap the look point to whole art pixels; keep the remainder for the display.
         float unit = 2 * dist * MathF.Tan(Mathf.DegToRad(fov) / 2) / PixelHeight;
         float unitZ = unit / MathF.Sin(pitch);
-        float sxp = MathF.Round(_tx / unit) * unit;
-        float szp = MathF.Round(_tz / unitZ) * unitZ;
+        float sxp = Snap ? MathF.Round(_tx / unit) * unit : _tx;
+        float szp = Snap ? MathF.Round(_tz / unitZ) * unitZ : _tz;
         float subX = (_tx - sxp) / unit, subY = (szp - _tz) / unitZ;
         float shX = MathF.Sin((float)_time * 41) * _shake * 0.25f;
         float shY = MathF.Cos((float)_time * 37) * _shake * 0.2f;
