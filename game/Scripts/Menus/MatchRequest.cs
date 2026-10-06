@@ -25,6 +25,11 @@ public sealed class MatchRequest
     /// <summary>An away day (the league): the hosts' crest. The ground dresses in side 1's
     /// colours and crest instead of your club's; null = you're the home side.</summary>
     public GameNight.Club.Crest HostCrest;
+    /// <summary>An away day at a ground built from a plan (a league club's own stadium; Ground "custom").</summary>
+    public GameNight.Grounds.Build.StadiumPlan HostPlan;
+    /// <summary>The hosts' own goal explosion (side 1's); null picks one at random.</summary>
+    public int? HostGoalFx;
+    public bool AwayDay => HostCrest != null;
 }
 
 public sealed class MatchOutcome

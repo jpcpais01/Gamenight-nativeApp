@@ -116,6 +116,9 @@ public sealed class Cutscene
     /// <summary>Every body jumped (a cut): settle feet afresh.</summary>
     public Action OnJump;
 
+    /// <summary>An away day: team 1 are the hosts (their name first, their line-up the home one).</summary>
+    public bool Away;
+
     public void Start(Match m, MatchSnapshot cur, string ground)
     {
         _live = cur;
@@ -152,7 +155,8 @@ public sealed class Cutscene
             var team = m.Teams[t];
             return UI.MatchInfo.Who(team.Players[Math.Clamp(team.Captain, 0, team.Players.Count - 1)]);
         }
-        _caption = new[] { m.Teams[0].Info.Name, "v " + m.Teams[1].Info.Name, "Captains", $"{Name(0)} · {Name(1)}" };
+        int hosts = Away ? 1 : 0;
+        _caption = new[] { m.Teams[hosts].Info.Name, "v " + m.Teams[1 - hosts].Info.Name, "Captains", $"{Name(hosts)} · {Name(1 - hosts)}" };
 
         _shots.Clear();
         // In the tunnel's mouth, looking back in: they wait, then come out at the camera.
@@ -200,7 +204,7 @@ public sealed class Cutscene
             case Kind.Line:
                 Place(_line);
                 OnCaption?.Invoke(_team[shot.Team], "");
-                OnBeat?.Invoke(shot.Team == 0 ? Beat.HomeLine : Beat.AwayLine);
+                OnBeat?.Invoke(shot.Team == (Away ? 1 : 0) ? Beat.HomeLine : Beat.AwayLine);
                 break;
             case Kind.Captains:
                 Place(_line);
@@ -275,7 +279,7 @@ public sealed class Cutscene
                 {
                     _named = best;
                     OnSubtitle?.Invoke(_who.GetValueOrDefault(best, ""));
-                    OnBeat?.Invoke(shot.Team == 0 ? Beat.HomeName : Beat.AwayName);
+                    OnBeat?.Invoke(shot.Team == (Away ? 1 : 0) ? Beat.HomeName : Beat.AwayName);
                 }
                 return;
             }

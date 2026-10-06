@@ -153,8 +153,9 @@ public abstract class Ground
     /// <summary>Builds the ground with this id, in the colours of the match's two clubs (the
     /// home side's shirt for the home fans and the stadium, the visitors' for the away end).
     /// Debug: `-- --ground=id` overrides the id. With a `host` crest it's an away day (the
-    /// league): side 1 are the hosts, so the stadium, the home fans and the badge are theirs.</summary>
-    public static Ground Create(string id, MatchSetup setup = null, Crest host = null)
+    /// league): side 1 are the hosts, so the stadium, the home fans and the badge are theirs;
+    /// a `plan` builds "custom" to it (a league club's own stadium) instead of your club's.</summary>
+    public static Ground Create(string id, MatchSetup setup = null, Crest host = null, Build.StadiumPlan plan = null)
     {
         foreach (var arg in OS.GetCmdlineUserArgs())
             if (arg.StartsWith("--ground=")) id = arg[9..];
@@ -164,7 +165,7 @@ public abstract class Ground
             "old" => new OldGround(),
             "bare" => new BarePitch(),
             "training" => new TrainingGround(),
-            "custom" => new Build.BuiltGround(Club?.S.Stadium, false),
+            "custom" => new Build.BuiltGround(plan ?? Club?.S.Stadium, false),
             "custom:preview" => new Build.BuiltGround(Club?.S.Stadium, true),
             _ => new BigStadium(),
         };

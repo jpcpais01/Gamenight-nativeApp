@@ -21,6 +21,8 @@ uniform vec3 surround = vec3(0.17, 0.33, 0.14);
 global uniform vec3 gn_land;
 uniform vec3 chalk = vec3(0.92, 0.93, 0.88);
 uniform float line_half_width = 0.06;
+// Rendered samples per art pixel, across (2 with smooth pixels on).
+global uniform float gn_ss;
 
 varying vec2 wp;
 
@@ -94,12 +96,14 @@ void fragment() {
 		g = mix(g, vec3(0.13, 0.17, 0.2), puddle * 0.7);
 	}
 
-	// Chalk, filtered by how much of the pixel it covers (as the PWA does): a hard edge made
-	// lines a pixel thick here and two there, and they shimmered as the camera moved. A far
-	// line thinner than a pixel fades to a steady, paler line instead of breaking up.
+	// Chalk, filtered over one whole art pixel. A line never draws thinner than a pixel: one
+	// narrower than that widens to a pixel and pales by as much (the same amount of chalk), so
+	// as the camera moves it glides at a steady brightness instead of flickering between one
+	// pixel, two, or none.
 	float d = lines_dist(p);
-	float aa = fwidth(d) * 0.8 + 0.01;
-	float line = (1.0 - smoothstep(line_half_width - aa, line_half_width + aa, d)) * (1.0 - trackMask);
+	float px = max(fwidth(d) * max(gn_ss, 1.0), 1e-4);
+	float hw = max(line_half_width, px * 0.5);
+	float line = (1.0 - smoothstep(hw - px * 0.5, hw + px * 0.5, d)) * (line_half_width / hw) * (1.0 - trackMask);
 	// Colours above are written in sRGB; the renderer lights in linear.
 	ALBEDO = pow(mix(g, chalk, line), vec3(2.2));
 	ROUGHNESS = 1.0;

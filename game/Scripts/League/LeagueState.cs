@@ -22,8 +22,10 @@ public sealed class LClub
     public List<Card> Squad = new();
     /// <summary>0 balanced, 1 attacking, 2 defensive, 3 counter-attacking.</summary>
     public int Style;
-    /// <summary>The ground id their home matches are played at.</summary>
+    /// <summary>The ground id their home matches were played at before every club had its own (old saves).</summary>
     public string Venue = "big";
+    /// <summary>Their own stadium (see Stadia), drawn up the first time it's needed.</summary>
+    public GameNight.Grounds.Build.StadiumPlan Plan;
     public int Capacity = 30000;
     /// <summary>Came up from below this season.</summary>
     public bool Promoted;
@@ -527,6 +529,19 @@ public sealed class LeagueState
         if (team == 0) return _club.Card(_club.S.Lineup.Slots[Math.Clamp(index, 0, 10)])?.Name ?? "";
         var sq = S.Clubs[f.Other(You)].Squad;
         return index >= 0 && index < sq.Count ? sq[index].Name : "";
+    }
+
+    /// <summary>A club's own stadium, the same on every visit.</summary>
+    public GameNight.Grounds.Build.StadiumPlan PlanOf(int c)
+    {
+        if (c == You) return _club.S.Stadium;
+        var cl = S.Clubs[c];
+        if (cl.Plan?.Sets == null)
+        {
+            cl.Plan = Stadia.Make(cl, RatingOf(cl));
+            Save();
+        }
+        return cl.Plan;
     }
 
     /// <summary>Their best player: the one to watch.</summary>
