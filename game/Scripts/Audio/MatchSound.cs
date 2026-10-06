@@ -32,7 +32,6 @@ public sealed class MatchSound
         {
             audio.SetCrowdLevel(1);
             if (s.KickCount > 0) audio.Kick(s.KickMax);
-            if (s.Bounce > 1.5f) audio.Bounce(s.Bounce);
             if (s.Whistle > 0) audio.Whistle(s.Whistle);
             if (s.Post > 0) audio.Post(s.Post);
             if (s.Net > 0) audio.Net(s.Net);

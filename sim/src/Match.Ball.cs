@@ -622,7 +622,6 @@ public sealed partial class Match
         JudgeOffside(p, false);
         PassTarget = null;
         if (Owner != null && Owner != p) Owner = null;
-        Events.Kicks.Add(M.Clamp(-rv / 25, 0.1, 0.6));
     }
 
     /// <summary>Direction the player wants to take the ball (from stick or AI).</summary>
@@ -684,7 +683,6 @@ public sealed partial class Match
         p.TouchH = 0;
         LastTouch = p;
         JudgeOffside(p);
-        Events.Kicks.Add(0.08);
     }
 
     /// <summary>Extra reach of a leg stretched out for the ball, following the stretch's extension.</summary>

@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.86", "Quieter ball: you only hear it when it is passed, shot, crossed, headed or received. Bounces, dribble touches and deflections are silent now."),
         ("0.85", "Sound settings are volume bars now: MASTER, CROWD, MATCH (ball, whistle, nets, goal explosions) and MENUS, ten steps each in the pause menu. Slide or tap the bars; tap a name to mute it. Saved between sessions."),
         ("0.84", "Phone controllers now pair with a 4-digit code shown on the PC (PHONE CONTROLLER on its home screen). Type it once and the phone remembers it; scanning the PC's QR code pairs by itself. NEW CODE makes every phone pair again."),
         ("0.83", "An iPhone (or any phone) can now be the controller for GameNight on a PC, no app needed: tap PHONE CONTROLLER on the PC's home screen, scan the code with the phone's camera and turn it sideways. Same stick, buttons and swipes, and a touchpad in the menus."),

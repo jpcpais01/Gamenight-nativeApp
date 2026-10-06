@@ -186,19 +186,6 @@ public sealed partial class GameAudio : Node
         _mx.Burst(t, 0.035 + strength * 0.03, FilterType.Highpass, 1600, 0.7f, 0.1f + strength * 0.35f, 1.6f);
     });
 
-    public void Bounce(float speed)
-    {
-        if (speed < 1.2f) return;
-        float s = MathF.Min(1, speed / 12);
-        Do(() =>
-        {
-            double t = _mx.Now;
-            var f = new Param(110).Set(110, t).Exp(45, t + 0.07);
-            var g = new Param(0).Set(0.25f * s, t).Exp(0.0001f, t + 0.1);
-            _mx.Osc(Wave.Sine, t, 0, t + 0.15, g, Bus.Master, f);
-        });
-    }
-
     /// <summary>The referee: 1 a blast, 2 two (half time), 3 three (full time).</summary>
     public void Whistle(int kind) => Do(() =>
     {
