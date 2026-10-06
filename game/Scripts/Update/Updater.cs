@@ -160,6 +160,10 @@ public sealed partial class Updater : Node
             if (Directory.Exists(stage)) Directory.Delete(stage, true);
             ZipFile.ExtractToDirectory(Target, stage);
             File.Delete(Target);
+            // A zip with the game inside one folder (as 0.96 had): copy from that folder.
+            string from = stage;
+            if (!File.Exists(Path.Combine(stage, "GameNight.exe")) && File.Exists(Path.Combine(stage, "GameNight", "GameNight.exe")))
+                from = Path.Combine(stage, "GameNight");
             string script = Path.Combine(Path.GetTempPath(), "gamenight-update.cmd");
             // Paths come in as arguments (the script itself stays ASCII, so a name like João's works).
             File.WriteAllText(script, string.Join("\r\n",
@@ -167,9 +171,10 @@ public sealed partial class Updater : Node
                 ":wait",
                 "tasklist /FI \"PID eq %1\" 2>nul | find \" %1 \" >nul && (ping -n 2 127.0.0.1 >nul & goto wait)",
                 "robocopy \"%~2\" \"%~3\" /E /MOVE /R:10 /W:1 >nul",
+                "rd /s /q \"%~4\" 2>nul",
                 "start \"\" \"%~3\\GameNight.exe\"",
                 "del \"%~f0\"", ""));
-            Process.Start(new ProcessStartInfo("cmd.exe", $"/c \"\"{script}\" {OS.GetProcessId()} \"{stage}\" \"{dir}\"\"")
+            Process.Start(new ProcessStartInfo("cmd.exe", $"/c \"\"{script}\" {OS.GetProcessId()} \"{from}\" \"{dir}\" \"{stage}\"\"")
             {
                 CreateNoWindow = true,
                 UseShellExecute = false,

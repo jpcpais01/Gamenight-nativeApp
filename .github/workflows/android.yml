@@ -241,11 +241,12 @@ jobs:
       - name: Export for Windows
         working-directory: game
         run: |
-          # Everything in one GameNight folder: the .exe needs the data folder beside it.
-          mkdir -p ../build/win/GameNight
-          "$GODOT" --headless --path . --export-release Windows ../build/win/GameNight/GameNight.exe 2>&1 | tee ../build/export-windows.log
-          test -s ../build/win/GameNight/GameNight.exe
-          cd ../build/win && zip -qr "../GameNight-$APP_VERSION-Windows.zip" GameNight && cd ..
+          # Flat: the .exe and its data folder at the zip's top (the in-app updater copies the
+          # zip's top over the game's folder, in every version since 0.89).
+          mkdir -p ../build/win
+          "$GODOT" --headless --path . --export-release Windows ../build/win/GameNight.exe 2>&1 | tee ../build/export-windows.log
+          test -s ../build/win/GameNight.exe
+          cd ../build/win && zip -qr "../GameNight-$APP_VERSION-Windows.zip" . && cd ..
           cp "GameNight-$APP_VERSION-Windows.zip" GameNight-Windows.zip
 
       - name: Upload build log
@@ -277,7 +278,7 @@ jobs:
           append_body: true
           body: |
 
-            On a Windows PC: download GameNight-${{ needs.windows.outputs.version }}-Windows.zip, unzip it and run GameNight.exe in the GameNight folder (keep the folder together).
+            On a Windows PC: download GameNight-${{ needs.windows.outputs.version }}-Windows.zip, unzip it and run GameNight.exe (keep it next to its data folder).
             To use the phone as the controller, tap PLAY ON PC on the phone's home screen (same Wi-Fi).
           files: |
             build/GameNight-${{ needs.windows.outputs.version }}-Windows.zip
