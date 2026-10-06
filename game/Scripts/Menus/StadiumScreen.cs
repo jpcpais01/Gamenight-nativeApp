@@ -18,9 +18,36 @@ public sealed partial class StadiumScreen : PxCanvas
     double _changedAt = -1;
     bool _building;
 
+    // The bottom drawer's tab (stands, colour, around) and its scrolling strip of stand cards.
+    int _tab, _shownSet = -1;
+    readonly Strip _strip;
+
     public StadiumScreen(Menus ui)
     {
         _ui = ui;
+        _strip = new Strip { ClipContents = true, Draw = PaintStrip, Visible = false };
+        AddChild(_strip);
+    }
+
+    /// <summary>A clipped strip that swipes sideways, drawn by its owner.</summary>
+    public sealed partial class Strip : PxCanvas
+    {
+        public Action<Strip> Draw;
+        public Rect2 Area;
+        public Strip() { ScrollAxis = 2; }
+        public float Offset => Scroll;
+        public float Max => ScrollMax;
+        public float Total { set => Content = value; }
+        protected override void Paint() => Draw?.Invoke(this);
+        public void Hit(string k, Rect2 r, Action a) => Tap(k, r, a);
+        public bool IsHeld(string k) => Held(k);
+        public void Page(int dir) => Glide(dir * Size.X * 0.8f);
+        /// <summary>Brings [a, b] into view.</summary>
+        public void Show(float a, float b)
+        {
+            if (a < Scroll) Scroll = a - 8;
+            else if (b > Scroll + Size.X) Scroll = b - Size.X + 8;
+        }
     }
 
     StadiumPlan Plan => _ui.Club.S.Stadium;
@@ -127,6 +154,9 @@ public sealed partial class StadiumScreen : PxCanvas
     public override void _Process(double delta)
     {
         base._Process(delta);
+        _strip.Position = _strip.Area.Position;
+        _strip.Size = _strip.Area.Size;
+        _strip.Visible = !_bare && _tab == 0 && _strip.Area.Size.X > 0;
         if (!IsVisibleInTree()) return;
         // Rebuild once the picks settle (building takes a moment): first a frame saying so.
         if (_building)
@@ -208,97 +238,244 @@ public sealed partial class StadiumScreen : PxCanvas
             if (a > 0) Px.TextC(this, Px.Small, W / 2, H - 20, "TAP TO BRING BACK THE MENU", 8, new Color(1, 1, 1, a), new Color(0, 0, 0, 0.6f * a), 1);
             // SURPRISE ME stays, to keep rolling stadiums with the view clear (a tap on it
             // isn't the tap that brings the menu back).
-            float sw = Px.Width(Px.Big, "SURPRISE ME", 18) + 18;
-            Chip("surprise", new Vector2(W - 16 - sw, 16), "SURPRISE ME", false, Surprise);
+            float bw = Px.Width(Px.Big, "SURPRISE ME", 18) + 18;
+            Chip("surprise", new Vector2(W - 16 - bw, 16), "SURPRISE ME", false, Surprise);
             if (_building || _changedAt >= 0)
                 Px.TextR(this, Px.Big, W - 16, 74, (T % 0.6) < 0.3 ? "BUILDING..." : "BUILDING", 22, Px.Gold, new Color(0, 0, 0, 0.6f), 2);
             return;
         }
-        // The stadium shows through; shade the panels' side so they read.
-        DrawRect(new Rect2(0, 0, 340, H), new Color(14 / 255f, 10 / 255f, 40 / 255f, 0.45f));
-        DrawRect(new Rect2(0, H - 110, W, 110), new Color(14 / 255f, 10 / 255f, 40 / 255f, 0.35f));
+        var (L, R) = Margins();
+        var drawer = Drawer();
+        float DH = drawer.Size.Y;
 
-        BackButton(new Vector2(16, 12), () => _ui.Go(_ui.Home));
-        Title(new Vector2(66, 44), "STADIUM");
-        Px.Text(this, Px.Small, new Vector2(68, 60), "PICK A STAND FOR EACH PLACE", 8, Px.Cyan);
+        // Top bar: back, the title; play here and surprise me on the right.
+        DrawRect(new Rect2(0, 0, W, 66), new Color(14 / 255f, 10 / 255f, 40 / 255f, 0.35f));
+        BackButton(new Vector2(L, 12), () => _ui.Go(_ui.Home));
+        Title(new Vector2(L + 50, 44), "STADIUM");
+        Px.Text(this, Px.Small, new Vector2(L + 52, 60), "TAP A PLACE, THEN PICK ITS STAND", 8, Px.Cyan);
+        GoldButton("play", new Rect2(R - 190, 12, 190, 42), "PLAY HERE  >", 26, () => _ui.App.PlayAt("custom"));
+        float sw = Px.Width(Px.Big, "SURPRISE ME", 18) + 18;
+        Chip("surprise", new Vector2(R - 190 - 12 - sw, 20), "SURPRISE ME", false, Surprise);
+        if (_building || _changedAt >= 0)
+            Px.TextR(this, Px.Big, R, 86, (T % 0.6) < 0.3 ? "BUILDING..." : "BUILDING", 22, Px.Gold, new Color(0, 0, 0, 0.6f), 2);
 
-        var panel = new Rect2(16, 72, 308, H - 72 - 16);
+        // Left: the ground from above, and the place picked.
+        var panel = new Rect2(L, 72, PanelW, H - 72 - 16);
         Px.Frame(this, panel, Px.Glass, Px.Line2, Px.ShadowSoft);
-        PlanMap(new Rect2(panel.Position + new Vector2(14, 12), new Vector2(panel.Size.X - 28, Mathf.Min(176, panel.Size.Y * 0.56f))));
+        float mh = Mathf.Min(196, panel.Size.Y * 0.5f);
+        PlanMap(new Rect2(panel.Position + new Vector2(12, 12), new Vector2(panel.Size.X - 24, mh)));
         var set = Kit.Sets[Plan.Get(Selected)];
-        float ty = panel.Position.Y + 12 + Mathf.Min(176, panel.Size.Y * 0.56f) + 30;
-        Px.Text(this, Px.Small, new Vector2(panel.Position.X + 16, ty - 12), Kit.SlotNames[(int)Selected].ToUpperInvariant(), 8, Px.InkDim);
-        Px.Text(this, Px.Big, new Vector2(panel.Position.X + 16, ty + 14), set.Name, 28, Px.Hex((int)set.Swatch), new Color(0, 0, 0, 0.5f), 2);
-        float ly = Colours(new Rect2(panel.Position.X + 16, ty + 26, panel.Size.X - 32, 0), Plan.Get(Selected)) + 14;
-        // Which sets can hang the club's giant tifo (as the main stand).
-        string tifo = set.CarriesTifo ? "HANGS YOUR GIANT TIFO AS THE MAIN STAND"
-            : Selected == Slot.Main ? "NO GIANT TIFO HERE: " + string.Join(", ", TifoSets()).ToUpperInvariant() + " HANG IT" : null;
-        if (tifo != null)
+        float px = panel.Position.X + 16, tw = panel.Size.X - 32;
+        float ly = panel.Position.Y + 12 + mh + 24;
+        Px.Text(this, Px.Small, new Vector2(px, ly), Kit.SlotNames[(int)Selected].ToUpperInvariant(), 8, Px.InkDim);
+        ly += 28;
+        Px.Text(this, Px.Big, new Vector2(px, ly), Px.Fit(Px.Big, set.Name, 30, tw), 30, Px.Hex((int)Shown(Plan.Get(Selected))).Lightened(0.15f), new Color(0, 0, 0, 0.5f), 2);
+        ly += 18;
+        foreach (var l in Px.Wrap(Px.Small, set.About.ToUpperInvariant(), 8, tw))
         {
-            foreach (var l in Px.Wrap(Px.Small, tifo, 8, panel.Size.X - 32))
-            {
-                Px.Text(this, Px.Small, new Vector2(panel.Position.X + 16, ly), l, 8, set.CarriesTifo ? Px.Gold : Px.InkDim);
-                ly += 13;
-            }
-            ly += 4;
-        }
-        foreach (var l in Px.Wrap(Px.Small, set.About, 8, panel.Size.X - 32))
-        {
-            if (ly > panel.End.Y - 6) break;
-            Px.Text(this, Px.Small, new Vector2(panel.Position.X + 16, ly), l, 8, Px.Ink);
+            if (ly > panel.End.Y - 40) break;
+            Px.Text(this, Px.Small, new Vector2(px, ly), l, 8, Px.Ink);
             ly += 13;
         }
+        string tifo = set.CarriesTifo ? "HANGS YOUR GIANT TIFO AS THE MAIN STAND"
+            : Selected == Slot.Main ? "NO GIANT TIFO ON THIS ONE (LOOK FOR THE FLAG ON A CARD)" : null;
+        if (tifo != null)
+        {
+            ly += 6;
+            if (set.CarriesTifo) TifoBadge(new Vector2(px, ly - 9), false);
+            foreach (var l in Px.Wrap(Px.Small, tifo, 8, tw - (set.CarriesTifo ? 14 : 0)))
+            {
+                if (ly > panel.End.Y - 6) break;
+                Px.Text(this, Px.Small, new Vector2(px + (set.CarriesTifo ? 14 : 0), ly), l, 8, set.CarriesTifo ? Px.Gold : Px.InkDim);
+                ly += 13;
+            }
+        }
 
-        // Top right: play here, and the quick picks.
-        GoldButton("play", new Rect2(W - 16 - 190, 14, 190, 42), "PLAY HERE  >", 26, () => _ui.App.PlayAt("custom"));
-        float cx = W - 16 - 190 - 14;
-        float w2 = Px.Width(Px.Big, "SURPRISE ME", 18) + 18;
-        Chip("surprise", new Vector2(cx - w2, 22), "SURPRISE ME", false, Surprise);
-        cx -= w2 + 10;
-        float w1 = Px.Width(Px.Big, "SAME ALL ROUND", 18) + 18;
-        Chip("same", new Vector2(cx - w1, 22), "SAME ALL ROUND", false, () => All(Plan.Get(Selected)));
-
-        // Under them: what's round the ground, stepped through either way.
-        int area = Surroundings.Clamp(Plan.Area);
-        string an = "AROUND: " + Surroundings.Names[area].ToUpperInvariant();
-        float aw = Px.Width(Px.Big, an, 18) + 18, arrow = Px.Width(Px.Big, ">", 18) + 18;
-        float ax = W - 16 - arrow;
-        Chip("area+", new Vector2(ax, 66), ">", false, () => Around(1));
-        ax -= aw + 6;
-        Chip("area", new Vector2(ax, 66), an, true, () => Around(1));
-        ax -= arrow + 6;
-        Chip("area-", new Vector2(ax, 66), "<", false, () => Around(-1));
-        Px.TextR(this, Px.Small, W - 16, 108, Surroundings.About[area], 8, Px.Ink, new Color(0, 0, 0, 0.6f), 1);
-        if (_building || _changedAt >= 0)
-            Px.TextR(this, Px.Big, W - 16, 140, (T % 0.6) < 0.3 ? "BUILDING..." : "BUILDING", 22, Px.Gold, new Color(0, 0, 0, 0.6f), 2);
-
-        const string hint = "DRAG TO TURN  ·  TWO FINGERS TO MOVE AND ZOOM";
+        // How to move round it, just above the drawer.
+        const string hint = "DRAG TO TURN  ·  TWO FINGERS TO MOVE AND ZOOM  ·  TAP TO HIDE THE MENU";
         float hw = Px.Width(Px.Small, hint, 8) + 16;
-        DrawRect(new Rect2(W - 16 - hw, H - 16 - SetRows * 50 - 22, hw, 16), new Color(14 / 255f, 10 / 255f, 40 / 255f, 0.7f));
-        Px.TextR(this, Px.Small, W - 24, H - 16 - SetRows * 50 - 10, hint, 8, Px.Ink);
+        DrawRect(new Rect2(R - hw, drawer.Position.Y - 22, hw, 16), new Color(14 / 255f, 10 / 255f, 40 / 255f, 0.7f));
+        Px.TextR(this, Px.Small, R - 8, drawer.Position.Y - 10, hint, 8, Px.Ink);
 
-        // The sets along the bottom, five to a row.
-        int rows = (Kit.Sets.Length + 4) / 5, per = (Kit.Sets.Length + rows - 1) / rows;
-        float x0 = 340, x1 = W - 16, gap = 6, ch = 44;
-        float cw = (x1 - x0 - gap * (per - 1)) / per;
+        // The drawer: tabs along its top, the stands, the colours or what's around below.
+        Px.Frame(this, drawer, Px.Glass, Px.Line2, Px.ShadowSoft);
+        Tap("drawer", drawer, null);
+        float tx = drawer.Position.X + 12, ty = drawer.Position.Y + 10;
+        string[] tabs = { $"STANDS  {Kit.Sets.Length}", "COLOUR", "AROUND" };
+        for (int i = 0; i < tabs.Length; i++)
+        {
+            int t = i;
+            tx += Chip("tab" + i, new Vector2(tx, ty), tabs[i], _tab == i, () => _tab = t, 18, 28) + 8;
+        }
+        var body = new Rect2(drawer.Position.X + 12, drawer.Position.Y + 48, drawer.Size.X - 24, DH - 58);
+        switch (_tab)
+        {
+            case 0:
+            {
+                float aw = Px.Width(Px.Big, "SAME ALL ROUND", 18) + 18;
+                Chip("same", new Vector2(drawer.End.X - 12 - aw, ty), "SAME ALL ROUND", false, () => All(Plan.Get(Selected)), 18, 28);
+                // The cards scroll in their own strip; arrows either side page through them.
+                float aw2 = 26;
+                _strip.Area = new Rect2(body.Position.X + aw2 + 6, body.Position.Y, body.Size.X - 2 * (aw2 + 6), body.Size.Y);
+                Arrow("stripL", new Rect2(body.Position.X, body.Position.Y, aw2, body.Size.Y), -1);
+                Arrow("stripR", new Rect2(body.End.X - aw2, body.Position.Y, aw2, body.Size.Y), 1);
+                break;
+            }
+            case 1:
+            {
+                int si = Plan.Get(Selected);
+                Px.TextR(this, Px.Small, drawer.End.X - 14, ty + 18, $"EVERY {Kit.Sets[si].Name.ToUpperInvariant()} STAND IN THE GROUND", 8, Px.InkDim);
+                Colours(body, si);
+                break;
+            }
+            default:
+            {
+                int area = Surroundings.Clamp(Plan.Area);
+                var about = Px.Fit(Px.Small, Surroundings.About[area], 8, drawer.End.X - 14 - tx - 10);
+                Px.TextR(this, Px.Small, drawer.End.X - 14, ty + 18, about, 8, Px.InkDim);
+                Areas(body);
+                break;
+            }
+        }
+    }
+
+    /// <summary>Side margins: the menus keep to the middle of a very wide screen.</summary>
+    (float l, float r) Margins()
+    {
+        float L = Mathf.Max(16, (Size.X - 1640) / 2);
+        return (L, Size.X - L);
+    }
+
+    const float PanelW = 264;
+
+    /// <summary>The drawer along the bottom, right of the plan panel.</summary>
+    Rect2 Drawer()
+    {
+        var (L, R) = Margins();
+        const float DH = 150;
+        return new Rect2(L + PanelW + 16, Size.Y - 16 - DH, R - (L + PanelW + 16), DH);
+    }
+
+    /// <summary>A tall arrow key either side of the cards: pages them along.</summary>
+    void Arrow(string key, Rect2 r, int dir)
+    {
+        bool can = dir < 0 ? _strip.Offset > 1 : _strip.Offset < _strip.Max - 1;
+        bool held = Held(key) && can;
+        var rr = held ? new Rect2(r.Position + new Vector2(1, 1), r.Size) : r;
+        Px.Frame(this, rr, can ? Px.Glass2 : new Color(0, 0, 0, 0.2f), Px.Line2, null, 2, 0);
+        var c = rr.GetCenter();
+        var ink = can ? Px.Ink : Px.InkDim;
+        DrawColoredPolygon(new[] { c + new Vector2(-5 * dir, -9), c + new Vector2(6 * dir, 0), c + new Vector2(-5 * dir, 9) }, ink);
+        Tap(key, r, () => _strip.Page(dir));
+    }
+
+    /// <summary>The stand cards, drawn into the strip (it clips and scrolls them).</summary>
+    void PaintStrip(Strip st)
+    {
+        const float cw = 106, gap = 8;
+        float h = st.Size.Y;
+        st.Total = Kit.Sets.Length * (cw + gap) - gap;
+        // Whenever the place (or its stand) changes, bring its card into view.
+        int now = Plan.Get(Selected);
+        if (now != _shownSet && st.Size.X > 0)
+        {
+            _shownSet = now;
+            st.Show(now * (cw + gap), now * (cw + gap) + cw);
+        }
         for (int i = 0; i < Kit.Sets.Length; i++)
         {
             int idx = i;
             var s = Kit.Sets[i];
-            var r = new Rect2(x0 + i % per * (cw + gap), H - 16 - (rows - i / per) * (ch + gap) + gap, cw, ch);
+            var r = new Rect2(i * (cw + gap) - st.Offset, 0, cw, h - 2);
+            if (r.End.X < -4 || r.Position.X > st.Size.X + 4) continue;
             bool on = Plan.Get(Selected) == i;
-            bool held = Held("set" + i);
+            bool held = st.IsHeld("set" + i);
             var rr = held ? new Rect2(r.Position + new Vector2(2, 2), r.Size) : r;
-            Px.Frame(this, rr, on ? Px.Gold : Px.Glass2, on ? Px.Hex(0xb37400) : Px.Line2, held ? null : Px.ShadowSoft);
-            float sw = Mathf.Clamp(cw - 82, 18, 46);
-            Swatch(new Rect2(rr.Position + new Vector2(7, 7), new Vector2(sw, ch - 14)), i);
-            Px.Text(this, Px.Big, new Vector2(rr.Position.X + sw + 12, rr.GetCenter().Y + 7), Px.Fit(Px.Big, s.Name, 19, cw - sw - 17), 19, on ? Px.Dark : Px.Ink);
-            if (s.CarriesTifo) TifoBadge(new Vector2(rr.End.X - 12, rr.Position.Y + 5), on);
-            Tap("set" + i, r, () => Choose(idx));
+            Px.Frame(st, rr, on ? Px.Gold : Px.Glass2, on ? Px.Hex(0xb37400) : Px.Line2, null, 3, 0);
+            Swatch(st, new Rect2(rr.Position + new Vector2(6, 6), new Vector2(cw - 12, h - 36)), i);
+            Px.TextC(st, Px.Big, rr.GetCenter().X, rr.End.Y - 9, Px.Fit(Px.Big, s.Name.ToUpperInvariant(), 17, cw - 10), 17, on ? Px.Dark : Px.Ink);
+            if (s.CarriesTifo) TifoBadge(st, new Vector2(rr.End.X - 15, rr.Position.Y + 8), false);
+            st.Hit("set" + i, r, () => Choose(idx));
         }
     }
 
-    static int SetRows => (Kit.Sets.Length + 4) / 5;
+    /// <summary>What's round the ground: a card per area, a little view of each.</summary>
+    void Areas(Rect2 body)
+    {
+        int n = Surroundings.Names.Length, now = Surroundings.Clamp(Plan.Area);
+        float gap = 8, cw = (body.Size.X - gap * (n - 1)) / n;
+        for (int i = 0; i < n; i++)
+        {
+            int idx = i;
+            var r = new Rect2(body.Position.X + i * (cw + gap), body.Position.Y, cw, body.Size.Y - 2);
+            bool on = now == i, held = Held("area" + i);
+            var rr = held ? new Rect2(r.Position + new Vector2(2, 2), r.Size) : r;
+            Px.Frame(this, rr, on ? Px.Gold : Px.Glass2, on ? Px.Hex(0xb37400) : Px.Line2, null, 3, 0);
+            AreaView(new Rect2(rr.Position + new Vector2(6, 6), new Vector2(cw - 12, rr.Size.Y - 36)), i);
+            Px.TextC(this, Px.Big, rr.GetCenter().X, rr.End.Y - 9, Px.Fit(Px.Big, Surroundings.Names[i].ToUpperInvariant(), 17, cw - 10), 17, on ? Px.Dark : Px.Ink);
+            Tap("area" + i, r, () => SetArea(idx));
+        }
+    }
+
+    /// <summary>A tiny view of an area: its sky, its land and what stands out in it.</summary>
+    void AreaView(Rect2 r, int area)
+    {
+        float x = r.Position.X, y = r.End.Y, w = r.Size.X, h = r.Size.Y;
+        Vector2 P(float fx, float fy) => new(Mathf.Round(x + fx * w), Mathf.Round(y - fy * h));
+        DrawRect(r, Px.Hex(0x9cc7e8));
+        var land = Px.Hex(area switch { 1 => 0x6b6e6a, 3 => 0x5a6250, 4 => 0x6f9440, 5 => 0x5f8a3e, _ => 0x557a3c });
+        switch (area)
+        {
+            case 1: // towers
+                for (int i = 0; i < 7; i++)
+                {
+                    float hh = 0.35f + 0.5f * Mathf.Abs(Mathf.Sin(i * 2.1f + 0.7f));
+                    DrawRect(new Rect2(P(0.04f + i * 0.135f, hh), new Vector2(w * 0.11f, hh * h)), Px.Hex(i % 2 == 0 ? 0x5f7f8a : 0x404852));
+                }
+                DrawRect(new Rect2(P(0, 0.12f), new Vector2(w, h * 0.12f)), land);
+                break;
+            case 2: // red roofs up to a castle on its hill, the river
+                DrawColoredPolygon(new[] { P(0, 0.2f), P(0.45f, 0.62f), P(0.75f, 0.55f), P(1, 0.3f), P(1, 0), P(0, 0) }, Px.Hex(0x6d8442));
+                DrawRect(new Rect2(P(0.4f, 0.8f), new Vector2(w * 0.12f, h * 0.2f)), Px.Hex(0xa39886));
+                for (int i = 0; i < 6; i++) DrawColoredPolygon(new[] { P(0.05f + i * 0.15f, 0.22f), P(0.12f + i * 0.15f, 0.32f), P(0.19f + i * 0.15f, 0.22f) }, Px.Hex(0xb5522f));
+                DrawRect(new Rect2(P(0, 0.12f), new Vector2(w, h * 0.08f)), Px.Hex(0x2f6a86));
+                break;
+            case 3: // the quay, a crane, cooling towers over the water
+                DrawRect(new Rect2(P(0, 0.35f), new Vector2(w, h * 0.35f)), Px.Hex(0x2f5a6e));
+                DrawColoredPolygon(new[] { P(0.62f, 0.35f), P(0.66f, 0.62f), P(0.72f, 0.62f), P(0.76f, 0.35f) }, Px.Hex(0xc9c3b8));
+                DrawColoredPolygon(new[] { P(0.8f, 0.35f), P(0.84f, 0.58f), P(0.9f, 0.58f), P(0.94f, 0.35f) }, Px.Hex(0xc9c3b8));
+                DrawRect(new Rect2(P(0.2f, 0.9f), new Vector2(3, h * 0.55f)), Px.Hex(0xb8322a));
+                DrawRect(new Rect2(P(0.08f, 0.9f), new Vector2(w * 0.36f, 3)), Px.Hex(0xb8322a));
+                DrawRect(new Rect2(P(0, 0.12f), new Vector2(w, h * 0.12f)), Px.Hex(0x8a4a35));
+                break;
+            case 4: // fields, a turbine
+                for (int i = 0; i < 4; i++) DrawRect(new Rect2(P(0, 0.12f + i * 0.08f + 0.08f), new Vector2(w, h * 0.08f + 1)), Px.Hex(new[] { 0xc8b45e, 0x6f9440, 0xd9c63a, 0x5f8c3c }[i]));
+                DrawRect(new Rect2(P(0.7f, 0.85f), new Vector2(2, h * 0.5f)), Px.Hex(0xf2f2f0));
+                DrawLine(P(0.705f, 0.85f), P(0.62f, 0.95f), Px.Hex(0xf2f2f0), 2);
+                DrawLine(P(0.705f, 0.85f), P(0.8f, 0.9f), Px.Hex(0xf2f2f0), 2);
+                DrawLine(P(0.705f, 0.85f), P(0.69f, 0.7f), Px.Hex(0xf2f2f0), 2);
+                break;
+            case 5: // snowy peaks over a lake
+                DrawColoredPolygon(new[] { P(0, 0.3f), P(0.3f, 0.9f), P(0.55f, 0.45f), P(0.75f, 0.8f), P(1, 0.35f), P(1, 0.2f), P(0, 0.2f) }, Px.Hex(0x4a5a48));
+                DrawColoredPolygon(new[] { P(0.22f, 0.74f), P(0.3f, 0.9f), P(0.38f, 0.74f) }, Px.Hex(0xeef1f4));
+                DrawColoredPolygon(new[] { P(0.69f, 0.68f), P(0.75f, 0.8f), P(0.81f, 0.68f) }, Px.Hex(0xeef1f4));
+                DrawRect(new Rect2(P(0, 0.2f), new Vector2(w, h * 0.12f)), Px.Hex(0x2f6a86));
+                break;
+            default: // a skyline across the bay, a beach
+                for (int i = 0; i < 6; i++) DrawRect(new Rect2(P(0.45f + i * 0.08f, 0.45f + (i % 3) * 0.1f), new Vector2(w * 0.06f, h * (0.12f + (i % 3) * 0.1f))), Px.Hex(0x8a96a3));
+                DrawRect(new Rect2(P(0, 0.33f), new Vector2(w, h * 0.13f)), Px.Hex(0x2f6a86));
+                DrawRect(new Rect2(P(0, 0.2f), new Vector2(w, h * 0.08f)), Px.Hex(0xdcc9a0));
+                break;
+        }
+        DrawRect(new Rect2(P(0, 0.12f), new Vector2(w, h * 0.12f)), land);
+    }
+
+    void SetArea(int area)
+    {
+        if (Surroundings.Clamp(Plan.Area) == area) return;
+        _ui.Club.SetStadiumArea(area);
+        _changedAt = T;
+    }
 
     static IEnumerable<string> TifoSets()
     {
@@ -306,25 +483,26 @@ public sealed partial class StadiumScreen : PxCanvas
     }
 
     /// <summary>A little hanging banner: this set carries the giant tifo.</summary>
-    void TifoBadge(Vector2 p, bool on)
+    void TifoBadge(Vector2 p, bool on) => TifoBadge(this, p, on);
+
+    static void TifoBadge(CanvasItem ci, Vector2 p, bool on)
     {
         var c = on ? Px.Dark : Px.Gold;
-        DrawRect(new Rect2(p, new Vector2(8, 2)), c);
-        DrawColoredPolygon(new[] { p + new Vector2(1, 2), p + new Vector2(7, 2), p + new Vector2(7, 11), p + new Vector2(4, 9), p + new Vector2(1, 11) }, c);
+        ci.DrawRect(new Rect2(p, new Vector2(8, 2)), c);
+        ci.DrawColoredPolygon(new[] { p + new Vector2(1, 2), p + new Vector2(7, 2), p + new Vector2(7, 11), p + new Vector2(4, 9), p + new Vector2(1, 11) }, c);
     }
 
     /// <summary>The set's main colour: its own, the club's, or one of the paints; returns the
     /// row's bottom.</summary>
-    float Colours(Rect2 r, int set)
+    void Colours(Rect2 r, int set)
     {
-        Px.Text(this, Px.Small, new Vector2(r.Position.X, r.Position.Y + 8), $"COLOUR OF EVERY {Kit.Sets[set].Name.ToUpperInvariant()} STAND", 8, Px.InkDim);
-        int per = (Kit.Paints.Length + 1) / 2;
-        float gap = 4, w = (r.Size.X - gap * (per - 1)) / per, h = 20, y0 = r.Position.Y + 14;
+        int n = Kit.Paints.Length;
+        float gap = 6, w = Mathf.Min(64, (r.Size.X - gap * (n - 1)) / n), h = r.Size.Y - 4;
         uint now = Plan.PaintOf(set);
-        for (int i = 0; i < Kit.Paints.Length; i++)
+        for (int i = 0; i < n; i++)
         {
             uint p = Kit.Paints[i];
-            var b = new Rect2(r.Position.X + i % per * (w + gap), y0 + i / per * (h + gap), w, h);
+            var b = new Rect2(r.Position.X + i * (w + gap), r.Position.Y + 2, w, h);
             bool held = Held("paint" + i);
             var bb = held ? new Rect2(b.Position + new Vector2(1, 1), b.Size) : b;
             uint shown = p == 0 ? Kit.Sets[set].Mains[0] : p == Kit.ClubPaint ? (uint)_ui.Club.S.Kit.Main : p;
@@ -334,99 +512,142 @@ public sealed partial class StadiumScreen : PxCanvas
                 var lum = Px.Hex((int)shown).Luminance;
                 Px.TextC(this, Px.Small, bb.GetCenter().X, bb.GetCenter().Y + 4, p == 0 ? "OWN" : "CLUB", 8, lum > 0.5f ? Px.Dark : Px.Ink);
             }
-            if (p == now) Px.Ring(this, bb.Grow(2), (T % 0.8) < 0.4 ? Px.Ink : Px.Gold, 2);
+            if (p == now) Px.Ring(this, bb.Grow(3), (T % 0.8) < 0.4 ? Px.Ink : Px.Gold, 3);
             else Px.Ring(this, bb, new Color(0, 0, 0, 0.5f), 1);
             uint pick = p;
             Tap("paint" + i, b.Grow(gap / 2), () => Recolour(set, pick));
         }
-        return y0 + 2 * (h + gap);
     }
 
     /// <summary>A little elevation of a set: its silhouette in its colour.</summary>
-    void Swatch(Rect2 r, int set)
+    void Swatch(CanvasItem ci, Rect2 r, int set)
     {
         var c = Px.Hex((int)Kit.Sets[set].Swatch);
         var dark = c.Darkened(0.45f);
-        DrawRect(r, new Color(0.05f, 0.04f, 0.14f, 0.85f));
+        ci.DrawRect(r, new Color(0.05f, 0.04f, 0.14f, 0.85f));
         float x = r.Position.X, y = r.End.Y, w = r.Size.X, h = r.Size.Y;
         Vector2 P(float fx, float fy) => new(Mathf.Round(x + fx * w), Mathf.Round(y - fy * h));
         switch (set)
         {
             case 0: // a bowl under a sweeping roof
-                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.2f), P(0.55f, 0.62f), P(1, 0.62f), P(1, 0) }, c);
-                DrawColoredPolygon(new[] { P(0.1f, 0.86f), P(1, 0.72f), P(1, 0.8f), P(0.1f, 0.92f) }, dark);
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.2f), P(0.55f, 0.62f), P(1, 0.62f), P(1, 0) }, c);
+                ci.DrawColoredPolygon(new[] { P(0.1f, 0.86f), P(1, 0.72f), P(1, 0.8f), P(0.1f, 0.92f) }, dark);
                 break;
             case 1: // a low terrace under a pitched roof
-                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.9f, 0.4f), P(0.9f, 0) }, c);
-                DrawColoredPolygon(new[] { P(0.05f, 0.55f), P(0.95f, 0.66f), P(0.95f, 0.6f), P(0.05f, 0.5f) }, dark);
-                for (int i = 1; i < 4; i++) DrawRect(new Rect2(P(0.08f + i * 0.2f, 0.52f + i * 0.02f), new Vector2(2, h * 0.3f)), dark);
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.9f, 0.4f), P(0.9f, 0) }, c);
+                ci.DrawColoredPolygon(new[] { P(0.05f, 0.55f), P(0.95f, 0.66f), P(0.95f, 0.6f), P(0.05f, 0.5f) }, dark);
+                for (int i = 1; i < 4; i++) ci.DrawRect(new Rect2(P(0.08f + i * 0.2f, 0.52f + i * 0.02f), new Vector2(2, h * 0.3f)), dark);
                 break;
             case 2: // two open tiers and a ramp tower
-                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.15f), P(0.4f, 0.4f), P(0.4f, 0.5f), P(0.78f, 0.78f), P(0.82f, 0.78f), P(0.82f, 0) }, c);
-                DrawRect(new Rect2(P(0.88f, 0.95f), new Vector2(Mathf.Max(3, w * 0.06f), h * 0.95f)), dark);
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.15f), P(0.4f, 0.4f), P(0.4f, 0.5f), P(0.78f, 0.78f), P(0.82f, 0.78f), P(0.82f, 0) }, c);
+                ci.DrawRect(new Rect2(P(0.88f, 0.95f), new Vector2(Mathf.Max(3, w * 0.06f), h * 0.95f)), dark);
                 break;
             case 3: // one steep wall and its pylon
-                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.1f), P(0.68f, 0.82f), P(0.72f, 0.82f), P(0.72f, 0) }, c);
-                DrawColoredPolygon(new[] { P(0.12f, 0.88f), P(0.78f, 0.88f), P(0.78f, 0.82f), P(0.12f, 0.82f) }, dark);
-                DrawRect(new Rect2(P(0.8f, 1), new Vector2(Mathf.Max(3, w * 0.05f), h)), c.Lightened(0.2f));
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.1f), P(0.68f, 0.82f), P(0.72f, 0.82f), P(0.72f, 0) }, c);
+                ci.DrawColoredPolygon(new[] { P(0.12f, 0.88f), P(0.78f, 0.88f), P(0.78f, 0.82f), P(0.12f, 0.82f) }, dark);
+                ci.DrawRect(new Rect2(P(0.8f, 1), new Vector2(Mathf.Max(3, w * 0.05f), h)), c.Lightened(0.2f));
                 break;
             case 5: // containers stacked, a crane
-                for (int i = 0; i < 6; i++) DrawRect(new Rect2(P(0.05f + i % 3 * 0.22f, 0.25f + i / 3 * 0.25f), new Vector2(w * 0.2f, h * 0.22f)), Px.Hex(new[] { 0xc0392b, 0x2f7fb8, 0xe0a030, 0x2e8b57, 0xd35400, 0xbdc3c7 }[i]));
-                DrawRect(new Rect2(P(0.8f, 0.95f), new Vector2(3, h * 0.95f)), dark);
-                DrawRect(new Rect2(P(0.45f, 0.95f), new Vector2(w * 0.5f, 3)), dark);
+                for (int i = 0; i < 6; i++) ci.DrawRect(new Rect2(P(0.05f + i % 3 * 0.22f, 0.25f + i / 3 * 0.25f), new Vector2(w * 0.2f, h * 0.22f)), Px.Hex(new[] { 0xc0392b, 0x2f7fb8, 0xe0a030, 0x2e8b57, 0xd35400, 0xbdc3c7 }[i]));
+                ci.DrawRect(new Rect2(P(0.8f, 0.95f), new Vector2(3, h * 0.95f)), dark);
+                ci.DrawRect(new Rect2(P(0.45f, 0.95f), new Vector2(w * 0.5f, 3)), dark);
                 break;
             case 6: // a tier under a swept roof, red pillars
-                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.8f, 0.45f), P(0.8f, 0) }, Px.Hex(0x6e2a22));
-                DrawColoredPolygon(new[] { P(0, 0.62f), P(0.15f, 0.55f), P(0.9f, 0.8f), P(1, 0.72f), P(0.9f, 0.86f), P(0.1f, 0.66f) }, Px.Hex(0x34433f).Lightened(0.2f));
-                for (int i = 0; i < 3; i++) DrawRect(new Rect2(P(0.1f + i * 0.25f, 0.6f), new Vector2(2, h * 0.5f)), c);
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.8f, 0.45f), P(0.8f, 0) }, Px.Hex(0x6e2a22));
+                ci.DrawColoredPolygon(new[] { P(0, 0.62f), P(0.15f, 0.55f), P(0.9f, 0.8f), P(1, 0.72f), P(0.9f, 0.86f), P(0.1f, 0.66f) }, Px.Hex(0x34433f).Lightened(0.2f));
+                for (int i = 0; i < 3; i++) ci.DrawRect(new Rect2(P(0.1f + i * 0.25f, 0.6f), new Vector2(2, h * 0.5f)), c);
                 break;
             case 7: // stepped cream stand and its clock tower
-                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.15f), P(0.55f, 0.55f), P(0.62f, 0.55f), P(0.62f, 0.68f), P(0.7f, 0.68f), P(0.7f, 0) }, c);
-                DrawRect(new Rect2(P(0.75f, 1), new Vector2(w * 0.16f, h)), c);
-                DrawRect(new Rect2(P(0.78f, 0.82f), new Vector2(w * 0.1f, w * 0.1f)), Px.Hex(0xd4a63a));
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.15f), P(0.55f, 0.55f), P(0.62f, 0.55f), P(0.62f, 0.68f), P(0.7f, 0.68f), P(0.7f, 0) }, c);
+                ci.DrawRect(new Rect2(P(0.75f, 1), new Vector2(w * 0.16f, h)), c);
+                ci.DrawRect(new Rect2(P(0.78f, 0.82f), new Vector2(w * 0.1f, w * 0.1f)), Px.Hex(0xd4a63a));
                 break;
             case 8: // black rock, a lava seam, a spire
-                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.1f), P(0.6f, 0.75f), P(0.7f, 0.9f), P(0.8f, 0.7f), P(1, 0) }, Px.Hex(0x3a3533).Lightened(0.15f));
-                DrawRect(new Rect2(P(0.1f, 0.3f), new Vector2(w * 0.5f, 2)), c);
-                DrawColoredPolygon(new[] { P(0.85f, 0), P(0.9f, 1), P(0.95f, 0) }, Px.Hex(0x4d4642).Lightened(0.2f));
-                DrawRect(new Rect2(P(0.88f, 1.0f), new Vector2(4, 3)), Px.Hex(0xffb347));
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.1f), P(0.6f, 0.75f), P(0.7f, 0.9f), P(0.8f, 0.7f), P(1, 0) }, Px.Hex(0x3a3533).Lightened(0.15f));
+                ci.DrawRect(new Rect2(P(0.1f, 0.3f), new Vector2(w * 0.5f, 2)), c);
+                ci.DrawColoredPolygon(new[] { P(0.85f, 0), P(0.9f, 1), P(0.95f, 0) }, Px.Hex(0x4d4642).Lightened(0.2f));
+                ci.DrawRect(new Rect2(P(0.88f, 1.0f), new Vector2(4, 3)), Px.Hex(0xffb347));
                 break;
             case 9: // white tiers under a floating halo
-                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.65f, 0.55f), P(0.7f, 0.55f), P(0.7f, 0) }, Px.Hex(0xe6eaee));
-                DrawRect(new Rect2(P(0.05f, 0.85f), new Vector2(w * 0.85f, 3)), c);
-                DrawRect(new Rect2(P(0.78f, 0.85f), new Vector2(2, h * 0.85f)), Px.Hex(0xe6eaee));
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.65f, 0.55f), P(0.7f, 0.55f), P(0.7f, 0) }, Px.Hex(0xe6eaee));
+                ci.DrawRect(new Rect2(P(0.05f, 0.85f), new Vector2(w * 0.85f, 3)), c);
+                ci.DrawRect(new Rect2(P(0.78f, 0.85f), new Vector2(2, h * 0.85f)), Px.Hex(0xe6eaee));
                 break;
             case 10: // a tier under peaked white fabric on masts
-                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.75f, 0.5f), P(0.75f, 0) }, Px.Hex(0x8d949b));
-                DrawColoredPolygon(new[] { P(0, 0.7f), P(0.3f, 0.95f), P(0.55f, 0.72f), P(0.8f, 0.95f), P(0.95f, 0.78f), P(0.95f, 0.72f), P(0.8f, 0.86f), P(0.55f, 0.64f), P(0.3f, 0.86f), P(0, 0.62f) }, c);
-                DrawRect(new Rect2(P(0.3f, 1), new Vector2(2, h)), dark);
-                DrawRect(new Rect2(P(0.8f, 1), new Vector2(2, h)), dark);
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.75f, 0.5f), P(0.75f, 0) }, Px.Hex(0x8d949b));
+                ci.DrawColoredPolygon(new[] { P(0, 0.7f), P(0.3f, 0.95f), P(0.55f, 0.72f), P(0.8f, 0.95f), P(0.95f, 0.78f), P(0.95f, 0.72f), P(0.8f, 0.86f), P(0.55f, 0.64f), P(0.3f, 0.86f), P(0, 0.62f) }, c);
+                ci.DrawRect(new Rect2(P(0.3f, 1), new Vector2(2, h)), dark);
+                ci.DrawRect(new Rect2(P(0.8f, 1), new Vector2(2, h)), dark);
                 break;
             case 11: // raw concrete, raking frames and a heavy slab
-                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.7f, 0.6f), P(0.7f, 0) }, c);
-                DrawRect(new Rect2(P(0, 0.86f), new Vector2(w * 0.85f, h * 0.1f)), dark);
-                DrawColoredPolygon(new[] { P(0.6f, 0.86f), P(0.66f, 0.86f), P(0.9f, 0.3f), P(0.9f, 0) , P(0.84f, 0), P(0.84f, 0.3f) }, dark);
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.7f, 0.6f), P(0.7f, 0) }, c);
+                ci.DrawRect(new Rect2(P(0, 0.86f), new Vector2(w * 0.85f, h * 0.1f)), dark);
+                ci.DrawColoredPolygon(new[] { P(0.6f, 0.86f), P(0.66f, 0.86f), P(0.9f, 0.3f), P(0.9f, 0) , P(0.84f, 0), P(0.84f, 0.3f) }, dark);
                 break;
             case 12: // three steep stacked tiers in blue and gold
                 for (int i = 0; i < 3; i++)
-                    DrawColoredPolygon(new[] { P(0.12f + i * 0.25f, 0.06f + i * 0.3f), P(0.12f + i * 0.25f, 0.12f + i * 0.3f), P(0.4f + i * 0.25f, 0.34f + i * 0.3f), P(0.4f + i * 0.25f, 0.28f + i * 0.3f) }, i % 2 == 0 ? c : Px.Hex(0xf2c230));
-                DrawRect(new Rect2(P(0.92f, 0.98f), new Vector2(3, h * 0.98f)), dark);
+                    ci.DrawColoredPolygon(new[] { P(0.12f + i * 0.25f, 0.06f + i * 0.3f), P(0.12f + i * 0.25f, 0.12f + i * 0.3f), P(0.4f + i * 0.25f, 0.34f + i * 0.3f), P(0.4f + i * 0.25f, 0.28f + i * 0.3f) }, i % 2 == 0 ? c : Px.Hex(0xf2c230));
+                ci.DrawRect(new Rect2(P(0.92f, 0.98f), new Vector2(3, h * 0.98f)), dark);
                 break;
             case 13: // a timber tier under an arched green roof
-                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.8f, 0.42f), P(0.8f, 0) }, c);
-                DrawColoredPolygon(new[] { P(0, 0.6f), P(0.3f, 0.8f), P(0.65f, 0.86f), P(0.95f, 0.74f), P(0.95f, 0.66f), P(0.65f, 0.78f), P(0.3f, 0.72f), P(0, 0.54f) }, Px.Hex(0x6f8a3c));
-                DrawColoredPolygon(new[] { P(0.48f, 0), P(0.52f, 0), P(0.52f, 0.5f), P(0.6f, 0.78f), P(0.56f, 0.78f), P(0.5f, 0.58f), P(0.44f, 0.76f), P(0.4f, 0.76f), P(0.48f, 0.5f) }, dark);
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.8f, 0.42f), P(0.8f, 0) }, c);
+                ci.DrawColoredPolygon(new[] { P(0, 0.6f), P(0.3f, 0.8f), P(0.65f, 0.86f), P(0.95f, 0.74f), P(0.95f, 0.66f), P(0.65f, 0.78f), P(0.3f, 0.72f), P(0, 0.54f) }, Px.Hex(0x6f8a3c));
+                ci.DrawColoredPolygon(new[] { P(0.48f, 0), P(0.52f, 0), P(0.52f, 0.5f), P(0.6f, 0.78f), P(0.56f, 0.78f), P(0.5f, 0.58f), P(0.44f, 0.76f), P(0.4f, 0.76f), P(0.48f, 0.5f) }, dark);
                 break;
             case 14: // a glowing cushioned bowl
-                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.55f), P(0.3f, 0.8f), P(0.62f, 0.86f), P(0.88f, 0.7f), P(1, 0.4f), P(1, 0) }, Px.Hex(0xe8eef2));
-                for (int i = 0; i < 4; i++) DrawRect(new Rect2(P(0.1f + i * 0.22f, 0.5f), new Vector2(w * 0.12f, 2)), c);
-                DrawRect(new Rect2(P(0.05f, 0.25f), new Vector2(w * 0.9f, 2)), c);
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.55f), P(0.3f, 0.8f), P(0.62f, 0.86f), P(0.88f, 0.7f), P(1, 0.4f), P(1, 0) }, Px.Hex(0xe8eef2));
+                for (int i = 0; i < 4; i++) ci.DrawRect(new Rect2(P(0.1f + i * 0.22f, 0.5f), new Vector2(w * 0.12f, 2)), c);
+                ci.DrawRect(new Rect2(P(0.05f, 0.25f), new Vector2(w * 0.9f, 2)), c);
+                break;
+            case 15: // a red bowl in a woven steel lattice
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.62f, 0.62f), P(0.68f, 0.7f), P(0.68f, 0) }, Px.Hex(0x9e2b25));
+                for (int i = 0; i < 5; i++)
+                {
+                    ci.DrawLine(P(0.06f + i * 0.2f, 0), P(0.3f + i * 0.2f, 0.82f), c, 2);
+                    ci.DrawLine(P(0.3f + i * 0.2f, 0), P(0.06f + i * 0.2f, 0.82f), c, 2);
+                }
+                ci.DrawLine(P(0, 0.82f), P(1, 0.82f), c, 2);
+                break;
+            case 16: // two tiers under a great white arch
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.1f), P(0.4f, 0.3f), P(0.4f, 0.36f), P(0.72f, 0.56f), P(0.76f, 0.56f), P(0.76f, 0) }, Px.Hex(0x3c4450).Lightened(0.25f));
+                ci.DrawColoredPolygon(new[] { P(0.05f, 0.6f), P(0.8f, 0.6f), P(0.8f, 0.55f), P(0.05f, 0.56f) }, Px.Hex(0x2e333a).Lightened(0.3f));
+                for (int i = 0; i < 12; i++)
+                {
+                    float a0 = i / 12f * Mathf.Pi, a1 = (i + 1) / 12f * Mathf.Pi;
+                    ci.DrawLine(P(0.5f - 0.48f * Mathf.Cos(a0), 0.98f * Mathf.Sin(a0)), P(0.5f - 0.48f * Mathf.Cos(a1), 0.98f * Mathf.Sin(a1)), c, 3);
+                }
+                break;
+            case 17: // a black box striped with neon
+            {
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.7f, 0.66f), P(0.76f, 0.66f), P(0.76f, 0.86f), P(0.06f, 0.86f), P(0.06f, 0.8f), P(0.84f, 0.8f), P(0.84f, 0) }, Px.Hex(0x18191d).Lightened(0.12f));
+                var neon = Px.Hex(_ui.Club.S.Kit.Main).Lightened(0.2f);
+                for (int i = 0; i < 4; i++) ci.DrawRect(new Rect2(P(0.76f, 0.16f + i * 0.17f), new Vector2(w * 0.08f, 2)), neon);
+                ci.DrawRect(new Rect2(P(0.06f, 0.84f), new Vector2(w * 0.78f, 2)), neon);
+                break;
+            }
+            case 18: // mud brick, pinnacles, beams poking out
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.62f, 0.5f), P(0.62f, 0.62f), P(0.74f, 0.62f), P(0.74f, 0) }, c);
+                for (int i = 0; i < 3; i++)
+                {
+                    float px = 0.64f + i * 0.045f;
+                    ci.DrawColoredPolygon(new[] { P(px - 0.018f, 0.62f), P(px, 0.76f), P(px + 0.018f, 0.62f) }, c);
+                    ci.DrawRect(new Rect2(P(0.74f, 0.18f + i * 0.15f), new Vector2(w * 0.07f, 2)), Px.Hex(0x4f3420));
+                }
+                ci.DrawColoredPolygon(new[] { P(0.84f, 0), P(0.86f, 0.9f), P(0.9f, 1), P(0.94f, 0.9f), P(0.96f, 0) }, c.Darkened(0.15f));
+                break;
+            case 19: // grass banks and a tree
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.1f), P(0.55f, 0.3f), P(0.62f, 0.34f), P(1, 0.1f), P(1, 0) }, c);
+                ci.DrawRect(new Rect2(P(0, 0.14f), new Vector2(w * 0.3f, 2)), Px.Hex(0xebe7dc));
+                ci.DrawRect(new Rect2(P(0.76f, 0.5f), new Vector2(3, h * 0.3f)), Px.Hex(0x5a4030));
+                ci.DrawCircle(P(0.77f, 0.62f), h * 0.2f, Px.Hex(0x3f6e30));
+                ci.DrawRect(new Rect2(P(0.4f, 0.9f), new Vector2(2, h * 0.65f)), Px.Hex(0x8a8f96));
+                ci.DrawRect(new Rect2(P(0.37f, 0.92f), new Vector2(8, 4)), Px.Hex(0xfff2c8));
                 break;
             default: // walls, battlements and a keep
-                DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.62f, 0.55f), P(0.62f, 0.6f), P(0.7f, 0.6f), P(0.7f, 0) }, c);
-                for (int i = 0; i < 4; i++) DrawRect(new Rect2(P(0.6f + (i % 2) * 0.06f, 0.68f), new Vector2(3, 3)), c);
-                DrawRect(new Rect2(P(0.78f, 0.78f), new Vector2(w * 0.14f, h * 0.78f)), c);
-                DrawColoredPolygon(new[] { P(0.76f, 0.78f), P(0.94f, 0.78f), P(0.85f, 1) }, Px.Hex(_ui.Club.S.Kit.Main));
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.62f, 0.55f), P(0.62f, 0.6f), P(0.7f, 0.6f), P(0.7f, 0) }, c);
+                for (int i = 0; i < 4; i++) ci.DrawRect(new Rect2(P(0.6f + (i % 2) * 0.06f, 0.68f), new Vector2(3, 3)), c);
+                ci.DrawRect(new Rect2(P(0.78f, 0.78f), new Vector2(w * 0.14f, h * 0.78f)), c);
+                ci.DrawColoredPolygon(new[] { P(0.76f, 0.78f), P(0.94f, 0.78f), P(0.85f, 1) }, Px.Hex(_ui.Club.S.Kit.Main));
                 break;
         }
     }
@@ -484,7 +705,7 @@ public sealed partial class StadiumScreen : PxCanvas
         Piece(Slot.HomeNear, Quarter(-cx, cz, 0.5f * Mathf.Pi), Hit(-cx - o, cz, -cx, cz + o));
         Px.TextC(this, Px.Small, M(0, -bz - D / 2).X, M(0, -bz - D / 2).Y + 4, "MAIN", 8, Px.Dark);
         Px.TextC(this, Px.Small, M(0, bz + D / 2).X, M(0, bz + D / 2).Y + 4, "NEAR SIDE", 8, Px.Dark);
-        Px.TextC(this, Px.Small, M(-bx - D / 2, 0).X, M(-bx - D / 2, 0).Y + 4, "HOME", 8, Px.Dark);
-        Px.TextC(this, Px.Small, M(bx + D / 2, 0).X, M(bx + D / 2, 0).Y + 4, "AWAY", 8, Px.Dark);
+        for (int i = 0; i < 4; i++) Px.TextC(this, Px.Small, M(-bx - D / 2, 0).X, M(-bx - D / 2, 0).Y + 4 + (i - 1.5f) * 10, "HOME"[i].ToString(), 8, Px.Dark);
+        for (int i = 0; i < 4; i++) Px.TextC(this, Px.Small, M(bx + D / 2, 0).X, M(bx + D / 2, 0).Y + 4 + (i - 1.5f) * 10, "AWAY"[i].ToString(), 8, Px.Dark);
     }
 }

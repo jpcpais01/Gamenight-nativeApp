@@ -79,6 +79,9 @@ public abstract partial class PxCanvas : Control
         }
     }
 
+    /// <summary>Glide the scroll about `px` (it eases to a stop).</summary>
+    protected void Glide(float px) => _vel = px * 3.22f;
+
     public void ResetScroll()
     {
         Scroll = 0;

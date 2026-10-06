@@ -18,6 +18,7 @@ namespace GameNight.Grounds.Build;
 public sealed class BuiltGround : Ground
 {
     readonly StadiumPlan _plan;
+    public StadiumPlan Plan => _plan;
     readonly bool _preview;
     readonly List<Vector3> _seen = new(), _unseen = new();
     readonly List<PathPt> _front = new();

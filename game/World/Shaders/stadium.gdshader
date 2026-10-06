@@ -11,7 +11,7 @@ render_mode unshaded, cull_disabled, shadows_disabled, depth_draw_opaque;
 const float LOOK_ROOF = 1.0, LOOK_GLASS = 2.0, LOOK_CURTAIN = 3.0, LOOK_FASCIA = 4.0, LOOK_RIBBON = 5.0,
 	LOOK_LAMP = 6.0, LOOK_ROOFLIGHT = 7.0, LOOK_BOARD = 8.0, LOOK_TIER = 9.0, LOOK_SCREEN = 10.0,
 	LOOK_CLOTH = 11.0, LOOK_STIPPLE = 12.0, LOOK_UNLIT = 13.0, LOOK_ARCADE = 14.0, LOOK_COFFER = 15.0, LOOK_WALL = 16.0, LOOK_BRICK = 17.0,
-	LOOK_DECAL = 18.0, LOOK_HOUSE = 19.0, LOOK_TOWER = 20.0, LOOK_SKYLINE = 21.0, LOOK_WATER = 22.0, LOOK_ROAD = 23.0, LOOK_CUSHION = 24.0;
+	LOOK_DECAL = 18.0, LOOK_HOUSE = 19.0, LOOK_TOWER = 20.0, LOOK_SKYLINE = 21.0, LOOK_WATER = 22.0, LOOK_ROAD = 23.0, LOOK_CUSHION = 24.0, LOOK_NEON = 25.0;
 
 // The near stand's own draw (Ground.Near): cut where it would hide the pitch.
 uniform bool near_cut = false;
@@ -231,6 +231,16 @@ void fragment() {
 		float seam = 1.0 - step(0.1, edge);
 		alb = mix(alb * (0.85 + 0.25 * edge), vec3(0.25), seam);
 		emis = mix(gn_home, vec3(1.0), 0.15) * (1.0 - seam) * (0.3 + 0.7 * edge) * gn_flood * 0.9;
+	} else if (look == LOOK_NEON) {
+		// A black media facade striped with neon tubes (every 2.4 m): a slow wave of light runs
+		// along them in the home colour (par 1: white), racing after a goal.
+		float band = floor(uv.y / 2.4);
+		float tube = step(abs(fract(uv.y / 2.4) - 0.5) * 2.4, 0.3);
+		float goal = step(0.0, gn_goal.x) * (1.0 - smoothstep(6.0, 10.0, gn_goal.y));
+		float wave = 0.35 + 0.65 * smoothstep(-0.2, 1.0, sin(uv.x * 0.09 - TIME * (1.4 + goal * 6.0) + band * 0.7));
+		vec3 c = par > 0.5 ? vec3(0.9, 0.95, 1.0) : mix(gn_home, vec3(1.0), 0.1) * 1.2;
+		alb = mix(alb, c * 0.5, tube);
+		emis = c * tube * wave * (0.12 + gn_flood * 1.1);
 	} else if (look == LOOK_UNLIT) {
 		emis = alb;
 		alb = vec3(0.0);

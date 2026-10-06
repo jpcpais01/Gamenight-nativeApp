@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.65", "New stadium builder: the ground from above on the left, and a drawer of tabs below (stands, colour, around) with stand cards you swipe or page through. Five new sets: Nest, Arch, Neon, Adobe and Meadow."),
         ("0.64", "Long chipped through balls (past 50 m) are timed to the runner properly too."),
         ("0.63", "Through balls rethought: the ball and your runner now arrive at the same moment, every time. Along his run, each strike pace has one spot where they meet; the hold picks how deep, and a long hold now looks for the deeper runner, a tap the nearer one."),
         ("0.62", "The loading screen is free of crowd noise too: the crowd stays silent from launch until a real match starts. The splash keeps its own sounds."),
