@@ -160,6 +160,7 @@ public partial class Main : Node
         }
         if (Request?.Drill != null)
         {
+            _pause.Training = true;
             // The drill has its own board; the match HUD stays for the aim and the power bars.
             _hud.OverlayOnly = true;
             _drillHud = new DrillHud();
@@ -174,6 +175,8 @@ public partial class Main : Node
         }
 
         NewMatch();
+        // Debug: `-- --pause` opens the pause menu straight away.
+        if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--pause") >= 0) _pause.Open();
     }
 
     /// <summary>A fresh match (first launch, or Restart from the pause menu).</summary>

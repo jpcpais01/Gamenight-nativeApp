@@ -4,8 +4,9 @@ using Godot;
 namespace GameNight.UI;
 
 /// <summary>
-/// The pause button (top right) and the pause menu, as the PWA has them: the match dims, a
-/// small card in the middle with Resume and Restart full width and the settings two by two.
+/// The pause button (top right) and the pause menu: the match dims behind one card, what to do
+/// (resume, restart, leave) on the left and the settings on the right in sections (picture,
+/// match, performance), each a tile showing its value that moves on to the next with a tap.
 /// </summary>
 public sealed partial class PauseMenu : Control
 {
@@ -28,7 +29,9 @@ public sealed partial class PauseMenu : Control
 
     readonly Button _pause;
     readonly Control _menu;
-    readonly VBoxContainer _card;
+    readonly HBoxContainer _card;
+    readonly Label _title;
+    readonly Button _restart;
     readonly Button _foul;
     readonly Button _camera, _graphics, _pixels, _weather, _fps, _limit, _sound, _smooth, _leave, _report;
 
@@ -68,70 +71,93 @@ public sealed partial class PauseMenu : Control
         AddChild(_pause);
 
         // The dimmed match behind the card; taps on it do nothing.
-        _menu = new ColorRect { Color = new Color(16 / 255f, 22 / 255f, 18 / 255f, 0.6f), Visible = false, MouseFilter = MouseFilterEnum.Stop };
+        _menu = new ColorRect { Color = new Color(8 / 255f, 12 / 255f, 10 / 255f, 0.7f), Visible = false, MouseFilter = MouseFilterEnum.Stop };
         _menu.SetAnchorsPreset(LayoutPreset.FullRect);
         AddChild(_menu);
         var centre = new CenterContainer { MouseFilter = MouseFilterEnum.Ignore };
         centre.SetAnchorsPreset(LayoutPreset.FullRect);
         _menu.AddChild(centre);
-        var card = _card = new VBoxContainer { CustomMinimumSize = new Vector2(320, 0) };
-        card.AddThemeConstantOverride("separation", 5);
-        centre.AddChild(card);
 
-        var title = new Label { Text = "PAUSED", HorizontalAlignment = HorizontalAlignment.Center };
-        title.AddThemeFontOverride("font", Style.Font(true, 20 * 0.04f));
-        title.AddThemeFontSizeOverride("font_size", 20);
-        title.AddThemeColorOverride("font_color", Style.Ink);
-        card.AddChild(title);
+        // One card, two columns: what to do on the left, the settings by section on the right.
+        var panel = new PanelContainer();
+        var bg = Flat(Style.PanelSolid, 10, new Color(Style.Ink, 0.1f), 1, 18, 16);
+        bg.ShadowColor = new Color(0, 0, 0, 0.45f);
+        bg.ShadowSize = 18;
+        panel.AddThemeStyleboxOverride("panel", bg);
+        centre.AddChild(panel);
+        var cols = _card = new HBoxContainer();
+        cols.AddThemeConstantOverride("separation", 18);
+        panel.AddChild(cols);
 
+        var left = new VBoxContainer { CustomMinimumSize = new Vector2(190, 0) };
+        left.AddThemeConstantOverride("separation", 7);
+        cols.AddChild(left);
+        _title = new Label { Text = "PAUSED" };
+        _title.AddThemeFontOverride("font", Style.Font(true, 30 * 0.04f));
+        _title.AddThemeFontSizeOverride("font_size", 30);
+        _title.AddThemeColorOverride("font_color", Style.Ink);
+        left.AddChild(_title);
+        var bar = new ColorRect { Color = Style.Accent, CustomMinimumSize = new Vector2(34, 3), SizeFlagsHorizontal = SizeFlags.ShrinkBegin };
+        left.AddChild(bar);
+        left.AddChild(new Control { CustomMinimumSize = new Vector2(0, 8) });
         var resume = Solid("RESUME");
         resume.Pressed += Close;
-        card.AddChild(resume);
-        var restart = Ghost("RESTART MATCH");
-        restart.Pressed += () => { Close(); Restart?.Invoke(); };
-        card.AddChild(restart);
+        left.AddChild(resume);
+        _restart = Ghost("RESTART MATCH");
+        _restart.Pressed += () => { Close(); Restart?.Invoke(); };
+        left.AddChild(_restart);
         _leave = Ghost("LEAVE MATCH");
         _leave.Pressed += () => { _menu.Visible = false; Leave?.Invoke(); };
-        card.AddChild(_leave);
+        left.AddChild(_leave);
+        left.AddChild(new Control { SizeFlagsVertical = SizeFlags.ExpandFill });
+        _report = Ghost("SAVE PERFORMANCE REPORT");
+        _report.Pressed += () => { if (SaveReport != null) _report.Text = SaveReport(); };
+        left.AddChild(_report);
 
-        _camera = Ghost("");
-        _camera.Pressed += () => { MatchSettings.Camera = (MatchSettings.Camera + 1) % 3; Changed(); };
-        _graphics = Ghost("");
-        _graphics.Pressed += () => { MatchSettings.Fast = !MatchSettings.Fast; Changed(); };
-        card.AddChild(Row(_camera, _graphics));
+        cols.AddChild(new ColorRect { Color = new Color(Style.Ink, 0.08f), CustomMinimumSize = new Vector2(1, 0) });
 
-        _pixels = Ghost("");
-        _pixels.Pressed += NextPixels;
-        _weather = Ghost("");
-        _weather.Pressed += () => { CycleWeather?.Invoke(); Labels(); };
-        _smooth = Ghost("");
-        _smooth.Pressed += () => { MatchSettings.Smooth = !MatchSettings.Smooth; Changed(); };
-        card.AddChild(Row(_pixels, _smooth));
-        card.AddChild(Row(_weather));
-        _fps = Ghost("");
-        // Off, on, then on with the breakdown of where the time goes.
-        _fps.Pressed += () =>
-        {
-            if (!MatchSettings.ShowFps) MatchSettings.ShowFps = true;
-            else if (!MatchSettings.Profile) MatchSettings.Profile = true;
-            else MatchSettings.ShowFps = MatchSettings.Profile = false;
-            Changed();
-        };
-        _sound = Ghost("");
-        _sound.Pressed += () => { MatchSettings.Sound = !MatchSettings.Sound; Changed(); };
-        card.AddChild(Row(_fps, _sound));
-        _limit = Ghost("");
-        _limit.Pressed += () =>
+        var right = new VBoxContainer { CustomMinimumSize = new Vector2(330, 0) };
+        right.AddThemeConstantOverride("separation", 4);
+        cols.AddChild(right);
+
+        _camera = Tile("CAMERA", () => { MatchSettings.Camera = (MatchSettings.Camera + 1) % 3; Changed(); });
+        _pixels = Tile("PIXEL SIZE", NextPixels);
+        _smooth = Tile("SMOOTH PIXELS", () => { MatchSettings.Smooth = !MatchSettings.Smooth; Changed(); });
+        _graphics = Tile("SHADOWS", () => { MatchSettings.Fast = !MatchSettings.Fast; Changed(); });
+        Section(right, "PICTURE", _camera, _pixels, _smooth, _graphics);
+
+        _weather = Tile("WEATHER", () => { CycleWeather?.Invoke(); Labels(); });
+        _sound = Tile("SOUND", () => { MatchSettings.Sound = !MatchSettings.Sound; Changed(); });
+        Section(right, "MATCH", _weather, _sound);
+
+        _limit = Tile("FPS LIMIT", () =>
         {
             var caps = MatchSettings.FpsCaps;
             MatchSettings.FpsCap = caps[(Array.IndexOf(caps, MatchSettings.FpsCap) + 1) % caps.Length];
             MatchSettings.ApplyFpsCap();
             Changed();
-        };
-        _report = Ghost("SAVE PERFORMANCE REPORT");
-        _report.Pressed += () => { if (SaveReport != null) _report.Text = SaveReport(); };
-        card.AddChild(Row(_limit, _report));
+        });
+        // Off, on, then on with the breakdown of where the time goes.
+        _fps = Tile("FPS COUNTER", () =>
+        {
+            if (!MatchSettings.ShowFps) MatchSettings.ShowFps = true;
+            else if (!MatchSettings.Profile) MatchSettings.Profile = true;
+            else MatchSettings.ShowFps = MatchSettings.Profile = false;
+            Changed();
+        });
+        Section(right, "PERFORMANCE", _limit, _fps);
         Labels();
+    }
+
+    /// <summary>Training: the left column's actions are for the drill.</summary>
+    public bool Training
+    {
+        set
+        {
+            _title.Text = value ? "TRAINING" : "PAUSED";
+            _restart.Text = value ? "RESTART DRILL" : "RESTART MATCH";
+            _leave.Text = value ? "END TRAINING" : "LEAVE MATCH";
+        }
     }
 
     public override void _Process(double delta)
@@ -142,7 +168,6 @@ public sealed partial class PauseMenu : Control
         _pause.Position = new Vector2(Size.X - 14 - r - _pause.Size.X, 10 + t);
         _foul.Visible = Foul != null && FoulShown && !_menu.Visible;
         if (_foul.Visible) _foul.Position = new Vector2(Size.X - 60 - r - _foul.Size.X, 10 + t);
-        _card.CustomMinimumSize = new Vector2(Math.Min(340, Size.X - 32), 0);
     }
 
     public void Open()
@@ -203,33 +228,76 @@ public sealed partial class PauseMenu : Control
 
     void Labels()
     {
-        _camera.Text = "CAMERA: " + CameraNames[Math.Clamp(MatchSettings.Camera, 0, 2)].ToUpperInvariant();
-        _graphics.Text = "GRAPHICS: " + (MatchSettings.Fast ? "FAST" : "FULL");
+        Value(_camera, CameraNames[Math.Clamp(MatchSettings.Camera, 0, 2)]);
+        Value(_graphics, MatchSettings.Fast ? "Off" : "On");
         int h = MatchSettings.Pixels > 0 ? MatchSettings.Pixels : CurrentHeight();
         int scale = Math.Max(1, (int)MathF.Round(Render.PixelView.ScreenPixels().Y / (float)h));
-        _pixels.Text = $"PIXELS: {h} · {scale}X";
-        _fps.Text = "FPS COUNTER: " + (!MatchSettings.ShowFps ? "OFF" : MatchSettings.Profile ? "DETAIL" : "ON");
-        _limit.Text = $"FPS LIMIT: {MatchSettings.FpsCap}";
-        _smooth.Text = "SMOOTH PIXELS: " + (MatchSettings.Smooth ? "ON" : "OFF");
-        _sound.Text = "SOUND: " + (MatchSettings.Sound ? "ON" : "OFF");
-        _weather.Visible = WeatherName != null;
+        Value(_pixels, $"{h} · {scale}x");
+        Value(_smooth, MatchSettings.Smooth ? "On" : "Off");
+        Value(_fps, !MatchSettings.ShowFps ? "Off" : MatchSettings.Profile ? "Detail" : "On");
+        Value(_limit, MatchSettings.FpsCap.ToString());
+        Value(_sound, MatchSettings.Sound ? "On" : "Off");
+        _weather.Disabled = WeatherName == null;
+        Value(_weather, WeatherName != null ? WeatherName() : "—");
         _report.Visible = MatchSettings.ShowFps && MatchSettings.Profile && SaveReport != null;
         _report.Text = "SAVE PERFORMANCE REPORT";
-        if (WeatherName != null) _weather.Text = "MATCH: " + WeatherName().ToUpperInvariant();
     }
 
     // ------------------------------------------------------------------ look
 
-    static HBoxContainer Row(params Control[] items)
+    /// <summary>A section: a small heading, then its settings two to a row.</summary>
+    static void Section(VBoxContainer into, string name, params Button[] tiles)
     {
-        var row = new HBoxContainer();
-        row.AddThemeConstantOverride("separation", 5);
-        foreach (var c in items)
+        if (into.GetChildCount() > 0) into.AddChild(new Control { CustomMinimumSize = new Vector2(0, 4) });
+        var head = new Label { Text = name };
+        head.AddThemeFontOverride("font", Style.Font(true, 10 * 0.2f));
+        head.AddThemeFontSizeOverride("font_size", 10);
+        head.AddThemeColorOverride("font_color", new Color(Style.Accent, 0.85f));
+        into.AddChild(head);
+        var grid = new GridContainer { Columns = 2 };
+        grid.AddThemeConstantOverride("h_separation", 6);
+        grid.AddThemeConstantOverride("v_separation", 6);
+        foreach (var t in tiles)
         {
-            c.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-            row.AddChild(c);
+            t.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            grid.AddChild(t);
         }
-        return row;
+        into.AddChild(grid);
+    }
+
+    readonly System.Collections.Generic.Dictionary<Button, (string name, string value)> _tiles = new();
+
+    /// <summary>A setting: its name small on the left, what it's set to on the right; a tap
+    /// moves it on to the next choice.</summary>
+    Button Tile(string name, Action next)
+    {
+        var b = new Button { FocusMode = FocusModeEnum.None, CustomMinimumSize = new Vector2(0, 36) };
+        var fill = new Color(Style.Ink, 0.06f);
+        foreach (var st in new[] { "normal", "hover", "focus" }) b.AddThemeStyleboxOverride(st, Flat(fill, 6));
+        b.AddThemeStyleboxOverride("pressed", Flat(new Color(Style.Ink, 0.16f), 6));
+        b.AddThemeStyleboxOverride("disabled", Flat(new Color(Style.Ink, 0.03f), 6));
+        _tiles[b] = (name, "");
+        b.Pressed += next;
+        b.Draw += () =>
+        {
+            var (n, v) = _tiles[b];
+            float k = b.Disabled ? 0.4f : 1;
+            var r = new Rect2(Vector2.Zero, b.Size);
+            Style.Text(b, Style.Font(false, 0.6f), n, new Rect2(12, 0, r.Size.X, r.Size.Y), 12, new Color(Style.InkDim, Style.InkDim.A * k), false);
+            var vf = Style.Font(true, 0.5f);
+            float w = Style.Width(vf, v, 15);
+            Style.Text(b, vf, v, new Rect2(r.Size.X - 22 - w, 0, w, r.Size.Y), 15, new Color(Style.Ink, k), false);
+            // The chevron: tap for the next.
+            float cx = r.Size.X - 12, cy = r.Size.Y / 2;
+            b.DrawPolyline(new[] { new Vector2(cx - 3, cy - 4), new Vector2(cx, cy), new Vector2(cx - 3, cy + 4) }, new Color(Style.Accent, 0.8f * k), 1.5f, true);
+        };
+        return b;
+    }
+
+    void Value(Button tile, string value)
+    {
+        _tiles[tile] = (_tiles[tile].name, value.ToUpperInvariant());
+        tile.QueueRedraw();
     }
 
     static StyleBoxFlat Flat(Color bg, int radius, Color? border = null, float bw = 0, float padX = 0, float padY = 0)
