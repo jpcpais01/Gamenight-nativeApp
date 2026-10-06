@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.69", "Stadiums sit properly in their surroundings: a city superblock downtown, a stone square in the old town, a hedged field in the countryside, a valley road in the Alps, no more oval ring road. Three new areas: an Alentejo hill town, a Norwegian fjord and a tropical bay with a hillside favela."),
         ("0.68", "League away days done right: every league club has its own stadium, in its colours and the same on every visit, with its own goal explosion. The home end now cheers the hosts: its songs, roars, PA scorer call, the crowd shot after a goal and the walk-out all follow the real home side."),
         ("0.67", "Steady pitch lines: a line never draws thinner than a pixel (far ones go a touch paler instead), and with smooth pixels the camera glides freely rather than stepping pixel by pixel, so lines no longer flicker or jitter as it pans."),
         ("0.66", "Steadier picture in motion: every pixel is now four samples blended, so pitch lines, nets and the crowd no longer flicker as the camera moves, and edges look cleaner, still pixel art. SMOOTH PIXELS in the pause menu turns it off if your phone needs the speed."),
