@@ -618,6 +618,34 @@ public static class Kick
         v = v0r + (v1r - v0r) * k;
     }
 
+    /// <summary>A lofted through ball coming down at (tx, tz): steeper the further it goes.</summary>
+    public static KickResult ThroughLob(V3 from, double tx, double tz) =>
+        SolveLofted(from, tx, tz, M.Clamp(22 + M.Dist2D(from.X, from.Z, tx, tz) * 0.3, 26, 40), 45, 0);
+
+    static double[]? lobTimes;
+
+    /// <summary>Flight time of a ThroughLob that comes down `dist` metres away (table every 2 m, 0..80).</summary>
+    public static double ThroughLobTime(double dist)
+    {
+        var t = lobTimes;
+        if (t == null)
+        {
+            lock (tableLock)
+            {
+                if (lobTimes == null)
+                {
+                    var a = new double[41];
+                    for (int i = 0; i < a.Length; i++) a[i] = i == 0 ? 0 : ThroughLob(new V3(0, 0.11, 0), i * 2, 0).Time;
+                    lobTimes = a;
+                }
+                t = lobTimes;
+            }
+        }
+        double f = M.Clamp(dist / 2, 0, t.Length - 1.001);
+        int k = (int)f;
+        return t[k] + (t[k + 1] - t[k]) * (f - k);
+    }
+
     /// <summary>The softest ground pass (table row, m/s) still going at `arrive` m/s when it has rolled `dist` metres (20 if none).</summary>
     public static double RollPaceFor(double dist, double arrive)
     {

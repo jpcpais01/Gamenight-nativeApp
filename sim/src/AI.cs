@@ -349,11 +349,12 @@ public sealed partial class AI
     public double OffsideLineFor(int team) => offside[team];
 
     /// <summary>
-    /// Your through ball, kept simple. The stick picks the runner (the team-mate it points at,
-    /// with the space he's heading for; forwards first), his run goes on toward goal bent the
-    /// way the stick points, and the hold says how far ahead of him it goes: a tap into his
-    /// stride, a full hold into the space in behind. It's struck to get there just before he
-    /// does, still rolling. Whether it beats the defenders is your read, not the game's.
+    /// Your through ball. The stick picks the runner (the team-mate it points at, with the space he's
+    /// heading for; forwards first) and the hold how deep: a tap finds the nearer man, into his
+    /// stride; a full hold the deeper one, into the space in behind. It's never a guess at a spot:
+    /// along his run, every strike pace has its own point where the ball and he get there together
+    /// (Meet), and of those it takes the one nearest the depth you held for, steering off a spot a
+    /// defender reaches first or a line he cuts. A man the ball can't be timed to isn't chosen.
     /// </summary>
     public ThroughPlan? AimedThrough(Player p, double aimX, double aimZ, bool aimed, double power, bool lofted)
     {
@@ -366,9 +367,10 @@ public sealed partial class AI
             aimX = dir;
             aimZ = 0;
         }
+        double hold = M.Clamp(power, 0, 1);
+        double depth = 2 + 14 * hold;
         double cone = aimed ? 0.6 : -0.2;
-        Player? q = null;
-        double best = -1e9;
+        ThroughPlan? best = null;
         foreach (var o in team.Players)
         {
             if (o == p || o.Role == Role.GK) continue;
@@ -376,22 +378,40 @@ public sealed partial class AI
             double dx = o.Pos.X + o.Vel.X * 0.6 + dir * 3 - b.X;
             double dz = o.Pos.Z + o.Vel.Z * 0.6 - b.Z;
             double d = JsMath.Hypot(dx, dz);
-            if (d < 4 || d > 48) continue;
+            if (d < 4 || d > 52) continue;
             double align = (dx * aimX + dz * aimZ) / d;
             if (align < cone) continue;
+            var tp = Meet(p, o, aimed ? aimX : 0, aimed ? aimZ : 0, depth, lofted);
+            if (tp == null) continue;
             double ahead = (o.Pos.X - b.X) * dir;
             bool offsideNow = o.Pos.X * dir > line + 0.3 && ahead > 0;
             double open = 99;
             foreach (var e in m.Teams[1 - p.Team].Players) open = Math.Min(open, M.Dist2D(e.Pos.X, e.Pos.Z, o.Pos.X, o.Pos.Z));
-            double s = align * 3 + M.Clamp(ahead / 20, -0.5, 1) + M.Clamp(open / 6, 0, 1) * 0.6 - d / 40 + (o.Role == Role.FWD ? 0.3 : 0) - (offsideNow ? 2 : 0);
-            if (s > best)
+            // The hold leans it long or short, as for a pass to feet; then how good his ball is.
+            double s = align * 3 + M.Clamp(ahead / 20, -0.5, 1) + M.Clamp(open / 6, 0, 1) * 0.6 - d / 40
+                + (hold - 0.5) * 2 * Math.Min(d, 40) / 20
+                + (o.Role == Role.FWD ? 0.3 : 0) - (offsideNow ? 2 : 0) - tp.Score / 4;
+            if (best == null || s > best.Score)
             {
-                best = s;
-                q = o;
+                tp.Score = s;
+                best = tp;
             }
         }
-        if (q == null) return null;
-        // His run: on along the one he's making, or toward goal; bent by the stick; never back.
+        return best;
+    }
+
+    /// <summary>
+    /// Where a through ball meets runner q, `depth` metres on along his run if it can. His run goes
+    /// on the way he's making it (or toward goal), bent by the stick (aimX, aimZ), never back. For
+    /// a ground ball each strike pace (4..19 m/s) rolls out a clock; where along his run that clock
+    /// equals his own (he's there just as it is) is a meeting. A lob has one clock: its flight to
+    /// a little short of him and the bounce on. Of all the meetings: nearest the depth, and not
+    /// where a defender is first or a man nearby cuts the line. Score is that cost (lower is better).
+    /// </summary>
+    ThroughPlan? Meet(Player p, Player q, double aimX, double aimZ, double depth, bool lofted)
+    {
+        double dir = m.Teams[p.Team].Dir;
+        var b = m.Ball.Pos;
         double rx, rz;
         if (q.Speed > 2.5 && q.Vel.X * dir > 0)
         {
@@ -406,11 +426,8 @@ public sealed partial class AI
             rx = gx / gn;
             rz = gz / gn;
         }
-        if (aimed)
-        {
-            rx += aimX * 0.8;
-            rz += aimZ * 0.8;
-        }
+        rx += aimX * 0.8;
+        rz += aimZ * 0.8;
         if (rx * dir < 0) rx = 0;
         double rn = JsMath.Hypot(rx, rz);
         if (rn < 0.05)
@@ -423,42 +440,87 @@ public sealed partial class AI
             rx /= rn;
             rz /= rn;
         }
-        // How far ahead: the hold, at most. A passer with his head up plays it shorter, onto the
-        // runner, when a defender would get to that space first.
-        double x, z, tr, D, kx, kz, v0;
-        for (double lead = 3 + 11 * M.Clamp(power, 0, 1); ; lead -= 3)
+        // His clock along the run, every half metre.
+        const int N = 71;
+        const double Step = 0.5, From = 1, Early = 0.05;
+        Span<double> sx = stackalloc double[N], sz = stackalloc double[N], sd = stackalloc double[N], st = stackalloc double[N];
+        for (int i = 0; i < N; i++)
         {
-            x = M.Clamp(q.Pos.X + q.Vel.X * 0.2 + rx * lead, -Pitch.HalfL + 3, Pitch.HalfL - 3);
-            z = M.Clamp(q.Pos.Z + q.Vel.Z * 0.2 + rz * lead, -Pitch.HalfW + 2, Pitch.HalfW - 2);
-            tr = RunTime(q, x, z, PlanReactRun, PlayerK.Reach * 0.8);
-            D = Math.Max(0.5, M.Dist2D(b.X, b.Z, x, z));
-            kx = (x - b.X) / D;
-            kz = (z - b.Z) / D;
-            // Pace: there just before him, but never a dying ball: at least ~8 m/s on average,
-            // so a far runner gets a firm one he runs onto rather than a soft one the defence reads.
-            v0 = 19;
-            if (Kick.RollingPass(D, Math.Max(0.4, Math.Min(tr - 0.15, D / 8 + 0.3)), out var rp)) v0 = rp.V0;
+            double L = From + i * Step;
+            sx[i] = M.Clamp(q.Pos.X + rx * L, -Pitch.HalfL + 3, Pitch.HalfL - 3);
+            sz[i] = M.Clamp(q.Pos.Z + rz * L, -Pitch.HalfW + 2, Pitch.HalfW - 2);
+            sd[i] = Math.Max(0.5, M.Dist2D(b.X, b.Z, sx[i], sz[i]));
+            st[i] = RunTime(q, sx[i], sz[i], PlanReactRun, PlayerK.Reach * 0.8) - Early;
+        }
+        ThroughPlan? best = null;
+        int lo = lofted ? 0 : 4, hi = lofted ? 0 : 19;
+        // With no meeting at all (he's too far on for any ball to catch), the nearest miss, marked down.
+        int missV = -1;
+        double missL = 0, missF = 1e9;
+        for (int v0 = lo; v0 <= hi; v0++)
+        {
+            double prev = double.NaN;
+            for (int i = 0; i < N; i++)
+            {
+                double tb = BallClock(v0, sd[i]);
+                double f = tb < 0 ? double.NaN : tb - st[i];
+                if (!double.IsNaN(f) && Math.Abs(f) < missF)
+                {
+                    missF = Math.Abs(f);
+                    missV = v0;
+                    missL = From + i * Step;
+                }
+                // A sign change: between these two points ball and runner cross. Close in on it.
+                if (i > 0 && !double.IsNaN(f) && !double.IsNaN(prev) && (prev > 0) != (f > 0))
+                    Consider(From + (i - 1 + prev / (prev - f)) * Step, v0, 0);
+                prev = f;
+            }
+        }
+        if (best == null && missV >= 0) Consider(missL, missV, 6 + missF * 10);
+        return best;
+
+        void Consider(double L, int v0, double extra)
+        {
+            double x = M.Clamp(q.Pos.X + rx * L, -Pitch.HalfL + 3, Pitch.HalfL - 3);
+            double z = M.Clamp(q.Pos.Z + rz * L, -Pitch.HalfW + 2, Pitch.HalfW - 2);
+            double D = Math.Max(0.5, M.Dist2D(b.X, b.Z, x, z));
+            double tr = RunTime(q, x, z, PlanReactRun, PlayerK.Reach * 0.8);
+            double kx = (x - b.X) / D;
+            double kz = (z - b.Z) / D;
             double tOpp = 1e9;
             foreach (var o in m.Teams[1 - p.Team].Players) tOpp = Math.Min(tOpp, RunTime(o, x, z, PlanReactOpp, PlayerK.Reach * 0.8));
-            // A man near its line on the ground: zip it past him (firmer, he meets it further on).
-            if (!lofted)
-                for (int k = 0; k < 3 && Cuts(p, b, kx, kz, D, v0); k++) v0 = Math.Min(19, v0 + 3);
-            if (lead <= 4 || tOpp > tr + 0.1) break;
+            double cost = extra + Math.Abs(L - depth) + (tOpp < tr + 0.1 ? 8 : 0) + (!lofted && Cuts(p, b, kx, kz, D, v0) ? 8 : 0);
+            if (best != null && cost >= best.Score) return;
+            double arrive = 0;
+            if (!lofted) Kick.RollAt(v0, tr - Early, out _, out arrive);
+            best = new ThroughPlan
+            {
+                Receiver = q, X = x, Z = z, Time = tr, Arrive = arrive, Dx = kx, Dz = kz, V0 = v0, Score = cost,
+                // A lob drops a little short, to bounce on into his path.
+                LandX = lofted ? b.X + kx * D * 0.88 : x,
+                LandZ = lofted ? b.Z + kz * D * 0.88 : z,
+            };
         }
-        var tp = new ThroughPlan { Receiver = q, X = x, Z = z, Time = tr, Dx = kx, Dz = kz, LandX = x, LandZ = z, V0 = v0 };
-        if (lofted)
-        {
-            // Dropping a little short, to bounce on into his path.
-            tp.LandX = b.X + kx * D * 0.88;
-            tp.LandZ = b.Z + kz * D * 0.88;
-        }
-        return tp;
+    }
+
+    /// <summary>
+    /// Seconds for a through ball to cover `D` metres: rolled at strike pace v0 (-1 if it doesn't get
+    /// there still moving), or for v0 = 0 lobbed (down at 0.88 D, the last stretch on the bounce).
+    /// </summary>
+    static double BallClock(int v0, double D)
+    {
+        if (v0 == 0) return Kick.ThroughLobTime(D * 0.88) * 1.23;
+        double t = Kick.RollTimeAt(v0, D);
+        if (t < 0) return -1;
+        Kick.RollAt(v0, t, out _, out double v);
+        return v < 1.5 ? -1 : t;
     }
 
     /// <summary>
     /// Whether a defender near its line gets a foot to a ground ball struck at `v0` toward a spot
     /// `D` metres off along (kx, kz): he can step across before it's past him (it travels at
-    /// about three quarters of its strike pace).
+    /// about three quarters of its strike pace). And a soft one is taken off the feet of a man
+    /// right on the ball.
     /// </summary>
     bool Cuts(Player p, V3 b, double kx, double kz, double D, double v0)
     {
@@ -466,10 +528,11 @@ public sealed partial class AI
         {
             double ox = o.Pos.X - b.X;
             double oz = o.Pos.Z - b.Z;
+            if (v0 < 10 && ox * ox + oz * oz < 4) return true;
             double along = ox * kx + oz * kz;
-            if (along < 1 || along > D) continue;
+            if (along < 0.3 || along > D) continue;
             double perp = Math.Abs(ox * kz - oz * kx);
-            if (perp < 0.85 + Math.Max(0, along / (0.75 * v0) - PlanReactOpp) * 3) return true;
+            if (perp < 1.3 + Math.Max(0, along / (0.75 * v0) - PlanReactOpp) * 3) return true;
         }
         return false;
     }

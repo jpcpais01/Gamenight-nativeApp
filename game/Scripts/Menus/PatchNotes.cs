@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.63", "Through balls rethought: the ball and your runner now arrive at the same moment, every time. Along his run, each strike pace has one spot where they meet; the hold picks how deep, and a long hold now looks for the deeper runner, a tap the nearer one."),
         ("0.62", "The loading screen is free of crowd noise too: the crowd stays silent from launch until a real match starts. The splash keeps its own sounds."),
         ("0.61", "No crowd noise behind the menus any more: the home screen and every other menu are quiet apart from their own button sounds. The crowd comes in when a real match starts."),
         ("0.60", "The club crest on the home page no longer has the sweeping reflection across it."),

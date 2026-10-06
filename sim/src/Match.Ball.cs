@@ -243,7 +243,7 @@ public sealed partial class Match
             {
                 receiver = tp.Receiver;
                 r = lofted
-                    ? Kick.SolveLofted(b.Pos, tp.LandX, tp.LandZ, M.Clamp(22 + M.Dist2D(b.Pos.X, b.Pos.Z, tp.LandX, tp.LandZ) * 0.3, 26, 40), 45, 0)
+                    ? Kick.ThroughLob(b.Pos, tp.LandX, tp.LandZ)
                     : Kick.GroundKick(tp.Dx, tp.Dz, tp.V0);
                 AI.SetRun(receiver, tp.X, tp.Z, tp.Time + 1.2);
             }
@@ -276,7 +276,7 @@ public sealed partial class Match
             {
                 receiver = space.Receiver;
                 var r = lob
-                    ? Kick.SolveLofted(b.Pos, space.LandX, space.LandZ, M.Clamp(22 + M.Dist2D(b.Pos.X, b.Pos.Z, space.LandX, space.LandZ) * 0.3, 26, 40), 45, 0)
+                    ? Kick.ThroughLob(b.Pos, space.LandX, space.LandZ)
                     : Kick.GroundKick(space.Dx, space.Dz, space.V0);
                 AI.SetRun(receiver, space.X, space.Z, space.Time + 1.2);
                 vel = r.Vel;
