@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.94", "Four more goal explosions, 14 in all: Tornado (a twister rips up the goalmouth), Disco (a mirror ball sweeps coloured beams over the pitch), Rainbow (it arcs over the goal and pours gold) and Haunted (green fire, ghosts and bats). Pick yours in the club's GOAL tab."),
         ("0.93", "Through balls are played about 5% shorter along the runner's path, so they are less often a touch too far ahead of him."),
         ("0.92", "Receivers no longer run off ahead of the ball: on a through ball he meets it where it was weighted for, and the player you control goes to a loose ball instead of racing on to wait for it."),
         ("0.91", "Online 1v1 is switched on: 1V1 FRIEND → ONLINE, one of you hosts and the other types the 4-digit code."),
