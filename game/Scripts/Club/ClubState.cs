@@ -14,6 +14,8 @@ public sealed class Lineup
     public string[] Slots = new string[11];
     /// <summary>Custom slot placement per index (null = formation default).</summary>
     public FSlot[] Custom = new FSlot[11];
+    /// <summary>Card id per bench seat (7); empty seats fill with the best players left.</summary>
+    public string[] Bench = new string[7];
 }
 
 /// <summary>The club's own kit: shirt design and colours.</summary>
@@ -267,6 +269,69 @@ public sealed class ClubState
         l[slot] = cardId;
         if (from >= 0 && from != slot) l[from] = prev;
         Save();
+    }
+
+    /// <summary>The seven on the bench: the saved picks still at the club and not in the XI, gaps
+    /// filled with the best players left over.</summary>
+    public Card[] BenchSeven()
+    {
+        var l = S.Lineup;
+        if (l.Bench == null || l.Bench.Length != 7) l.Bench = new string[7];
+        var used = new HashSet<string>(l.Slots.Where(x => x != null));
+        var res = new Card[7];
+        for (int i = 0; i < 7; i++)
+        {
+            var c = Card(l.Bench[i]);
+            if (c != null && used.Add(c.Id)) res[i] = c;
+            else l.Bench[i] = null;
+        }
+        var pool = S.Cards.Where(c => !used.Contains(c.Id)).OrderByDescending(c => c.Overall).ToList();
+        int k = 0;
+        for (int i = 0; i < 7 && k < pool.Count; i++)
+            if (res[i] == null)
+            {
+                res[i] = pool[k++];
+                l.Bench[i] = res[i].Id;
+            }
+        return res;
+    }
+
+    public int BenchSeat(string id)
+    {
+        BenchSeven();
+        return id == null ? -1 : Array.IndexOf(S.Lineup.Bench, id);
+    }
+
+    /// <summary>Swap a man in the XI with one on the bench.</summary>
+    public void SwapSlotBench(int slot, int seat)
+    {
+        BenchSeven();
+        var l = S.Lineup;
+        (l.Slots[slot], l.Bench[seat]) = (l.Bench[seat], l.Slots[slot]);
+        Save();
+    }
+
+    public void SwapSeats(int a, int b)
+    {
+        BenchSeven();
+        var l = S.Lineup;
+        (l.Bench[a], l.Bench[b]) = (l.Bench[b], l.Bench[a]);
+        Save();
+    }
+
+    /// <summary>Put a card on a bench seat; from the XI or another seat, the two swap.</summary>
+    public void SetBench(int seat, string cardId)
+    {
+        BenchSeven();
+        var l = S.Lineup;
+        int s = Array.IndexOf(l.Slots, cardId);
+        if (s >= 0) SwapSlotBench(s, seat);
+        else if (Array.IndexOf(l.Bench, cardId) is int o and >= 0) SwapSeats(o, seat);
+        else
+        {
+            l.Bench[seat] = cardId;
+            Save();
+        }
     }
 
     public void SwapSlots(int a, int b)
