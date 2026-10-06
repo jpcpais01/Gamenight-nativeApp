@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.97", "Accounts: tap SIGN IN by the settings cog and create one with just a username and a password. Your club, league and career are saved to it and follow you to any phone or PC where you sign in. Still plays offline."),
         ("0.96", "Settings on the home screen (the cog by your coins): the four volume bars, match camera, shadows, smooth pixels, FPS limit and FPS counter, shared with the pause menu, plus your version, a check for updates and the patch notes."),
         ("0.95", "The Windows version has the GameNight icon on the .exe, the window and the taskbar, and the download now unzips into one GameNight folder."),
         ("0.94", "Four more goal explosions, 14 in all: Tornado (a twister rips up the goalmouth), Disco (a mirror ball sweeps coloured beams over the pitch), Rainbow (it arcs over the goal and pours gold) and Haunted (green fire, ghosts and bats). Pick yours in the club's GOAL tab."),

@@ -183,6 +183,36 @@ public sealed partial class HomeScreen : PxCanvas
         Px.Frame(this, gr, new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.9f), Px.Line2, held ? null : Px.Shadow, 2, 3);
         Cog(gr.GetCenter(), 11);
         Tap("settings", g, () => _ui.Open(new SettingsModal(_ui)));
+        AccountKey(g.Position.X - 8, x0 + lw + 10 + Px.Width(Px.Small, "FOOTBALL · 11 v 11", 8) + 12);
+    }
+
+    /// <summary>The account key left of the cog: SIGN IN, or your username with a light for the
+    /// cloud save (green saved, cyan saving, gold offline).</summary>
+    void AccountKey(float right, float left)
+    {
+        var acc = Account.Account.Instance;
+        if (acc == null || !Account.FirebaseConfig.Ready) return;
+        bool on = acc.SignedIn;
+        string label = on ? acc.User.ToUpperInvariant() : "SIGN IN";
+        float w = Mathf.Min(Px.Width(Px.Big, label, 20) + (on ? 40 : 26), right - left);
+        if (w < 60) return;
+        var r = new Rect2(right - w, 14, w, 34);
+        bool held = Held("account");
+        var rr = held ? r.Translated(Vector2.One * 2) : r;
+        Px.Frame(this, rr, new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.9f), on ? Px.Line2 : new Color(Px.Gold, 0.7f), held ? null : Px.Shadow, 2, 3);
+        if (on)
+        {
+            var light = acc.Now switch
+            {
+                Account.Account.State.Synced => Px.Win,
+                Account.Account.State.Offline => Px.Gold,
+                _ => (int)(T * 4) % 2 == 0 ? Px.Cyan : new Color(Px.Cyan, 0.4f),
+            };
+            DrawRect(new Rect2(rr.Position.X + 12, rr.GetCenter().Y - 4, 8, 8), light);
+            Px.Text(this, Px.Big, new Vector2(rr.Position.X + 28, rr.GetCenter().Y + 7), Px.Fit(Px.Big, label, 20, w - 38), 20, Px.Ink);
+        }
+        else Px.TextC(this, Px.Big, rr.GetCenter().X, rr.GetCenter().Y + 7, label, 20, Px.Gold);
+        Tap("account", r, () => _ui.Open(new Account.AccountModal(_ui)));
     }
 
     void Cog(Vector2 c, float r)

@@ -25,6 +25,9 @@ public sealed partial class App : Node
     bool _showcase;
     ulong _backAt;
 
+    /// <summary>A match (or drill) is on, rather than the menus.</summary>
+    public bool Playing => _playing;
+
     public override void _Ready()
     {
         UI.MatchSettings.Load();
