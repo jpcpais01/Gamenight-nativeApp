@@ -69,7 +69,7 @@ public sealed class BuiltGround : Ground
     {
         // The builder's camera stands well back: thin the haze for it.
         // The mountains and the open country carry on further before the haze takes them.
-        bool far = _plan.Area is 4 or 5;
+        bool far = _plan.Area is 4 or 5 or 6 or 7;
         FogRange = _preview ? new(320, far ? 1700 : 1500) : far ? new(240, 1600) : new(180, 1200);
         // What's round it (Surroundings): its land, a long view.
         Land = Surroundings.LandOf(_plan.Area);

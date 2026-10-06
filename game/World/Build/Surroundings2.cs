@@ -16,34 +16,52 @@ static partial class Surroundings
 
     // ---------------------------------------------------------------- shared pieces
 
-    /// <summary>The plaza and the ring road every area keeps, and a band of `verge` beyond it.</summary>
-    static void Core(MeshData m, uint plaza, uint verge, float vergeOut)
+    /// <summary>The paved concourse round the stands out to `o`, a kerb along its edge.</summary>
+    static void Concourse(MeshData m, uint col, float o)
     {
-        if (vergeOut > 0)
-        {
-            m.Hex(verge);
-            RingStrip(m, RoadOut + 4, RoadOut + vergeOut, 0.012f);
-        }
-        m.Hex(plaza);
-        RingStrip(m, 2, RoadIn - 4, 0.02f);
-        m.Hex(0xc3beb3);
-        RingStrip(m, RoadIn - 4, RoadIn, 0.025f);
-        m.Hex(0x34363a, Look.Road, RoadOut - RoadIn);
-        RingStrip(m, RoadIn, RoadOut, 0.04f);
-        m.Hex(0xb3aea4);
-        RingStrip(m, RoadOut, RoadOut + 5, 0.03f);
+        m.Hex(col);
+        RingStrip(m, 2, o - 1.2f, 0.06f);
+        m.Hex(Kit.Darken(col, 0.82f));
+        RingStrip(m, o - 1.2f, o, 0.066f);
     }
 
-    /// <summary>Trees round the plaza, lamps along the ring road, fans milling about.</summary>
-    static void Plaza(MeshData m, Random rng, uint home, uint[] leaves = null)
+    /// <summary>Fills from the stands' ring at offset o out to the rectangle ±hx, ±hz (it hides
+    /// the pitch's own grass plane, which runs out to ±160, ±120).</summary>
+    static void Collar(MeshData m, uint col, float o, float hx = 164, float hz = 124, float y = 0.015f)
     {
-        leaves ??= Leaves;
-        var edge = Ring(RoadIn - 6, 0);
-        Along(edge, 15, 0, p => Tree(m, p, 7 + (float)rng.NextDouble() * 3, leaves[rng.Next(leaves.Length)]));
-        Along(Ring(RoadOut + 2.5f, 0), 32, 8, p => Lamp(m, p));
-        for (int i = 0; i < 110; i++)
+        var a = Ring(o, y);
+        var q = new Vector3[a.Count];
+        for (int i = 0; i < a.Count; i++)
         {
-            var p = edge[rng.Next(edge.Count)];
+            var p = a[i];
+            var d = p - new Vector3(Mathf.Sign(p.X) * Kit.CX, y, Mathf.Sign(p.Z) * Kit.CZ);
+            float tx = Mathf.Abs(d.X) > 1e-4f ? (Mathf.Sign(d.X) * hx - p.X) / d.X : float.MaxValue;
+            float tz = Mathf.Abs(d.Z) > 1e-4f ? (Mathf.Sign(d.Z) * hz - p.Z) / d.Z : float.MaxValue;
+            q[i] = p + d * Mathf.Min(tx, tz);
+        }
+        m.Hex(col);
+        for (int i = 0; i + 1 < a.Count; i++)
+        {
+            m.QuadUV(a[i], a[i + 1], q[i + 1], q[i], new(0, 0), new(1, 0), new(1, 1), new(0, 1));
+            bool ex0 = Mathf.Abs(Mathf.Abs(q[i].X) - hx) < 0.01f, ex1 = Mathf.Abs(Mathf.Abs(q[i + 1].X) - hx) < 0.01f;
+            if (ex0 != ex1)
+            {
+                var corner = new Vector3(Mathf.Sign(ex0 ? q[i].X : q[i + 1].X) * hx, y, Mathf.Sign(ex0 ? q[i + 1].Z : q[i].Z) * hz);
+                m.Tri(q[i], q[i + 1], corner, Vector2.Zero, Vector2.Zero, Vector2.Zero);
+            }
+        }
+    }
+
+    /// <summary>Trees round the concourse's edge (at offset o, every 15 m unless `skip`), lamps
+    /// between them, and fans milling about outside the turnstiles.</summary>
+    static void Edge(MeshData m, Random rng, uint home, float o, uint[] leaves, Func<Vector3, bool> skip = null, int fans = 110)
+    {
+        var edge = Ring(o, 0);
+        Along(edge, 15, 0, p => { if (skip == null || !skip(p)) Tree(m, p, 7 + (float)rng.NextDouble() * 3, leaves[rng.Next(leaves.Length)]); });
+        Along(Ring(o - 2, 0), 30, 7.5f, p => { if (skip == null || !skip(p)) Lamp(m, p); });
+        for (int i = 0; i < fans; i++)
+        {
+            var p = Ring(o - 4 - (float)rng.NextDouble() * 8, 0)[rng.Next(edge.Count - 1)];
             Fan(m, rng, home, p + new Vector3((float)rng.NextDouble() * 12 - 6, 0, (float)rng.NextDouble() * 12 - 6));
         }
     }
@@ -152,6 +170,10 @@ static partial class Surroundings
             }
     }
 
+    /// <summary>Does the whole square lie within `o` of the stands' front edge (under the concourse)?</summary>
+    static bool Inside(Cell c, float o) =>
+        Off(c.X0, c.Z0) < o && Off(c.X0 + c.C, c.Z0) < o && Off(c.X0, c.Z0 + c.C) < o && Off(c.X0 + c.C, c.Z0 + c.C) < o;
+
     /// <summary>Far hills all round, out past `r0` (for the areas that have no horizon of their own).</summary>
     static void FarHills(MeshData m, float r0, float height)
     {
@@ -166,8 +188,18 @@ static partial class Surroundings
     /// highway on the west side.</summary>
     static void Downtown(MeshData m, Random rng, uint home)
     {
-        const float C = 44, Inset = 6, Av = 12, Hw = -330;
-        Core(m, 0xa8a39a, 0x8d8a85, 125);
+        const float C = 44, Inset = 6, Av = 12, Hw = -330, Sb = 154;
+        // The ground fills a whole city block: streets on all four sides, the rest of the
+        // block a paved square round the stands.
+        Collar(m, 0x3a3c40, Apron - 2, Sb + 6, Sb + 6, 0.022f);
+        Collar(m, 0xb0aba1, Apron - 2, Sb - 1, Sb - 1, 0.03f);
+        m.Hex(0x8f8a80);
+        foreach (float k in new[] { -1f, 1 })
+        {
+            Flat(m, -Sb, k > 0 ? Sb - 1 : -Sb, Sb, k > 0 ? Sb : -Sb + 1, 0.034f);
+            Flat(m, k > 0 ? Sb - 1 : -Sb, -Sb, k > 0 ? Sb : -Sb + 1, Sb, 0.034f);
+        }
+        Concourse(m, 0xa8a39a, Apron);
         var park = new Rect2(170, 150, 300, 230);
         uint[] walls = { 0x5f7f8a, 0x8a96a3, 0x404852, 0x9aa5ae, 0x6e7c88, 0xc9c6bd, 0xd9d4c7, 0xb5735a, 0x4a4e55, 0xcfc3ad };
         int spires = 0;
@@ -175,7 +207,7 @@ static partial class Surroundings
             for (int j = -20; j <= 20; j++)
             {
                 float cx = i * C, cz = j * C, r = new Vector2(cx, cz).Length();
-                if (r > 860 || i == 0 || j == 0 || Off(cx, cz) < RoadOut + 24) continue;
+                if (r > 860 || i == 0 || j == 0 || (Mathf.Abs(cx) < Sb + 10 && Mathf.Abs(cz) < Sb + 10)) continue;
                 var cell = new Rect2(cx - C / 2, cz - C / 2, C, C);
                 m.Hex(0x3a3c40);
                 Flat(m, cell.Position.X, cell.Position.Y, cell.End.X, cell.End.Y, 0.025f);
@@ -237,7 +269,7 @@ static partial class Surroundings
         {
             var dir = new Vector3(ax, 0, az);
             var side = new Vector3(-az, 0, ax);
-            float t0 = (ax != 0 ? Kit.BX : Kit.BZ) + RoadOut - 2;
+            float t0 = Sb + 6;
             m.Hex(0x34363a, Look.Road, 2 * Av);
             Strip(m, dir * t0 + new Vector3(0, 0.045f, 0), dir * 880 + new Vector3(0, 0.045f, 0), 2 * Av);
             m.Hex(0xb3aea4);
@@ -289,7 +321,20 @@ static partial class Surroundings
             foreach (float lane in new[] { -7f, -2.5f, 2.5f, 7 })
                 if (rng.NextDouble() < 0.3) Car(m, new Vector3(Hw + lane, Deck + 1.6f, z + (float)rng.NextDouble() * 3), 0, rng);
 
-        Plaza(m, rng, home);
+        // The square: street trees in from the kerbs, a grove of plane trees where there's
+        // room, lamps, and the crowd.
+        for (float t = -Sb + 8; t < Sb - 4; t += 12)
+            foreach (var p in new[] { new Vector3(t, 0, -Sb + 5), new Vector3(t, 0, Sb - 5), new Vector3(-Sb + 5, 0, t), new Vector3(Sb - 5, 0, t) })
+            {
+                if (Mathf.Abs(t) < Av + 4 || Off(p.X, p.Z) < Apron + 2) continue;
+                Tree(m, p, 8 + (float)rng.NextDouble() * 2, Leaves[rng.Next(Leaves.Length)]);
+                if (((int)((t + Sb) / 12) & 1) == 0) Lamp(m, p + (p.X == t ? new Vector3(6, 0, 0) : new Vector3(0, 0, 6)));
+            }
+        for (float x = -Sb + 20; x < Sb - 14; x += 16)
+            for (float z = -Sb + 20; z < Sb - 14; z += 16)
+                if (Off(x, z) > Apron + 8 && Mathf.Abs(x) > Av + 6 && Mathf.Abs(z) > Av + 6 && Hash(x * 0.1f, z * 0.1f) < 0.55f)
+                    Tree(m, new Vector3(x, 0, z), 9 + (float)rng.NextDouble() * 3, Leaves[rng.Next(Leaves.Length)]);
+        Edge(m, rng, home, Apron - 2, Leaves, p => true, 160);
         FarHills(m, 1050, 110);
     }
 
@@ -310,7 +355,7 @@ static partial class Surroundings
     }
 
     static bool InTown(float x, float z) =>
-        x * x + z * z < 500 * 500 && Off(x, z) > RoadOut + 10 && Mathf.Abs(z - RiverZ(x)) > RiverW + 12;
+        x * x + z * z < 500 * 500 && Off(x, z) > Apron + 4 && Mathf.Abs(z - RiverZ(x)) > RiverW + 12;
 
     /// <summary>An old river town: streets of tall narrow houses under red roofs, a river with
     /// stone bridges just past the main stand, the cathedral on the far bank and a castle on the
@@ -318,11 +363,13 @@ static partial class Surroundings
     static void OldTown(MeshData m, Random rng, uint home)
     {
         const uint Stone = 0x8b8175;
-        Core(m, 0x9b8f80, Stone, 64);
+        // The ground is squeezed into the town: the houses come right up to its concourse.
+        Concourse(m, 0x9b8f80, Apron);
+        Collar(m, Stone, Apron - 2);
         uint[] olives = { 0x5d6b3c, 0x67733f, 0x55633a };
         Terrain(m, 40, 1680, OldH, c =>
         {
-            if (Off(c.X0, c.Z0) < RoadOut + 6 || Off(c.X0 + 40, c.Z0) < RoadOut + 6 || Off(c.X0, c.Z0 + 40) < RoadOut + 6 || Off(c.X0 + 40, c.Z0 + 40) < RoadOut + 6) return 0;
+            if (Inside(c, Apron)) return 0;
             var p = c.Mid;
             if (InTown(p.X, p.Y) || Mathf.Abs(p.Y - RiverZ(p.X)) < RiverW + 20) return Stone;
             if (new Vector2(p.X - Castle.X, p.Y - Castle.Z).Length() < 70) return 0x7d7466;
@@ -394,7 +441,7 @@ static partial class Surroundings
             for (int j = -16; j <= 16; j++)
             {
                 float cx = i * B + 8, cz = j * B;
-                if (!InTown(cx, cz) || Off(cx, cz) < RoadOut + 22) continue;
+                if (!InTown(cx, cz) || Off(cx, cz) < Apron + 16) continue;
                 if (new Vector2(cx - Cathedral.X, cz - Cathedral.Z).Length() < 64 || new Vector2(cx - Castle.X, cz - Castle.Z).Length() < 80) continue;
                 bool near = false;
                 foreach (float bx in Bridges) near |= Mathf.Abs(cx - bx) < 26 && Mathf.Abs(cz - RiverZ(bx)) < 80;
@@ -495,7 +542,7 @@ static partial class Surroundings
             m.Box(new Transform3D(Basis.Identity, c + new Vector3(2.6f, 46.5f, 0)), new Vector3(5, 3, 0.15f), 63);
         }
 
-        Plaza(m, rng, home);
+        Edge(m, rng, home, Apron - 3, Leaves, p => Hash(p.X * 0.07f, p.Z * 0.07f) < 0.6f, 130);
     }
 
     // ---------------------------------------------------------------- the docklands
@@ -508,7 +555,10 @@ static partial class Surroundings
     /// cooling towers on the far bank.</summary>
     static void Docklands(MeshData m, Random rng, uint home)
     {
-        Core(m, 0x8f8b84, 0x55534f, 470);
+        // The ground is hemmed in by the terraces: their streets run right up to its concourse.
+        m.Hex(0x55534f);
+        RingStrip(m, Apron, 470, 0.012f);
+        Concourse(m, 0x8f8b84, Apron);
         // The river and its quays.
         m.Hex(0x1d4254, Look.Water);
         Flat(m, -1700, FarBank, 1700, QuayZ, 0.06f);
@@ -572,7 +622,7 @@ static partial class Surroundings
         for (int i = 0; i < 6; i++)
         {
             var c = new Vector3(-580 + i * 94, 0, QuayZ + 52);
-            if (Off(c.X, c.Z) < RoadOut + 30) continue;
+            if (Off(c.X, c.Z) < Apron + 20) continue;
             m.Hex(0x8a4a35, Look.Tower, 2);
             Gable(m, c, 0, new Vector3(80, 18 + (i % 3) * 3, 26), 6, 0x4a4d52, 0.4f);
         }
@@ -701,7 +751,7 @@ static partial class Surroundings
                 var a = new Vector2(x0, z);
                 var b = new Vector2(x0 + 60, z);
                 var mid = (a + b) / 2;
-                if (mid.Length() > 600 || Off(a.X, a.Y) < RoadOut + 14 || Off(b.X, b.Y) < RoadOut + 14 || Off(mid.X, mid.Y) < RoadOut + 14) continue;
+                if (mid.Length() > 600 || Off(a.X, a.Y) < Apron + 6 || Off(b.X, b.Y) < Apron + 6 || Off(mid.X, mid.Y) < Apron + 6) continue;
                 if (!Clear(a, 0) || !Clear(b, 0) || !Clear(mid, 0)) continue;
                 m.Hex(0xffffff, Look.House);
                 Gable(m, new Vector3(mid.X, 0, mid.Y), 0, new Vector3(60, 7.5f, 8), 2.6f, 0x3d4048, 0.3f);
@@ -713,7 +763,7 @@ static partial class Surroundings
             }
         Church(m, new Vector3(-250, 0, 250), 0, 0x9a8f7c, 0x4a4d52, 1.2f);
 
-        Plaza(m, rng, home);
+        Edge(m, rng, home, Apron - 3, Leaves, p => Hash(p.X * 0.07f, p.Z * 0.07f) < 0.75f, 150);
         Terrain(m, 80, 1680, (x, z) => z < FarBank - 120 ? Kit.Smooth((-z - 1000) / 320) * (40 + 100 * Noise(x * 0.004f + 3, z * 0.004f + 1)) : 0,
             c => c.Avg < 0.6f ? 0u : Noise(c.X0 * 0.02f, c.Z0 * 0.02f) > 0.5f ? 0x4f5f40u : 0x5a6a48u, -0.2f);
     }
@@ -740,18 +790,21 @@ static partial class Surroundings
         uint[] crops = { 0xc8b45e, 0xb9b067, 0x6f9440, 0x5f8c3c, 0x5f8c3c, 0x4c7232, 0x7b5b3e, 0xd9c63a, 0x86a24a, 0x5f8c3c };
         uint Crop(float x, float z) => crops[(int)(Hash(Mathf.Floor(x / F) + 0.5f, Mathf.Floor(z / G) + 0.25f) * crops.Length)];
         bool Wood(float x, float z) => Hash(Mathf.Floor(x / F) + 7.5f, Mathf.Floor(z / G) + 3.25f) < 0.1f;
-        Core(m, 0xa49a84, 0x5d8a3c, 60);
+        // A ground on the edge of the fields: a tarmac concourse, the club's grass round it
+        // inside a hedge, the lanes coming in across the fields.
+        Concourse(m, 0xa49a84, Apron - 8);
+        Collar(m, 0x5d8a3c, Apron - 10);
         Terrain(m, 40, 1680, CountryH, c =>
         {
-            if (Off(c.X0, c.Z0) < RoadOut + 6 || Off(c.X0 + 40, c.Z0) < RoadOut + 6 || Off(c.X0, c.Z0 + 40) < RoadOut + 6 || Off(c.X0 + 40, c.Z0 + 40) < RoadOut + 6) return 0;
+            if (Inside(c, Apron)) return 0;
             var p = c.Mid;
-            if (InVillage(p.X, p.Y) || Off(p.X, p.Y) < RoadOut + 60) return 0x5d8a3c;
+            if (InVillage(p.X, p.Y) || Off(p.X, p.Y) < Apron + 50) return 0x5d8a3c;
             if (c.Avg > 60 && c.Slope > 0.5f) return 0x6a7a4a;
             return Wood(p.X, p.Y) ? 0x3f6332u : Crop(p.X, p.Y);
         }, 0.05f, c =>
         {
             var p = c.Mid;
-            if (InVillage(p.X, p.Y) || Off(p.X, p.Y) < RoadOut + 60 || p.Length() > 1000) return;
+            if (InVillage(p.X, p.Y) || Off(p.X, p.Y) < Apron + 50 || p.Length() > 1000) return;
             uint crop = Crop(p.X, p.Y);
             if (Wood(p.X, p.Y))
                 for (int k = 0; k < 3; k++) Tree(m, c.At((float)rng.NextDouble(), (float)rng.NextDouble()) - new Vector3(0, 0.5f, 0), 11 + (float)rng.NextDouble() * 5, Leaves[rng.Next(Leaves.Length)]);
@@ -780,7 +833,7 @@ static partial class Surroundings
         void Hedge(Vector2 a, Vector2 b)
         {
             var mid = (a + b) / 2;
-            if (mid.Length() > 820 || Off(mid.X, mid.Y) < RoadOut + 64 || InVillage(mid.X, mid.Y) || rng.NextDouble() < 0.15) return;
+            if (mid.Length() > 820 || Off(mid.X, mid.Y) < Apron + 54 || InVillage(mid.X, mid.Y) || rng.NextDouble() < 0.15) return;
             var pa = new Vector3(a.X, CountryH(a.X, a.Y) + 0.9f, a.Y);
             var pb = new Vector3(b.X, CountryH(b.X, b.Y) + 0.9f, b.Y);
             m.Hex(0x3d5e30);
@@ -809,9 +862,16 @@ static partial class Surroundings
                 }
             }
         }
-        Lane(new Vector2(0, -(Kit.BZ + RoadOut - 2)), new Vector2(0, -1500), true);
-        Lane(new Vector2(-(Kit.BX + RoadOut - 2), 10), new Vector2(-1500, 10), true);
-        Lane(new Vector2(Kit.BX + RoadOut - 2, 10), new Vector2(1500, 10), true);
+        Lane(new Vector2(0, -(Kit.BZ + Apron - 10)), new Vector2(0, -1500), true);
+        Lane(new Vector2(-(Kit.BX + Apron - 10), 10), new Vector2(-1500, 10), true);
+        Lane(new Vector2(Kit.BX + Apron - 10, 10), new Vector2(1500, 10), true);
+        // The hedge round the club's grass, gaps where the lanes come in.
+        Along(Ring(Apron + 44, 0), 8, 0, p =>
+        {
+            if (Mathf.Abs(p.X) < 9 || Mathf.Abs(p.Z - 10) < 9) return;
+            m.Hex(0x3d5e30);
+            m.Box(new Transform3D(new Basis(Vector3.Up, Mathf.Atan2(p.X, p.Z) + Mathf.Pi / 2), p + new Vector3(0, 1, 0)), new Vector3(1.8f, 2.2f, 8.6f), 1 | 2 | 4 | 16 | 32);
+        });
         Lane(new Vector2(-130, -420), new Vector2(130, -420), false);
 
         // Cars parked on the grass.
@@ -869,7 +929,7 @@ static partial class Surroundings
             Turbine(m, new Vector3(x, CountryH(x, z), z), 78, 0.15f * (i - 3.5f) * 0.3f, (float)rng.NextDouble() * Mathf.Tau);
         }
 
-        Plaza(m, rng, home);
+        Edge(m, rng, home, Apron - 10, Leaves, p => Hash(p.X * 0.07f, p.Z * 0.07f) < 0.45f, 90);
     }
 
     // ---------------------------------------------------------------- the alpine valley
@@ -893,7 +953,10 @@ static partial class Surroundings
     /// dome and a cable car up the mountain.</summary>
     static void Alpine(MeshData m, Random rng, uint home)
     {
-        Core(m, 0xa3a09a, 0x5f8a3e, 40);
+        // On the valley floor by the lake, the valley road passing on the near side.
+        const float ValleyRd = 132;
+        Concourse(m, 0xa3a09a, Apron - 6);
+        Collar(m, 0x5f8a3e, Apron - 8);
         uint[] pines = { 0x2a4529, 0x31502f, 0x283f2a };
         Terrain(m, 40, 1700, AlpH, c =>
         {
@@ -941,7 +1004,7 @@ static partial class Surroundings
             for (int j = -12; j <= 12; j++)
             {
                 float x = i * 30 + 7 * Hash(i, j), z = j * 30 + 7 * Hash(j, i);
-                if (Off(x, z) < RoadOut + 16 || LakeK(x, z) < 1.25f || AlpH(x, z) > 18 || Hash(i + 4, j - 3) > 0.26f || Mathf.Abs(z) < 12) continue;
+                if (Off(x, z) < Apron + 12 || LakeK(x, z) < 1.25f || AlpH(x, z) > 18 || Hash(i + 4, j - 3) > 0.26f || Mathf.Abs(z - ValleyRd) < 14) continue;
                 var p = new Vector3(x, AlpH(x, z) - 0.5f, z);
                 float yaw = (Hash(i - 1, j + 1) < 0.5f ? 0 : Mathf.Pi / 2) + 0.1f * (Hash(i, j + 5) - 0.5f);
                 bool big = Hash(i + 2, j + 9) < 0.06f;
@@ -966,8 +1029,14 @@ static partial class Surroundings
 
         // The road along the valley, the railway on the far side.
         m.Hex(0x34363a, Look.Road, 12);
-        Strip(m, new Vector3(-(Kit.BX + RoadOut - 2), 0.045f, 0), new Vector3(-1000, 0.045f, 0), 12);
-        Strip(m, new Vector3(Kit.BX + RoadOut - 2, 0.045f, 0), new Vector3(1000, 0.045f, 0), 12);
+        Strip(m, new Vector3(-1000, 0.045f, ValleyRd), new Vector3(1000, 0.045f, ValleyRd), 12);
+        m.Hex(0x34363a, Look.Road, 9);
+        Strip(m, new Vector3(-30, 0.043f, Kit.BZ + Apron - 8), new Vector3(-30, 0.043f, ValleyRd), 9);
+        m.Hex(0x3c3e42, Look.Road, -1);
+        Flat(m, 10, Kit.BZ + Apron - 6, 150, ValleyRd - 8, 0.04f);
+        for (float x = 12; x < 148; x += 2.6f)
+            foreach (float z in new[] { Kit.BZ + Apron - 3.5f, ValleyRd - 10.5f })
+                if (rng.NextDouble() < 0.5) Car(m, new Vector3(x, 0, z), 0, rng);
         m.Hex(0x6b6259);
         Flat(m, -1000, 236, 1000, 244, 0.04f);
         for (int i = 0; i < 7; i++)
@@ -1010,6 +1079,6 @@ static partial class Surroundings
             }
         }
 
-        Plaza(m, rng, home, pines);
+        Edge(m, rng, home, Apron - 9, pines, null, 90);
     }
 }

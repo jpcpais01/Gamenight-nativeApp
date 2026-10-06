@@ -40,17 +40,19 @@ static partial class Surroundings
         new Vector2(Mathf.Max(Mathf.Abs(x) - Kit.CX, 0), Mathf.Max(Mathf.Abs(z) - Kit.CZ, 0)).Length() - Kit.R;
 
     // The approaches.
-    const float RoadIn = 78, RoadOut = 92, Boulevard = 9;
+    /// <summary>How far round the stands every area keeps clear (beyond the biggest stands'
+    /// backs, stairs and towers), the paved concourse every ground has, and the seaside park's path.</summary>
+    const float RoadOut = 92, Apron = 64, ParkPath = 90, Boulevard = 9;
     static bool WestBoulevard(float x, float z, float pad = 0) => x < 0 && Mathf.Abs(z) < Boulevard + 7 + pad;
     static bool SouthBoulevard(float x, float z, float pad = 0) => z > 0 && Mathf.Abs(x) < Boulevard + 7 + pad;
     static readonly Rect2[] CarParks = { new(-196, 150, 170, 48), new(26, 150, 170, 48) };
-    static readonly Rect2 FanZone = new(-262, -74, 84, 52);
+    static readonly Rect2 FanZone = new(-262, -74, 84, 52), Forecourt = new(-272, -84, 272 - (Kit.BX + Apron - 6), 168);
 
     static readonly uint[] Leaves = { 0x3f6b33, 0x4c7a38, 0x37602f, 0x58843c, 0x2f5a31 };
     static readonly uint[] Cars = { 0xe8e8e4, 0x1e2024, 0x9aa0a6, 0x5d6268, 0xb8322a, 0x2f5fb8, 0x2a4a3a, 0xd8c49a, 0x7a1f3a, 0xe0b030 };
 
     /// <summary>The areas a club can build its stadium in, in the order the builder lists them.</summary>
-    public static readonly string[] Names = { "Seaside", "Downtown", "Old Town", "Docklands", "Countryside", "Alpine" };
+    public static readonly string[] Names = { "Seaside", "Downtown", "Old Town", "Docklands", "Countryside", "Alpine", "Alentejo", "Fjord", "Tropical" };
 
     public static readonly string[] About =
     {
@@ -60,6 +62,9 @@ static partial class Surroundings
         "BRICK TERRACES AND THE DOCKS: CRANES, A SHIP, A BRIDGE AND THE POWER STATION",
         "FIELDS AND FARMS ROUND A VILLAGE, WIND TURBINES ON THE RIDGE",
         "A MOUNTAIN VALLEY: A LAKE, PINE FORESTS, CHALETS AND SNOW ON THE PEAKS",
+        "A WHITE PORTUGUESE HILL TOWN: A CASTLE, CORK OAKS, OLIVES, VINES AND WINDMILLS",
+        "A FJORD: SHEER ROCK WALLS, WATERFALLS, A WOODEN VILLAGE AND THE FERRY",
+        "A TROPICAL CITY: COLOURFUL HOUSES UP THE HILLS, GRANITE PEAKS AND THE BEACH",
     };
 
     /// <summary>The colour of the land that runs on under everything (and round the pitch).</summary>
@@ -69,6 +74,9 @@ static partial class Surroundings
         3 => new Vector3(0x4c, 0x55, 0x45) / 255f,
         4 => new Vector3(0x5a, 0x7f, 0x3c) / 255f,
         5 => new Vector3(0x5a, 0x80, 0x3e) / 255f,
+        6 => new Vector3(0xb5, 0xa0, 0x62) / 255f,
+        7 => new Vector3(0x4c, 0x76, 0x36) / 255f,
+        8 => new Vector3(0x8a, 0x8a, 0x84) / 255f,
         _ => new Vector3(0x46, 0x5f, 0x35) / 255f,
     };
 
@@ -84,6 +92,9 @@ static partial class Surroundings
             case 3: Docklands(m, rng, home); return;
             case 4: Countryside(m, rng, home); return;
             case 5: Alpine(m, rng, home); return;
+            case 6: Alentejo(m, rng, home); return;
+            case 7: FjordArea(m, rng, home); return;
+            case 8: Tropical(m, rng, home); return;
         }
         Ground(m);
         Approaches(m, rng, home);
@@ -132,23 +143,28 @@ static partial class Surroundings
     static void Band(MeshData m, float d0, float d1, float l0, float l1, float y) =>
         m.QuadUV(At(d0, l0, y), At(d0, l1, y), At(d1, l1, y), At(d1, l0, y), new(0, 0), new(l1 - l0, 0), new(l1 - l0, d1 - d0), new(0, d1 - d0));
 
+    /// <summary>The seaside ground stands in a park: lawns round it with a looping path under
+    /// the trees, a paved forecourt on the town side where the west boulevard arrives (the fan
+    /// zone on it), the south boulevard down past the car parks.</summary>
     static void Ground(MeshData m)
     {
         // Lawns out past the pitch's own ground plane (the district and parks sit on them).
         m.Hex(0x557a3c);
-        RingStrip(m, RoadOut + 4, RoadOut + 125, 0.012f);
-        // The plaza under and round the stands, the ring road, its pavement.
-        m.Hex(0xa8a39a);
-        RingStrip(m, 2, RoadIn - 4, 0.02f);
-        m.Hex(0xc3beb3);
-        RingStrip(m, RoadIn - 4, RoadIn, 0.025f);
-        m.Hex(0x34363a, Look.Road, RoadOut - RoadIn);
-        RingStrip(m, RoadIn, RoadOut, 0.04f);
-        m.Hex(0xb3aea4);
-        RingStrip(m, RoadOut, RoadOut + 5, 0.03f);
+        RingStrip(m, Apron, RoadOut + 125, 0.012f);
+        Concourse(m, 0xa8a39a, Apron);
+        // The path looping round through the park.
+        m.Hex(0xc2b79f);
+        RingStrip(m, ParkPath - 2, ParkPath + 2, 0.03f);
+
+        // The forecourt: from the concourse out to the fan zone, the boulevard running into it.
+        float fx = Forecourt.End.X;
+        m.Hex(0xb9b2a6);
+        Flat(m, Forecourt.Position.X, Forecourt.Position.Y, fx, Forecourt.End.Y, 0.033f);
+        m.Hex(0xa39d92);
+        for (float x = Forecourt.Position.X + 6; x < fx; x += 12) Flat(m, x, Forecourt.Position.Y, x + 1, Forecourt.End.Y, 0.036f);
 
         // The boulevards: west into town, south past the car parks.
-        float w0 = -(Kit.BX + RoadOut - 2), s0 = Kit.BZ + RoadOut - 2;
+        float w0 = Forecourt.Position.X, s0 = Kit.BZ + Apron - 3;
         m.Hex(0x34363a, Look.Road, 2 * Boulevard);
         m.QuadUV(new(w0, 0.045f, -Boulevard), new(w0, 0.045f, Boulevard), new(-520, 0.045f, Boulevard), new(-520, 0.045f, -Boulevard),
             new(0, 0), new(0, 2 * Boulevard), new(520 + w0, 2 * Boulevard), new(520 + w0, 0));
@@ -161,11 +177,13 @@ static partial class Surroundings
             Flat(m, Mathf.Min(k * Boulevard, k * (Boulevard + 7)), s0, Mathf.Max(k * Boulevard, k * (Boulevard + 7)), 520, 0.03f);
         }
 
-        // The car parks.
+        // The car parks, a drive into each off the boulevard.
         m.Hex(0x3c3e42, Look.Road, -1);
         foreach (var r in CarParks) Flat(m, r.Position.X, r.Position.Y, r.End.X, r.End.Y, 0.04f);
+        m.Hex(0x34363a);
+        Flat(m, -26, 166, 26, 182, 0.042f);
         // The fan zone's square.
-        m.Hex(0xb9ad98);
+        m.Hex(0xc9bea8);
         Flat(m, FanZone.Position.X, FanZone.Position.Y, FanZone.End.X, FanZone.End.Y, 0.04f);
     }
 
@@ -173,17 +191,37 @@ static partial class Surroundings
 
     static void Approaches(MeshData m, Random rng, uint home)
     {
-        // Trees round the plaza's edge (not across the boulevards), lamps along the ring road.
-        var edge = Ring(RoadIn - 6, 0);
-        Along(edge, 15, 0, p =>
+        // Trees in the park round the ground, thicker out by the path, not on the forecourt,
+        // the boulevards or the car parks; lamps along the path.
+        bool Busy(Vector3 p, float pad) =>
+            Forecourt.Grow(pad).HasPoint(new(p.X, p.Z)) || WestBoulevard(p.X, p.Z, pad) || SouthBoulevard(p.X, p.Z, pad)
+            || CarParks[0].Grow(pad).HasPoint(new(p.X, p.Z)) || CarParks[1].Grow(pad).HasPoint(new(p.X, p.Z));
+        Edge(m, rng, home, Apron - 3, Leaves, p => Busy(p, 4), 70);
+        foreach (float o in new[] { ParkPath - 6, ParkPath + 6 })
+            Along(Ring(o, 0), 11, o, p =>
+            {
+                var q = p + new Vector3((float)rng.NextDouble() * 4 - 2, 0, (float)rng.NextDouble() * 4 - 2);
+                if (!Busy(q, 5) && rng.NextDouble() < 0.75) Tree(m, q, 7 + (float)rng.NextDouble() * 5, Leaves[rng.Next(Leaves.Length)]);
+            });
+        Along(Ring(ParkPath + 2.6f, 0), 30, 4, p => { if (!Busy(p, 2)) Lamp(m, p); });
+        // Clumps of trees out on the lawns.
+        for (int i = 0; i < 60; i++)
         {
-            if (WestBoulevard(p.X, p.Z, 6) || SouthBoulevard(p.X, p.Z, 6)) return;
-            Tree(m, p, 7 + (float)rng.NextDouble() * 3, Leaves[rng.Next(Leaves.Length)]);
-        });
-        Along(Ring(RoadOut + 2.5f, 0), 32, 8, p => Lamp(m, p));
+            float a = (float)rng.NextDouble() * Mathf.Tau, o = ParkPath + 14 + (float)rng.NextDouble() * 70;
+            var p = Ring(o, 0)[(int)(a / Mathf.Tau * 36)];
+            if (Busy(p, 8) || Off(p.X, p.Z) > RoadOut + 24) continue;
+            for (int k = 0; k < 3; k++)
+                Tree(m, p + new Vector3((float)rng.NextDouble() * 12 - 6, 0, (float)rng.NextDouble() * 12 - 6), 8 + (float)rng.NextDouble() * 5, Leaves[rng.Next(Leaves.Length)]);
+        }
+        // Lamps and benches round the forecourt; a row of flagpoles where the boulevard meets it.
+        var fc = Forecourt;
+        for (float x = fc.Position.X + 8; x < -(Kit.BX + Apron); x += 24)
+            foreach (float z in new[] { fc.Position.Y + 3, fc.End.Y - 3 }) Lamp(m, new Vector3(x, 0, z));
+        for (int k = -3; k <= 3; k++)
+            Parts.Flag(m, new Vector3(fc.Position.X + 30, 0, k * 6), 12, new Vector3(0, 0, 1), 2.6f, 1.5f, k % 2 == 0 ? home : 0xf3eee2);
 
         // The boulevards: a row of trees and lamps down each side.
-        float w0 = -(Kit.BX + RoadOut), s0 = Kit.BZ + RoadOut;
+        float w0 = fc.Position.X, s0 = Kit.BZ + Apron;
         foreach (float k in new[] { -1f, 1 })
         {
             for (float x = w0 - 8; x > -500; x -= 13)
@@ -221,24 +259,16 @@ static partial class Surroundings
         m.Hex(0xffffff, Look.Lamp);
         m.Box(new Transform3D(Basis.Identity, new Vector3(fz.Position.X + 3, 7, fz.GetCenter().Y)), new Vector3(0.4f, 1, 14), 1);
 
-        // Fans: thick in the fan zone and round the plaza, thinning out up the boulevards.
-        void Fan(Vector3 p)
-        {
-            m.Hex(rng.NextDouble() < 0.7 ? home : Cars[rng.Next(Cars.Length)]);
-            m.Box(new Transform3D(Basis.Identity, p + new Vector3(0, 0.88f, 0)), new Vector3(0.55f, 1.75f, 0.45f), 1 | 2 | 4 | 16 | 32);
-        }
+        // Fans: thick in the fan zone and across the forecourt, thinning out up the boulevards.
         for (int i = 0; i < 90; i++)
-            Fan(new Vector3(fz.Position.X + 14 + (float)rng.NextDouble() * (fz.Size.X - 18), 0, fz.Position.Y + 9 + (float)rng.NextDouble() * (fz.Size.Y - 18)));
-        for (int i = 0; i < 50; i++)
-        {
-            var p = edge[rng.Next(edge.Count)];
-            Fan(p + new Vector3((float)rng.NextDouble() * 10 - 5, 0, (float)rng.NextDouble() * 10 - 5));
-        }
+            Fan(m, rng, home, new Vector3(fz.Position.X + 14 + (float)rng.NextDouble() * (fz.Size.X - 18), 0, fz.Position.Y + 9 + (float)rng.NextDouble() * (fz.Size.Y - 18)));
+        for (int i = 0; i < 70; i++)
+            Fan(m, rng, home, new Vector3(fc.Position.X + (float)rng.NextDouble() * (-(Kit.BX + Apron) - fc.Position.X), 0, fc.Position.Y + 4 + (float)rng.NextDouble() * (fc.Size.Y - 8)));
         for (int i = 0; i < 60; i++)
         {
             float t = (float)Math.Pow(rng.NextDouble(), 2) * 260;
             float a = (float)rng.NextDouble() * 10 - 5;
-            Fan(rng.Next(2) == 0 ? new Vector3(w0 - 4 - t, 0, (Boulevard + 4) * (rng.Next(2) * 2 - 1) + a * 0.3f) : new Vector3((Boulevard + 4) * (rng.Next(2) * 2 - 1) + a * 0.3f, 0, s0 + 4 + t));
+            Fan(m, rng, home, rng.Next(2) == 0 ? new Vector3(w0 - 4 - t, 0, (Boulevard + 4) * (rng.Next(2) * 2 - 1) + a * 0.3f) : new Vector3((Boulevard + 4) * (rng.Next(2) * 2 - 1) + a * 0.3f, 0, s0 + 4 + t));
         }
     }
 
@@ -256,7 +286,7 @@ static partial class Surroundings
                 if (r > 470 || Off(cx, cz) < RoadOut + 22 || D(cx, cz) > 276) continue;
                 if (WestBoulevard(cx, cz, C / 2) || SouthBoulevard(cx, cz, C / 2)) continue;
                 var cell = new Rect2(cx - C / 2, cz - C / 2, C, C);
-                bool blocked = cell.Intersects(FanZone.Grow(4));
+                bool blocked = cell.Intersects(Forecourt.Grow(4));
                 foreach (var p in CarParks) blocked |= cell.Intersects(p.Grow(4));
                 if (blocked) continue;
                 float h0 = Hash(i, j);

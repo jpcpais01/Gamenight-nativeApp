@@ -19,7 +19,7 @@ public sealed partial class StadiumScreen : PxCanvas
     bool _building;
 
     // The bottom drawer's tab (stands, colour, around) and its scrolling strip of stand cards.
-    int _tab, _shownSet = -1;
+    int _tab, _shownSet = -1, _shownArea = -1, _stripTab = -1;
     readonly Strip _strip;
 
     public StadiumScreen(Menus ui)
@@ -156,7 +156,7 @@ public sealed partial class StadiumScreen : PxCanvas
         base._Process(delta);
         _strip.Position = _strip.Area.Position;
         _strip.Size = _strip.Area.Size;
-        _strip.Visible = !_bare && _tab == 0 && _strip.Area.Size.X > 0;
+        _strip.Visible = !_bare && _tab != 1 && _strip.Area.Size.X > 0;
         if (!IsVisibleInTree()) return;
         // Rebuild once the picks settle (building takes a moment): first a frame saying so.
         if (_building)
@@ -315,10 +315,7 @@ public sealed partial class StadiumScreen : PxCanvas
                 float aw = Px.Width(Px.Big, "SAME ALL ROUND", 18) + 18;
                 Chip("same", new Vector2(drawer.End.X - 12 - aw, ty), "SAME ALL ROUND", false, () => All(Plan.Get(Selected)), 18, 28);
                 // The cards scroll in their own strip; arrows either side page through them.
-                float aw2 = 26;
-                _strip.Area = new Rect2(body.Position.X + aw2 + 6, body.Position.Y, body.Size.X - 2 * (aw2 + 6), body.Size.Y);
-                Arrow("stripL", new Rect2(body.Position.X, body.Position.Y, aw2, body.Size.Y), -1);
-                Arrow("stripR", new Rect2(body.End.X - aw2, body.Position.Y, aw2, body.Size.Y), 1);
+                StripIn(body);
                 break;
             }
             case 1:
@@ -333,7 +330,7 @@ public sealed partial class StadiumScreen : PxCanvas
                 int area = Surroundings.Clamp(Plan.Area);
                 var about = Px.Fit(Px.Small, Surroundings.About[area], 8, drawer.End.X - 14 - tx - 10);
                 Px.TextR(this, Px.Small, drawer.End.X - 14, ty + 18, about, 8, Px.InkDim);
-                Areas(body);
+                StripIn(body);
                 break;
             }
         }
@@ -356,6 +353,15 @@ public sealed partial class StadiumScreen : PxCanvas
         return new Rect2(L + PanelW + 16, Size.Y - 16 - DH, R - (L + PanelW + 16), DH);
     }
 
+    /// <summary>The scrolling card strip in the drawer's body, an arrow key either side.</summary>
+    void StripIn(Rect2 body)
+    {
+        float aw = 26;
+        _strip.Area = new Rect2(body.Position.X + aw + 6, body.Position.Y, body.Size.X - 2 * (aw + 6), body.Size.Y);
+        Arrow("stripL", new Rect2(body.Position.X, body.Position.Y, aw, body.Size.Y), -1);
+        Arrow("stripR", new Rect2(body.End.X - aw, body.Position.Y, aw, body.Size.Y), 1);
+    }
+
     /// <summary>A tall arrow key either side of the cards: pages them along.</summary>
     void Arrow(string key, Rect2 r, int dir)
     {
@@ -372,6 +378,9 @@ public sealed partial class StadiumScreen : PxCanvas
     /// <summary>The stand cards, drawn into the strip (it clips and scrolls them).</summary>
     void PaintStrip(Strip st)
     {
+        // A new tab brings its chosen card into view again.
+        if (_stripTab != _tab) { _stripTab = _tab; _shownSet = _shownArea = -1; }
+        if (_tab == 2) { Areas(st); return; }
         const float cw = 106, gap = 8;
         float h = st.Size.Y;
         st.Total = Kit.Sets.Length * (cw + gap) - gap;
@@ -400,74 +409,115 @@ public sealed partial class StadiumScreen : PxCanvas
     }
 
     /// <summary>What's round the ground: a card per area, a little view of each.</summary>
-    void Areas(Rect2 body)
+    void Areas(Strip st)
     {
         int n = Surroundings.Names.Length, now = Surroundings.Clamp(Plan.Area);
-        float gap = 8, cw = (body.Size.X - gap * (n - 1)) / n;
+        const float cw = 132, gap = 8;
+        float h = st.Size.Y;
+        st.Total = n * (cw + gap) - gap;
+        if (now != _shownArea && st.Size.X > 0)
+        {
+            _shownArea = now;
+            st.Show(now * (cw + gap), now * (cw + gap) + cw);
+        }
         for (int i = 0; i < n; i++)
         {
             int idx = i;
-            var r = new Rect2(body.Position.X + i * (cw + gap), body.Position.Y, cw, body.Size.Y - 2);
-            bool on = now == i, held = Held("area" + i);
+            var r = new Rect2(i * (cw + gap) - st.Offset, 0, cw, h - 2);
+            if (r.End.X < -4 || r.Position.X > st.Size.X + 4) continue;
+            bool on = now == i, held = st.IsHeld("area" + i);
             var rr = held ? new Rect2(r.Position + new Vector2(2, 2), r.Size) : r;
-            Px.Frame(this, rr, on ? Px.Gold : Px.Glass2, on ? Px.Hex(0xb37400) : Px.Line2, null, 3, 0);
-            AreaView(new Rect2(rr.Position + new Vector2(6, 6), new Vector2(cw - 12, rr.Size.Y - 36)), i);
-            Px.TextC(this, Px.Big, rr.GetCenter().X, rr.End.Y - 9, Px.Fit(Px.Big, Surroundings.Names[i].ToUpperInvariant(), 17, cw - 10), 17, on ? Px.Dark : Px.Ink);
-            Tap("area" + i, r, () => SetArea(idx));
+            Px.Frame(st, rr, on ? Px.Gold : Px.Glass2, on ? Px.Hex(0xb37400) : Px.Line2, null, 3, 0);
+            AreaView(st, new Rect2(rr.Position + new Vector2(6, 6), new Vector2(cw - 12, rr.Size.Y - 36)), i);
+            Px.TextC(st, Px.Big, rr.GetCenter().X, rr.End.Y - 9, Px.Fit(Px.Big, Surroundings.Names[i].ToUpperInvariant(), 17, cw - 10), 17, on ? Px.Dark : Px.Ink);
+            st.Hit("area" + i, r, () => SetArea(idx));
         }
     }
 
     /// <summary>A tiny view of an area: its sky, its land and what stands out in it.</summary>
-    void AreaView(Rect2 r, int area)
+    static void AreaView(CanvasItem ci, Rect2 r, int area)
     {
         float x = r.Position.X, y = r.End.Y, w = r.Size.X, h = r.Size.Y;
         Vector2 P(float fx, float fy) => new(Mathf.Round(x + fx * w), Mathf.Round(y - fy * h));
-        DrawRect(r, Px.Hex(0x9cc7e8));
-        var land = Px.Hex(area switch { 1 => 0x6b6e6a, 3 => 0x5a6250, 4 => 0x6f9440, 5 => 0x5f8a3e, _ => 0x557a3c });
+        ci.DrawRect(r, Px.Hex(0x9cc7e8));
+        var land = Px.Hex(area switch { 1 => 0x6b6e6a, 3 => 0x5a6250, 4 => 0x6f9440, 5 => 0x5f8a3e, 6 => 0xb5a062, 7 => 0x4c7636, 8 => 0x8a8a84, _ => 0x557a3c });
         switch (area)
         {
             case 1: // towers
                 for (int i = 0; i < 7; i++)
                 {
                     float hh = 0.35f + 0.5f * Mathf.Abs(Mathf.Sin(i * 2.1f + 0.7f));
-                    DrawRect(new Rect2(P(0.04f + i * 0.135f, hh), new Vector2(w * 0.11f, hh * h)), Px.Hex(i % 2 == 0 ? 0x5f7f8a : 0x404852));
+                    ci.DrawRect(new Rect2(P(0.04f + i * 0.135f, hh), new Vector2(w * 0.11f, hh * h)), Px.Hex(i % 2 == 0 ? 0x5f7f8a : 0x404852));
                 }
-                DrawRect(new Rect2(P(0, 0.12f), new Vector2(w, h * 0.12f)), land);
+                ci.DrawRect(new Rect2(P(0, 0.12f), new Vector2(w, h * 0.12f)), land);
                 break;
             case 2: // red roofs up to a castle on its hill, the river
-                DrawColoredPolygon(new[] { P(0, 0.2f), P(0.45f, 0.62f), P(0.75f, 0.55f), P(1, 0.3f), P(1, 0), P(0, 0) }, Px.Hex(0x6d8442));
-                DrawRect(new Rect2(P(0.4f, 0.8f), new Vector2(w * 0.12f, h * 0.2f)), Px.Hex(0xa39886));
-                for (int i = 0; i < 6; i++) DrawColoredPolygon(new[] { P(0.05f + i * 0.15f, 0.22f), P(0.12f + i * 0.15f, 0.32f), P(0.19f + i * 0.15f, 0.22f) }, Px.Hex(0xb5522f));
-                DrawRect(new Rect2(P(0, 0.12f), new Vector2(w, h * 0.08f)), Px.Hex(0x2f6a86));
+                ci.DrawColoredPolygon(new[] { P(0, 0.2f), P(0.45f, 0.62f), P(0.75f, 0.55f), P(1, 0.3f), P(1, 0), P(0, 0) }, Px.Hex(0x6d8442));
+                ci.DrawRect(new Rect2(P(0.4f, 0.8f), new Vector2(w * 0.12f, h * 0.2f)), Px.Hex(0xa39886));
+                for (int i = 0; i < 6; i++) ci.DrawColoredPolygon(new[] { P(0.05f + i * 0.15f, 0.22f), P(0.12f + i * 0.15f, 0.32f), P(0.19f + i * 0.15f, 0.22f) }, Px.Hex(0xb5522f));
+                ci.DrawRect(new Rect2(P(0, 0.12f), new Vector2(w, h * 0.08f)), Px.Hex(0x2f6a86));
                 break;
             case 3: // the quay, a crane, cooling towers over the water
-                DrawRect(new Rect2(P(0, 0.35f), new Vector2(w, h * 0.35f)), Px.Hex(0x2f5a6e));
-                DrawColoredPolygon(new[] { P(0.62f, 0.35f), P(0.66f, 0.62f), P(0.72f, 0.62f), P(0.76f, 0.35f) }, Px.Hex(0xc9c3b8));
-                DrawColoredPolygon(new[] { P(0.8f, 0.35f), P(0.84f, 0.58f), P(0.9f, 0.58f), P(0.94f, 0.35f) }, Px.Hex(0xc9c3b8));
-                DrawRect(new Rect2(P(0.2f, 0.9f), new Vector2(3, h * 0.55f)), Px.Hex(0xb8322a));
-                DrawRect(new Rect2(P(0.08f, 0.9f), new Vector2(w * 0.36f, 3)), Px.Hex(0xb8322a));
-                DrawRect(new Rect2(P(0, 0.12f), new Vector2(w, h * 0.12f)), Px.Hex(0x8a4a35));
+                ci.DrawRect(new Rect2(P(0, 0.35f), new Vector2(w, h * 0.35f)), Px.Hex(0x2f5a6e));
+                ci.DrawColoredPolygon(new[] { P(0.62f, 0.35f), P(0.66f, 0.62f), P(0.72f, 0.62f), P(0.76f, 0.35f) }, Px.Hex(0xc9c3b8));
+                ci.DrawColoredPolygon(new[] { P(0.8f, 0.35f), P(0.84f, 0.58f), P(0.9f, 0.58f), P(0.94f, 0.35f) }, Px.Hex(0xc9c3b8));
+                ci.DrawRect(new Rect2(P(0.2f, 0.9f), new Vector2(3, h * 0.55f)), Px.Hex(0xb8322a));
+                ci.DrawRect(new Rect2(P(0.08f, 0.9f), new Vector2(w * 0.36f, 3)), Px.Hex(0xb8322a));
+                ci.DrawRect(new Rect2(P(0, 0.12f), new Vector2(w, h * 0.12f)), Px.Hex(0x8a4a35));
                 break;
             case 4: // fields, a turbine
-                for (int i = 0; i < 4; i++) DrawRect(new Rect2(P(0, 0.12f + i * 0.08f + 0.08f), new Vector2(w, h * 0.08f + 1)), Px.Hex(new[] { 0xc8b45e, 0x6f9440, 0xd9c63a, 0x5f8c3c }[i]));
-                DrawRect(new Rect2(P(0.7f, 0.85f), new Vector2(2, h * 0.5f)), Px.Hex(0xf2f2f0));
-                DrawLine(P(0.705f, 0.85f), P(0.62f, 0.95f), Px.Hex(0xf2f2f0), 2);
-                DrawLine(P(0.705f, 0.85f), P(0.8f, 0.9f), Px.Hex(0xf2f2f0), 2);
-                DrawLine(P(0.705f, 0.85f), P(0.69f, 0.7f), Px.Hex(0xf2f2f0), 2);
+                for (int i = 0; i < 4; i++) ci.DrawRect(new Rect2(P(0, 0.12f + i * 0.08f + 0.08f), new Vector2(w, h * 0.08f + 1)), Px.Hex(new[] { 0xc8b45e, 0x6f9440, 0xd9c63a, 0x5f8c3c }[i]));
+                ci.DrawRect(new Rect2(P(0.7f, 0.85f), new Vector2(2, h * 0.5f)), Px.Hex(0xf2f2f0));
+                ci.DrawLine(P(0.705f, 0.85f), P(0.62f, 0.95f), Px.Hex(0xf2f2f0), 2);
+                ci.DrawLine(P(0.705f, 0.85f), P(0.8f, 0.9f), Px.Hex(0xf2f2f0), 2);
+                ci.DrawLine(P(0.705f, 0.85f), P(0.69f, 0.7f), Px.Hex(0xf2f2f0), 2);
                 break;
             case 5: // snowy peaks over a lake
-                DrawColoredPolygon(new[] { P(0, 0.3f), P(0.3f, 0.9f), P(0.55f, 0.45f), P(0.75f, 0.8f), P(1, 0.35f), P(1, 0.2f), P(0, 0.2f) }, Px.Hex(0x4a5a48));
-                DrawColoredPolygon(new[] { P(0.22f, 0.74f), P(0.3f, 0.9f), P(0.38f, 0.74f) }, Px.Hex(0xeef1f4));
-                DrawColoredPolygon(new[] { P(0.69f, 0.68f), P(0.75f, 0.8f), P(0.81f, 0.68f) }, Px.Hex(0xeef1f4));
-                DrawRect(new Rect2(P(0, 0.2f), new Vector2(w, h * 0.12f)), Px.Hex(0x2f6a86));
+                ci.DrawColoredPolygon(new[] { P(0, 0.3f), P(0.3f, 0.9f), P(0.55f, 0.45f), P(0.75f, 0.8f), P(1, 0.35f), P(1, 0.2f), P(0, 0.2f) }, Px.Hex(0x4a5a48));
+                ci.DrawColoredPolygon(new[] { P(0.22f, 0.74f), P(0.3f, 0.9f), P(0.38f, 0.74f) }, Px.Hex(0xeef1f4));
+                ci.DrawColoredPolygon(new[] { P(0.69f, 0.68f), P(0.75f, 0.8f), P(0.81f, 0.68f) }, Px.Hex(0xeef1f4));
+                ci.DrawRect(new Rect2(P(0, 0.2f), new Vector2(w, h * 0.12f)), Px.Hex(0x2f6a86));
+                break;
+            case 6: // a white town and its castle on the hill, gold fields, a windmill
+                ci.DrawColoredPolygon(new[] { P(0, 0.25f), P(0.25f, 0.55f), P(0.5f, 0.7f), P(0.8f, 0.5f), P(1, 0.3f), P(1, 0), P(0, 0) }, Px.Hex(0xb59a5a));
+                for (int i = 0; i < 9; i++)
+                {
+                    float fx = 0.18f + i * 0.07f, fy = 0.42f + 0.22f * (1 - Mathf.Abs(fx - 0.5f) * 3f);
+                    ci.DrawRect(new Rect2(P(fx, fy), new Vector2(w * 0.06f, h * 0.1f)), Px.Hex(0xf4f1ea));
+                    ci.DrawRect(new Rect2(P(fx, fy), new Vector2(w * 0.06f, 2)), Px.Hex(0xb5522f));
+                }
+                ci.DrawRect(new Rect2(P(0.44f, 0.86f), new Vector2(w * 0.14f, h * 0.18f)), Px.Hex(0xa8946e));
+                for (int i = 0; i < 3; i++) ci.DrawRect(new Rect2(P(0.44f + i * 0.055f, 0.9f), new Vector2(w * 0.03f, h * 0.04f)), Px.Hex(0xa8946e));
+                ci.DrawRect(new Rect2(P(0, 0.3f), new Vector2(w, h * 0.12f)), Px.Hex(0xd6b85a));
+                ci.DrawRect(new Rect2(P(0.84f, 0.5f), new Vector2(w * 0.06f, h * 0.2f)), Px.Hex(0xf4f1ea));
+                ci.DrawColoredPolygon(new[] { P(0.83f, 0.5f), P(0.87f, 0.58f), P(0.91f, 0.5f) }, Px.Hex(0x8a4a35));
+                break;
+            case 7: // steep walls down to the water, a waterfall, red houses on the shore
+                ci.DrawColoredPolygon(new[] { P(0, 0.95f), P(0.3f, 0.75f), P(0.36f, 0.3f), P(0, 0.3f) }, Px.Hex(0x4f5a52));
+                ci.DrawColoredPolygon(new[] { P(1, 0.9f), P(0.68f, 0.72f), P(0.62f, 0.3f), P(1, 0.3f) }, Px.Hex(0x45524a));
+                ci.DrawColoredPolygon(new[] { P(0.36f, 0.48f), P(0.5f, 0.6f), P(0.62f, 0.48f) }, Px.Hex(0x6b7a72));
+                ci.DrawRect(new Rect2(P(0.2f, 0.8f), new Vector2(2, h * 0.48f)), Px.Hex(0xe8f2f6));
+                ci.DrawRect(new Rect2(P(0, 0.34f), new Vector2(w, h * 0.12f)), Px.Hex(0x2a5868));
+                for (int i = 0; i < 5; i++) ci.DrawRect(new Rect2(P(0.08f + i * 0.18f, 0.3f), new Vector2(w * 0.07f, h * 0.08f)), Px.Hex(i % 2 == 0 ? 0xa83a2a : 0xe0c060));
+                break;
+            case 8: // a granite dome over the bay, a colourful hill, the beach
+                ci.DrawColoredPolygon(new[] { P(0.6f, 0.4f), P(0.64f, 0.8f), P(0.72f, 0.92f), P(0.8f, 0.8f), P(0.84f, 0.4f) }, Px.Hex(0x7a7468));
+                ci.DrawRect(new Rect2(P(0, 0.4f), new Vector2(w, h * 0.12f)), Px.Hex(0x2f7a8e));
+                ci.DrawColoredPolygon(new[] { P(0, 0.3f), P(0.05f, 0.62f), P(0.3f, 0.7f), P(0.5f, 0.3f) }, Px.Hex(0x3f7a3a));
+                for (int i = 0; i < 10; i++)
+                {
+                    float fx = 0.05f + (i % 5) * 0.075f, fy = 0.36f + (i / 5) * 0.12f + (i % 5) * 0.02f;
+                    ci.DrawRect(new Rect2(P(fx, fy), new Vector2(w * 0.05f, h * 0.06f)), Px.Hex(new[] { 0xe8c84a, 0xd85a4a, 0x5aa8d8, 0xf0f0ea, 0xe88a3a }[i % 5]));
+                }
+                ci.DrawRect(new Rect2(P(0, 0.28f), new Vector2(w, h * 0.1f)), Px.Hex(0xe6d6a8));
                 break;
             default: // a skyline across the bay, a beach
-                for (int i = 0; i < 6; i++) DrawRect(new Rect2(P(0.45f + i * 0.08f, 0.45f + (i % 3) * 0.1f), new Vector2(w * 0.06f, h * (0.12f + (i % 3) * 0.1f))), Px.Hex(0x8a96a3));
-                DrawRect(new Rect2(P(0, 0.33f), new Vector2(w, h * 0.13f)), Px.Hex(0x2f6a86));
-                DrawRect(new Rect2(P(0, 0.2f), new Vector2(w, h * 0.08f)), Px.Hex(0xdcc9a0));
+                for (int i = 0; i < 6; i++) ci.DrawRect(new Rect2(P(0.45f + i * 0.08f, 0.45f + (i % 3) * 0.1f), new Vector2(w * 0.06f, h * (0.12f + (i % 3) * 0.1f))), Px.Hex(0x8a96a3));
+                ci.DrawRect(new Rect2(P(0, 0.33f), new Vector2(w, h * 0.13f)), Px.Hex(0x2f6a86));
+                ci.DrawRect(new Rect2(P(0, 0.2f), new Vector2(w, h * 0.08f)), Px.Hex(0xdcc9a0));
                 break;
         }
-        DrawRect(new Rect2(P(0, 0.12f), new Vector2(w, h * 0.12f)), land);
+        ci.DrawRect(new Rect2(P(0, 0.12f), new Vector2(w, h * 0.12f)), land);
     }
 
     void SetArea(int area)
