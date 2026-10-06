@@ -349,9 +349,9 @@ public sealed partial class AI
     public double OffsideLineFor(int team) => offside[team];
 
     /// <summary>
-    /// Your through ball. The stick picks the runner (the team-mate it points at, with the space he's
-    /// heading for; forwards first) and the hold how deep: a tap finds the nearer man, into his
-    /// stride; a full hold the deeper one, into the space in behind. It's never a guess at a spot:
+    /// Your through ball. The stick picks the runner, as for a pass to feet (within 50° of it, judged
+    /// by where he's heading), and the hold how deep: a tap finds the nearer man, into his stride; a
+    /// full hold the deeper one, into the space in behind. It's never a guess at a spot:
     /// along his run, every strike pace has its own point where the ball and he get there together
     /// (Meet), and of those it takes the one nearest the depth you held for, steering off a spot a
     /// defender reaches first or a line he cuts. A man the ball can't be timed to isn't chosen.
@@ -369,8 +369,12 @@ public sealed partial class AI
         }
         double hold = M.Clamp(power, 0, 1);
         double depth = 2 + 14 * hold;
-        double cone = aimed ? 0.6 : -0.2;
+        // The same rule as a pass to feet (HumanReceiver): the direction first, then the distance
+        // the hold asks for, then how good his ball is. Lower cost wins.
+        double cone = JsMath.Cos((aimed ? 50 : 70) * Math.PI / 180);
+        double want = 8 + 32 * hold;
         ThroughPlan? best = null;
+        double bestC = 1e9;
         foreach (var o in team.Players)
         {
             if (o == p || o.Role == Role.GK) continue;
@@ -379,24 +383,23 @@ public sealed partial class AI
             double dz = o.Pos.Z + o.Vel.Z * 0.6 - b.Z;
             double d = JsMath.Hypot(dx, dz);
             if (d < 4 || d > 52) continue;
-            double align = (dx * aimX + dz * aimZ) / d;
-            if (align < cone) continue;
+            if ((dx * aimX + dz * aimZ) / d < cone) continue;
             var tp = Meet(p, o, aimed ? aimX : 0, aimed ? aimZ : 0, depth, lofted);
             if (tp == null) continue;
+            double off = Math.Abs(JsMath.Atan2(dx * aimZ - dz * aimX, dx * aimX + dz * aimZ)) * 180 / Math.PI;
             double ahead = (o.Pos.X - b.X) * dir;
             bool offsideNow = o.Pos.X * dir > line + 0.3 && ahead > 0;
-            double open = 99;
-            foreach (var e in m.Teams[1 - p.Team].Players) open = Math.Min(open, M.Dist2D(e.Pos.X, e.Pos.Z, o.Pos.X, o.Pos.Z));
-            // The hold leans it long or short, as for a pass to feet; then how good his ball is.
-            double s = align * 3 + M.Clamp(ahead / 20, -0.5, 1) + M.Clamp(open / 6, 0, 1) * 0.6 - d / 40
-                + (hold - 0.5) * 2 * Math.Min(d, 40) / 20
-                + (o.Role == Role.FWD ? 0.3 : 0) - (offsideNow ? 2 : 0) - tp.Score / 4;
-            if (best == null || s > best.Score)
+            double D = M.Dist2D(b.X, b.Z, tp.X, tp.Z);
+            // Its own cost (the depth missed, a defender there first, a cut lane) counts a quarter;
+            // a man already beyond the line, or one heading back, isn't the one for a ball in behind.
+            double c = off / 12 + Math.Abs(D - want) / 12 + tp.Score / 4 + (offsideNow ? 3 : 0) - M.Clamp(ahead / 20, -0.5, 1) * 0.5;
+            if (c < bestC)
             {
-                tp.Score = s;
+                bestC = c;
                 best = tp;
             }
         }
+        if (best != null) best.Score = -bestC;
         return best;
     }
 
