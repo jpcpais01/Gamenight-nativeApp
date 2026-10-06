@@ -35,9 +35,10 @@ public sealed partial class PauseMenu : Control
     readonly Button _restart;
     readonly Button _foul;
     readonly PanelContainer _main, _subsCard;
+    readonly VolumeBar[] _volumes;
     readonly SubsBoard _subs;
     readonly Button _subsButton;
-    readonly Button _camera, _graphics, _pixels, _weather, _fps, _limit, _sound, _smooth, _leave, _report;
+    readonly Button _camera, _graphics, _pixels, _weather, _fps, _limit, _smooth, _leave, _report;
 
     public bool IsOpen => _menu.Visible;
 
@@ -134,9 +135,23 @@ public sealed partial class PauseMenu : Control
         _graphics = Tile("SHADOWS", () => { MatchSettings.Fast = !MatchSettings.Fast; Changed(); });
         Section(right, "PICTURE", _camera, _pixels, _smooth, _graphics);
 
+        VolumeBar Volume(string name, Func<int> get, Action<int> set)
+        {
+            var v = new VolumeBar(name, get, set);
+            v.Changed += () => GameNight.Audio.GameAudio.Instance?.ApplyVolumes();
+            v.Released += MatchSettings.Save;
+            return v;
+        }
+        _volumes = new[]
+        {
+            Volume("MASTER", () => MatchSettings.VolMaster, x => MatchSettings.VolMaster = x),
+            Volume("CROWD", () => MatchSettings.VolCrowd, x => MatchSettings.VolCrowd = x),
+            Volume("MATCH", () => MatchSettings.VolFx, x => MatchSettings.VolFx = x),
+            Volume("MENUS", () => MatchSettings.VolUi, x => MatchSettings.VolUi = x),
+        };
+        Section(right, "SOUND", _volumes);
+
         _weather = Tile("WEATHER", () => { CycleWeather?.Invoke(); Labels(); });
-        _sound = Tile("SOUND", () => { MatchSettings.Sound = !MatchSettings.Sound; Changed(); });
-        Section(right, "MATCH", _weather, _sound);
 
         _limit = Tile("FPS LIMIT", () =>
         {
@@ -153,7 +168,7 @@ public sealed partial class PauseMenu : Control
             else MatchSettings.ShowFps = MatchSettings.Profile = false;
             Changed();
         });
-        Section(right, "PERFORMANCE", _limit, _fps);
+        Section(right, "MATCH & PERFORMANCE", _weather, _limit, _fps);
         Labels();
 
         // The substitutions card, in the same place as the menu's.
@@ -271,7 +286,7 @@ public sealed partial class PauseMenu : Control
         Value(_smooth, MatchSettings.Smooth ? "On" : "Off");
         Value(_fps, !MatchSettings.ShowFps ? "Off" : MatchSettings.Profile ? "Detail" : "On");
         Value(_limit, MatchSettings.FpsCap.ToString());
-        Value(_sound, MatchSettings.Sound ? "On" : "Off");
+        foreach (var v in _volumes) v.QueueRedraw();
         _weather.Disabled = WeatherName == null;
         Value(_weather, WeatherName != null ? WeatherName() : "—");
         _report.Visible = MatchSettings.ShowFps && MatchSettings.Profile && SaveReport != null;
@@ -281,7 +296,7 @@ public sealed partial class PauseMenu : Control
     // ------------------------------------------------------------------ look
 
     /// <summary>A section: a small heading, then its settings two to a row.</summary>
-    static void Section(VBoxContainer into, string name, params Button[] tiles)
+    static void Section(VBoxContainer into, string name, params Control[] tiles)
     {
         if (into.GetChildCount() > 0) into.AddChild(new Control { CustomMinimumSize = new Vector2(0, 4) });
         var head = new Label { Text = name };
