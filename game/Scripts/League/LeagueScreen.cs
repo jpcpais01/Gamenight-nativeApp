@@ -530,7 +530,7 @@ public sealed partial class LeagueScreen : PxCanvas
             return;
         }
         int opp = f.Other(You);
-        var goals = (o.Goals ?? new()).Select(g => new GoalNote { Club = g.Team == 0 ? You : opp, Player = L.Scorer(f, g.Team, g.Index), Minute = Math.Max(1, g.Minute) }).ToList();
+        var goals = (o.Goals ?? new()).Select(g => new GoalNote { Club = g.Team == 0 ? You : opp, Player = g.Name is { Length: > 0 } n ? n : L.Scorer(f, g.Team, g.Index), Minute = Math.Max(1, g.Minute) }).ToList();
         L.Complete(home ? o.Home : o.Away, home ? o.Away : o.Home, goals);
         Reward(f, round);
     }

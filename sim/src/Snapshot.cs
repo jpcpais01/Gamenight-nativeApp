@@ -111,7 +111,7 @@ public sealed class MatchSnapshot
     public int KickCount;
     /// <summary>Strongest kick this step, 0..1.</summary>
     public float KickMax;
-    public int Whistle, Goal = -1, Foul, Card, Offside;
+    public int Whistle, Goal = -1, Foul, Card, Offside, Sub;
     public float Post, Net, Bounce, Save, Tackle;
 
     public void CopyFrom(MatchSnapshot o)
@@ -158,7 +158,7 @@ public sealed class MatchSnapshot
         ShotTeam = o.ShotTeam; AttackingTeam = o.AttackingTeam; LastTouchTeam = o.LastTouchTeam; PenaltyPending = o.PenaltyPending;
         KickCount = o.KickCount; KickMax = o.KickMax;
         InvaderT = o.InvaderT; InvaderSeed = o.InvaderSeed;
-        Whistle = o.Whistle; Goal = o.Goal; Foul = o.Foul; Card = o.Card; Offside = o.Offside;
+        Whistle = o.Whistle; Goal = o.Goal; Foul = o.Foul; Card = o.Card; Offside = o.Offside; Sub = o.Sub;
         Post = o.Post; Net = o.Net; Bounce = o.Bounce; Save = o.Save; Tackle = o.Tackle;
     }
 
@@ -172,6 +172,7 @@ public sealed class MatchSnapshot
         Foul = Math.Max(Foul, e.Foul);
         Card = Math.Max(Card, e.Card);
         Offside = Math.Max(Offside, e.Offside);
+        Sub = Math.Max(Sub, e.Sub);
         Post = Math.Max(Post, (float)e.Post);
         Net = Math.Max(Net, (float)e.Net);
         Bounce = Math.Max(Bounce, (float)e.Bounce);
@@ -183,7 +184,7 @@ public sealed class MatchSnapshot
     {
         KickCount = 0;
         KickMax = 0;
-        Whistle = Foul = Card = Offside = 0;
+        Whistle = Foul = Card = Offside = Sub = 0;
         Goal = -1;
         Post = Net = Bounce = Save = Tackle = 0;
     }

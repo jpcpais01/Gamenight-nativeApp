@@ -188,13 +188,14 @@ public partial class Main : Node
         _officials.Reset();
         _invader.Clear(null);
         _goalLog.Clear();
-        _logged = 0;
+        _logged = _subsDressed = 0;
         _match = Request != null ? new Match(Request.Seed, Request.Setup) : new Match(seed: DateTime.Now.Ticks % 2147483647);
         PickExplosions();
         if (Request?.Demo == true) _match.AutoPlay = true;
         // Names and kits are read before the match's own thread starts.
         _players.SetMatch(_match);
         _hud.SetMatch(_match);
+        _pause.Match = Request?.Drill == null ? _match : null;
         _runner = new MatchRunner(_match);
         if (Request?.Drill is DrillKind kind)
         {
@@ -404,6 +405,7 @@ public partial class Main : Node
         if (_cur.Goal >= 0) _camera.Bump(0.4f);
         if (_cur.Goal >= 0 && !Directed) Explode(_cur);
         LogGoal();
+        if (_cur.Sub != 0) Substituted();
         if (_cur.Post > 0) _camera.Bump(0.6f);
         float run = _pause.IsOpen ? 0 : dt;
         if (_replay.Active)
@@ -531,7 +533,20 @@ public partial class Main : Node
         var p = _match.All.Find(x => x.Id == _cur.Scorer);
         if (p == null) return;
         // An own goal goes down to the side that gained it (its striker, as the engine credits it).
-        _goalLog.Add(new GoalEvent { Team = p.Team, Index = p.Index, Minute = Math.Max(1, _cur.Minute) });
+        _goalLog.Add(new GoalEvent { Team = p.Team, Index = p.Index, Minute = Math.Max(1, _cur.Minute), Name = p.Name });
+    }
+
+    int _subsDressed;
+
+    /// <summary>Substitutes have come on: dress them.</summary>
+    void Substituted()
+    {
+        lock (_match.SubGate)
+        {
+            for (; _subsDressed < _match.Subs.Count; _subsDressed++)
+                _players.Dress(_match, _match.All[_match.Subs[_subsDressed].Id]);
+        }
+        _players.Flush();
     }
 
     int _prewarm;

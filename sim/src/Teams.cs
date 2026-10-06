@@ -133,6 +133,8 @@ public sealed class SetupPlayer
     public int Foot = 1;
     /// <summary>Formation slot, team frame.</summary>
     public double X, Z;
+    /// <summary>His own position, for the bench list ("CB", "ST"...).</summary>
+    public string Pos = "";
 }
 
 public sealed class TeamSetup
@@ -142,6 +144,8 @@ public sealed class TeamSetup
     public List<SetupPlayer> Players = new List<SetupPlayer>();
     /// <summary>Shirt index of the captain (wears the armband); null = the striker.</summary>
     public int? Captain;
+    /// <summary>The substitutes (seven), each as he plays in his own position.</summary>
+    public List<SetupPlayer>? Bench;
 }
 
 public sealed class MatchSetup

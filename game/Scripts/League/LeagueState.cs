@@ -520,6 +520,7 @@ public sealed class LeagueState
                 t.Captain = i;
             }
         }
+        t.Bench = cl.Squad.Skip(11).Take(7).Select(Cards.Sub).ToList();
         return t;
     }
 

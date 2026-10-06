@@ -626,7 +626,7 @@ public sealed class ClubState
     public TeamSetup TeamSetup()
     {
         var s = Starters();
-        var t = new TeamSetup { Info = Info(), Captain = CaptainIndex() };
+        var t = new TeamSetup { Info = Info(), Captain = CaptainIndex(), Bench = BenchSeven().Where(c => c != null).Select(Club.Cards.Sub).ToList() };
         for (int i = 0; i < 11; i++)
         {
             var slot = Slot(i);
@@ -660,6 +660,13 @@ public sealed class ClubState
                 t.Captain = i;
             }
             t.Players.Add(ToSetup(Club.Cards.ToSim(c, slot.Pos), slot));
+        }
+        // Their bench: a keeper and cover across the pitch, a little below the XI.
+        t.Bench = new();
+        foreach (var pos in new[] { Position.GK, Position.CB, Position.RB, Position.CM, Position.CAM, Position.LW, Position.ST })
+        {
+            int o = (int)Math.Clamp(Club.Cards.JsRound(level - 3 + rng.Gauss() * 3), 45, 95);
+            t.Bench.Add(Club.Cards.Sub(Club.Cards.Generate(rng, RarityFor(o), pos, o)));
         }
         return t;
     }

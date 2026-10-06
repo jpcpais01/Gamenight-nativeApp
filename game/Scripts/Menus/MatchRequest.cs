@@ -46,6 +46,8 @@ public sealed class MatchOutcome
 public sealed class GoalEvent
 {
     public int Team, Index, Minute;
+    /// <summary>Who scored (the slot may have changed hands through a substitution).</summary>
+    public string Name = "";
 }
 
 /// <summary>The grounds a match can be played at. The stadium thread adds its grounds here; the

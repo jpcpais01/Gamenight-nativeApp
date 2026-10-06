@@ -160,6 +160,9 @@ public sealed partial class AI
     readonly List<Player> near = new List<Player>();
     readonly List<Player> runners = new List<Player>();
 
+    /// <summary>A substitute has taken p's slot: his own character.</summary>
+    public void Refresh(Player p) => Traits[p.Id] = TraitsFor(p);
+
     public AI(Match match)
     {
         m = match;

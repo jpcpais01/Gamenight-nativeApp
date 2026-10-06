@@ -107,6 +107,8 @@ public sealed class MatchEvents
     public int Card;
     /// <summary>The linesman's flag went up for offside.</summary>
     public int Offside;
+    /// <summary>A substitution was made (see Match.Subs).</summary>
+    public int Sub;
 
     public void Clear()
     {
@@ -114,7 +116,7 @@ public sealed class MatchEvents
         Whistle = 0;
         Goal = -1;
         Post = Net = NetX = NetY = NetZ = Bounce = Save = Tackle = 0;
-        Foul = Card = Offside = 0;
+        Foul = Card = Offside = Sub = 0;
     }
 }
 
@@ -318,6 +320,7 @@ public sealed partial class Match
             Teams.Add(team);
         }
         All.AddRange(Players);
+        MakeBenches(seed, setup);
         AI = new AI(this);
         Controlled = Teams[HumanTeam].Players[9];
         StartKickoff(0);

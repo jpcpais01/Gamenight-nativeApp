@@ -82,6 +82,7 @@ public sealed partial class Match
         }
 
         SendOffStep();
+        SubStep();
 
         // Set piece timer.
         if (SetPiece != null) SetPiece.T += DT;

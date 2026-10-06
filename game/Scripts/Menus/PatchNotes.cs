@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.81", "Substitutions: SUBSTITUTIONS in the pause menu shows your eleven with their legs left and your bench of seven. Tap one of each; he comes on at the next stoppage, five changes a match. Computer managers make their own changes from the hour."),
         ("0.80", "Play on a PC: a Windows version now comes with every release, fullscreen at your screen's resolution and refresh rate, with keyboard, mouse or a gamepad. Or use this phone as its controller: PLAY ON PC on the home screen finds the PC on your Wi-Fi."),
         ("0.79", "Squad page rebuilt around a big floodlit pitch with your eleven. New bench of seven in a dugout under it: tap or drag to swap players between the XI and the bench. The rest of the squad, team and line ratings and auto-pick sit down the side."),
         ("0.78", "High balls to you are kept, even when pressed: he chests it, lets it drop or cushions it down with his head. He only nods it on when a team-mate close by is free to take it. Headers at goal near the box are unchanged."),

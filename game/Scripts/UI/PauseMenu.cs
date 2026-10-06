@@ -1,4 +1,5 @@
 using System;
+using GameNight.Sim;
 using Godot;
 
 namespace GameNight.UI;
@@ -33,6 +34,9 @@ public sealed partial class PauseMenu : Control
     readonly Label _title;
     readonly Button _restart;
     readonly Button _foul;
+    readonly PanelContainer _main, _subsCard;
+    readonly SubsBoard _subs;
+    readonly Button _subsButton;
     readonly Button _camera, _graphics, _pixels, _weather, _fps, _limit, _sound, _smooth, _leave, _report;
 
     public bool IsOpen => _menu.Visible;
@@ -79,7 +83,7 @@ public sealed partial class PauseMenu : Control
         _menu.AddChild(centre);
 
         // One card, two columns: what to do on the left, the settings by section on the right.
-        var panel = new PanelContainer();
+        var panel = _main = new PanelContainer();
         var bg = Flat(Style.PanelSolid, 10, new Color(Style.Ink, 0.1f), 1, 18, 16);
         bg.ShadowColor = new Color(0, 0, 0, 0.45f);
         bg.ShadowSize = 18;
@@ -103,6 +107,10 @@ public sealed partial class PauseMenu : Control
         var resume = Solid("RESUME");
         resume.Pressed += Close;
         left.AddChild(resume);
+        _subsButton = Ghost("SUBSTITUTIONS");
+        _subsButton.Visible = false;
+        _subsButton.Pressed += () => ShowSubs(true);
+        left.AddChild(_subsButton);
         _restart = Ghost("RESTART MATCH");
         _restart.Pressed += () => { Close(); Restart?.Invoke(); };
         left.AddChild(_restart);
@@ -147,6 +155,31 @@ public sealed partial class PauseMenu : Control
         });
         Section(right, "PERFORMANCE", _limit, _fps);
         Labels();
+
+        // The substitutions card, in the same place as the menu's.
+        _subsCard = new PanelContainer { Visible = false };
+        _subsCard.AddThemeStyleboxOverride("panel", bg);
+        centre.AddChild(_subsCard);
+        _subs = new SubsBoard();
+        _subs.Done += () => ShowSubs(false);
+        _subsCard.AddChild(_subs);
+    }
+
+    /// <summary>The match whose side 0 the player manages (substitutions); null hides them (training).</summary>
+    public Match Match
+    {
+        set
+        {
+            _subs.Match = value;
+            _subsButton.Visible = value != null;
+        }
+    }
+
+    void ShowSubs(bool on)
+    {
+        _subs.Reset();
+        _main.Visible = !on;
+        _subsCard.Visible = on;
     }
 
     /// <summary>Training: the left column's actions are for the drill.</summary>
@@ -176,6 +209,7 @@ public sealed partial class PauseMenu : Control
         _menu.Visible = true;
         _pause.Visible = false;
         _leave.Visible = Leave != null;
+        ShowSubs(false);
         Labels();
         Opened?.Invoke();
     }
@@ -193,7 +227,8 @@ public sealed partial class PauseMenu : Control
         // Back (Android) or Escape toggles the menu.
         if (e is InputEventKey { Pressed: true, Echo: false } k && (k.Keycode == Key.Escape || k.Keycode == Key.Back))
         {
-            if (_menu.Visible) Close();
+            if (_subsCard.Visible) ShowSubs(false);
+            else if (_menu.Visible) Close();
             else Open();
             GetViewport().SetInputAsHandled();
         }
