@@ -294,6 +294,7 @@ public partial class Main : Node
     {
         _camera.BaseDist = MatchCamera.Presets[Math.Clamp(MatchSettings.Camera, 0, 2)];
         _view.TargetHeight = MatchSettings.Pixels > 0 ? MatchSettings.Pixels : 270;
+        _view.Smooth = MatchSettings.Smooth;
         _hud.ShowFps = MatchSettings.ShowFps;
         _prof.On = MatchSettings.ShowFps && MatchSettings.Profile && Request?.Demo != true;
         if (GameAudio.Instance != null) GameAudio.Instance.Muted = !MatchSettings.Sound;
@@ -546,7 +547,7 @@ public partial class Main : Node
     {
         string version = (string)ProjectSettings.GetSetting("application/config/version", "?");
         var header = $"App {version} · {DateTime.Now:yyyy-MM-dd HH:mm} · ground {Request?.Ground ?? "big"} · weather {Atmosphere.Names[(int)_ground.Atmosphere.Weather]}"
-            + $"\nSettings: graphics {(MatchSettings.Fast ? "fast" : "full")} · pixels {_view.ArtHeight} tall (setting {(MatchSettings.Pixels > 0 ? MatchSettings.Pixels.ToString() : "auto")}) · camera {MatchSettings.Camera} · sound {(MatchSettings.Sound ? "on" : "off")}"
+            + $"\nSettings: graphics {(MatchSettings.Fast ? "fast" : "full")} · smooth {(MatchSettings.Smooth ? "on" : "off")} · pixels {_view.ArtHeight} tall (setting {(MatchSettings.Pixels > 0 ? MatchSettings.Pixels.ToString() : "auto")}) · camera {MatchSettings.Camera} · sound {(MatchSettings.Sound ? "on" : "off")}"
             + $"\nMatch: {_cur.ClockLabel} · {_cur.Score[0]}-{_cur.Score[1]} · {SpikeContext()}{(Request?.Drill != null ? $" · training {Request.Drill}" : "")}";
         string text = _prof.Report(header);
         DisplayServer.ClipboardSet(text);

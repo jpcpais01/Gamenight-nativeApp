@@ -4,9 +4,11 @@ using Godot;
 namespace GameNight.Render;
 
 /// <summary>
-/// The pixel-art presentation. The 3D world renders once, at art resolution (about 270 pixels
-/// tall), into a SubViewport: one sample per pixel, no supersampling, the post pass on a
-/// full-screen quad inside it. The result is shown with nearest-neighbour filtering at a
+/// The pixel-art presentation. The 3D world renders at art resolution (about 270 pixels tall)
+/// into a SubViewport, the post pass on a full-screen quad inside it. With Smooth on, each art
+/// pixel is four samples (the 3D renders at twice the size and is averaged down), so thin
+/// things (lines, nets, far fans) cover a pixel partly instead of popping in and out of it
+/// as the camera moves; the post pass still works in whole art pixels. The result is shown with nearest-neighbour filtering at a
 /// whole-number scale, so every art pixel is the same size on screen, and scrolled by the
 /// camera's sub-pixel remainder so motion glides while the pixel grid stays put.
 /// </summary>
@@ -27,6 +29,19 @@ public sealed partial class PixelView : Control
     public int PixelScale { get; private set; } = 1;
 
     readonly TextureRect _display;
+    readonly ShaderMaterial _post;
+    bool _smooth = true;
+
+    /// <summary>Four samples per art pixel (steady edges in motion), or one.</summary>
+    public bool Smooth
+    {
+        get => _smooth;
+        set
+        {
+            _smooth = value;
+            Viewport.Scaling3DScale = value ? 2 : 1;
+        }
+    }
     Vector2I _lastScreen;
 
     public PixelView()
@@ -39,7 +54,8 @@ public sealed partial class PixelView : Control
             RenderTargetUpdateMode = SubViewport.UpdateMode.Always,
             Msaa3D = Godot.Viewport.Msaa.Disabled,
             ScreenSpaceAA = Godot.Viewport.ScreenSpaceAAEnum.Disabled,
-            Scaling3DScale = 1f,
+            Scaling3DMode = Godot.Viewport.Scaling3DModeEnum.Bilinear,
+            Scaling3DScale = 2f,
             PositionalShadowAtlasSize = 0,
             HandleInputLocally = false,
             GuiDisableInput = true,
@@ -52,10 +68,11 @@ public sealed partial class PixelView : Control
         WorldRoot.AddChild(Camera);
 
         // The post pass: a full-screen quad drawn last (outline, grade, dither).
+        _post = Geo.Material("res://Shaders/post.gdshader");
         var quad = new MeshInstance3D
         {
             Mesh = new QuadMesh { Size = new Vector2(2, 2) },
-            MaterialOverride = Geo.Material("res://Shaders/post.gdshader"),
+            MaterialOverride = _post,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             ExtraCullMargin = 16384,
         };
@@ -107,6 +124,7 @@ public sealed partial class PixelView : Control
         int artW = (int)MathF.Ceiling(screen.X / (float)PixelScale);
         // One spare pixel all round, for the sub-pixel scroll.
         Viewport.Size = new Vector2I(artW + 2, ArtHeight + 2);
+        _post.SetShaderParameter("art_size", new Vector2(Viewport.Size.X, Viewport.Size.Y));
     }
 
     public float Aspect => Viewport.Size.X / (float)Viewport.Size.Y;

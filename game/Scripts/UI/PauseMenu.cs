@@ -30,7 +30,7 @@ public sealed partial class PauseMenu : Control
     readonly Control _menu;
     readonly VBoxContainer _card;
     readonly Button _foul;
-    readonly Button _camera, _graphics, _pixels, _weather, _fps, _limit, _sound, _leave, _report;
+    readonly Button _camera, _graphics, _pixels, _weather, _fps, _limit, _sound, _smooth, _leave, _report;
 
     public bool IsOpen => _menu.Visible;
 
@@ -104,7 +104,10 @@ public sealed partial class PauseMenu : Control
         _pixels.Pressed += NextPixels;
         _weather = Ghost("");
         _weather.Pressed += () => { CycleWeather?.Invoke(); Labels(); };
-        card.AddChild(Row(_pixels, _weather));
+        _smooth = Ghost("");
+        _smooth.Pressed += () => { MatchSettings.Smooth = !MatchSettings.Smooth; Changed(); };
+        card.AddChild(Row(_pixels, _smooth));
+        card.AddChild(Row(_weather));
         _fps = Ghost("");
         // Off, on, then on with the breakdown of where the time goes.
         _fps.Pressed += () =>
@@ -207,6 +210,7 @@ public sealed partial class PauseMenu : Control
         _pixels.Text = $"PIXELS: {h} · {scale}X";
         _fps.Text = "FPS COUNTER: " + (!MatchSettings.ShowFps ? "OFF" : MatchSettings.Profile ? "DETAIL" : "ON");
         _limit.Text = $"FPS LIMIT: {MatchSettings.FpsCap}";
+        _smooth.Text = "SMOOTH PIXELS: " + (MatchSettings.Smooth ? "ON" : "OFF");
         _sound.Text = "SOUND: " + (MatchSettings.Sound ? "ON" : "OFF");
         _weather.Visible = WeatherName != null;
         _report.Visible = MatchSettings.ShowFps && MatchSettings.Profile && SaveReport != null;

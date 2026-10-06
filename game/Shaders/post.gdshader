@@ -1,4 +1,5 @@
-// The pixel-art post pass, at art resolution (one fragment per art pixel): 1-pixel outlines
+// The pixel-art post pass. It runs per rendered sample (four per art pixel when the view is
+// supersampled, then averaged down) but thinks in art pixels (art_size): 1-art-pixel outlines
 // from the depth buffer, the PWA's grade (green lift, cool shade, warm light, S-curve,
 // vibrance) and an ordered-dither quantise, all in one pass. Drawn on a full-screen quad
 // that renders last in the 3D viewport.
@@ -9,6 +10,8 @@ uniform sampler2D screen_tex : hint_screen_texture, filter_nearest;
 uniform sampler2D depth_tex : hint_depth_texture, filter_nearest;
 uniform float levels = 22.0;
 uniform float night = 0.0;
+/// The art target's size in art pixels (the 3D may render at a multiple of it).
+uniform vec2 art_size = vec2(480.0, 270.0);
 
 void vertex() {
 	POSITION = vec4(VERTEX.xy, 1.0, 1.0);
@@ -30,7 +33,7 @@ float bayer4(vec2 p) { return bayer2(0.5 * p) * 0.25 + bayer2(p); }
 
 void fragment() {
 	vec2 uv = SCREEN_UV;
-	vec2 e = 1.0 / VIEWPORT_SIZE;
+	vec2 e = 1.0 / art_size;
 	vec3 c = texture(screen_tex, uv).rgb;
 
 	// Silhouette outlines: this pixel is clearly nearer than a neighbour.
@@ -63,7 +66,8 @@ void fragment() {
 	c *= mix(vec3(0.94, 0.98, 1.08), vec3(1.05, 1.01, 0.95), smoothstep(0.2, 0.75, l2));
 
 	// Quantise with a light ordered dither: gradients become crisp pixel bands.
-	float th = bayer4(FRAGCOORD.xy);
+	// (The pattern is per art pixel, so all of a pixel's samples agree.)
+	float th = bayer4(floor(uv * art_size));
 	c = floor(clamp(c, 0.0, 1.0) * levels + 0.5 + (th - 0.5) * 0.4) / levels;
 	// Outlines in a deeper shade of the object's own colour.
 	c = mix(c, c * c * vec3(0.55, 0.5, 0.7), edge * 0.9);
