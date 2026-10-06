@@ -137,6 +137,7 @@ public sealed partial class Match
         var s = new Substitution { Team = p.Team, Id = p.Id, Minute = Math.Max(1, DisplayMinute), Off = p.Name, OffNumber = p.Number, On = on.Name, OnNumber = on.Number };
         p.Name = on.Name;
         p.Number = on.Number;
+        p.Source = on.Source;
         p.Foot = on.Foot == -1 ? -1 : 1;
         p.Attrs = on.Attrs.Clone();
         p.Look = on.Look;

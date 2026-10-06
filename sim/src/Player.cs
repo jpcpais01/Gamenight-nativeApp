@@ -162,6 +162,8 @@ public sealed class Player
     /// <summary>Shirt name / number (club line-ups).</summary>
     public string Name = "";
     public int Number;
+    /// <summary>The setup's Source for whoever is in this slot (the game's player card).</summary>
+    public object? Source;
 
     public readonly int Id;
     public readonly int Team;

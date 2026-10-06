@@ -2,6 +2,7 @@ using System;
 using Godot;
 using GameNight.Render;
 using GameNight.Sim;
+using ClubCard = GameNight.Club.Card;
 
 namespace GameNight.UI;
 
@@ -68,6 +69,9 @@ public sealed partial class Hud : Control
     float _revealAt = -1;
     int _revealTeam;
     string _revealLine = "";
+    /// <summary>The scorer (player id) whose card goes up with the new score.</summary>
+    int _revealScorer = -1, _cardScorer = -1;
+    readonly Painter _big;
 
     // Caption.
     string _capTitle = "", _capSub = "";
@@ -124,6 +128,9 @@ public sealed partial class Hud : Control
         _caption = Layer(DrawCaption);
         _card = new Painter(DrawCard) { Visible = false };
         AddChild(_card);
+        _big = new Painter(DrawBig) { Visible = false };
+        AddChild(_big);
+        Menus.Px.LoadFonts();
         // The score card's numbers roll inside their cells.
         _cellHome = new Painter(p => DrawCell(p, 0)) { ClipContents = true };
         _cellAway = new Painter(p => DrawCell(p, 1)) { ClipContents = true };
@@ -145,6 +152,8 @@ public sealed partial class Hud : Control
         _revealAt = -1;
         _capAt = _cardAt = -99;
         _subsShown = 0;
+        _cards = new ClubCard[MatchSnapshot.N];
+        _cardScorer = _revealScorer = -1;
         _card.Visible = false;
         _pcFor = -2;
         _lastPhase = Phase.Kickoff;
@@ -207,6 +216,7 @@ public sealed partial class Hud : Control
                 var s = _match.Subs[_subsShown];
                 var p = _match.All[s.Id];
                 _info.Surname[s.Id] = MatchInfo.Who(p);
+                _cards[s.Id] = null;
                 lines.Add($"{_info.Surname[s.Id]} on for {Surname(s.Off, p.Index)}");
                 team = s.Team;
             }
@@ -230,6 +240,7 @@ public sealed partial class Hud : Control
             _held = new[] { b.Score[0] - (team == 0 ? 1 : 0), b.Score[1] - (team == 1 ? 1 : 0) };
             _revealAt = (float)GoalSeq.Back + 0.6f;
             _revealTeam = team;
+            _revealScorer = b.Scorer;
             _revealLine = who + _info.Name[team] + " · " + b.ClockLabel;
         }
         // The referee's calls. (The Foul object is made before the step that reports it, and
@@ -268,6 +279,7 @@ public sealed partial class Hud : Control
             _cardNew[0] = b.Score[0];
             _cardNew[1] = b.Score[1];
             _cardTeam = _revealTeam;
+            _cardScorer = _revealScorer;
             _cardLine = _revealLine;
             _cardAt = _now;
             _revealAt = -1;
@@ -298,6 +310,7 @@ public sealed partial class Hud : Control
         if (_now - _capAt < Math.Min(_capDur, 3.2) + 0.1) _caption.QueueRedraw();
         double ct = _now - _cardAt;
         _card.Visible = !_overlayOnly && ct >= 0 && ct < 3.4;
+        if (!_card.Visible) _big.Visible = false;
         if (_card.Visible)
         {
             float t = (float)ct;
@@ -309,7 +322,24 @@ public sealed partial class Hud : Control
             _card.Modulate = new Color(1, 1, 1, op);
             _card.PivotOffset = _card.Size / 2;
             _card.Scale = new Vector2(s, s);
-            _card.Position = (Size - _card.Size) / 2 + new Vector2(0, y);
+            // The scorer's card stands over the score, the pair centred together.
+            bool big = _cardScorer >= 0 && CardOf(_cardScorer) != null;
+            float bh = big ? Mathf.Clamp(Size.Y * 0.44f, 130, 240) : 0, gap = big ? 14 : 0;
+            float top = (Size.Y - (bh + gap + _card.Size.Y)) / 2;
+            _card.Position = new Vector2((Size.X - _card.Size.X) / 2, top + bh + gap + y);
+            _big.Visible = big;
+            if (big)
+            {
+                // A beat after the score: up from below with a little overshoot.
+                float bt = Math.Clamp((t - 0.12f) / 0.45f, 0, 1);
+                float bo = bt < 1 ? 1 + 0.06f * MathF.Sin(bt * MathF.PI) : 1;
+                _big.Size = new Vector2(bh * 10 / 14f, bh);
+                _big.PivotOffset = _big.Size / 2;
+                _big.Scale = new Vector2(bo, bo) * (0.85f + 0.15f * Style.EaseOut(bt)) * s;
+                _big.Position = new Vector2((Size.X - _big.Size.X) / 2, top + y + 40 * (1 - Style.EaseOut(bt)));
+                _big.Modulate = new Color(1, 1, 1, op * Style.EaseOut(bt));
+                _big.QueueRedraw();
+            }
             _cellHome.QueueRedraw();
             _cellAway.QueueRedraw();
         }
@@ -519,6 +549,41 @@ public sealed partial class Hud : Control
         Style.Text(c, nf, _cardNew[side].ToString(), new Rect2(0, _rowH * (1 - e), _numW, _rowH), _numFont, fg);
     }
 
+    // ------------------------------------------------------------------ player cards
+
+    ClubCard[] _cards = new ClubCard[MatchSnapshot.N];
+
+    /// <summary>The card of whoever is in slot `id`: his own, or one made for him (a team
+    /// without cards), in his name and looks.</summary>
+    ClubCard CardOf(int id)
+    {
+        if (_match == null || id < 0 || id >= _cards.Length || id >= _match.All.Count) return null;
+        if (_cards[id] != null) return _cards[id];
+        var p = _match.All[id];
+        if (p.Source is ClubCard own) return _cards[id] = own;
+        var pos = p.Role switch
+        {
+            Role.GK => Club.Position.GK, Role.DEF => Club.Position.CB, Role.MID => Club.Position.CM,
+            _ => p.Index == 9 ? Club.Position.ST : Club.Position.LW,
+        };
+        var a = p.Attrs;
+        int ovr = (int)Math.Clamp(Math.Round(100 * (a.Pace + a.Passing + a.Shooting + a.Defending + a.Control) / 5), 45, 95);
+        var c = Club.Cards.Generate(new Rng(id * 7919 + 17), Club.Rarity.Common, pos, ovr);
+        c.Name = string.IsNullOrWhiteSpace(p.Name) ? (p.Role == Role.GK ? "Keeper" : "Player") : p.Name;
+        c.Number = p.Number > 0 ? p.Number : p.Index + 1;
+        c.Skin = Math.Max(0, Array.IndexOf(TeamData.SkinTones, p.Look.Skin));
+        c.Hair = Math.Max(0, Array.IndexOf(TeamData.HairColors, p.Look.Hair));
+        c.HairStyle = p.Look.HairStyle;
+        return _cards[id] = c;
+    }
+
+    void DrawBig(Painter c)
+    {
+        var card = CardOf(_cardScorer);
+        if (card == null) return;
+        Menus.Art.Card(c, new Rect2(Vector2.Zero, c.Size), card, _match.Teams[_match.All[_cardScorer].Team].Info.Kit, 0.8f);
+    }
+
     // ------------------------------------------------------------------ player card
 
     void PlayerCard(MatchSnapshot b)
@@ -549,6 +614,14 @@ public sealed partial class Hud : Control
         float w = Math.Max(118, Style.Width(f, _pcName, size) + 18);
         float h = 5 + size * 1.1f + 5 + 3 + 6;
         var r = new Rect2(14 + _safeL, Size.Y - 12 - _safeB - h, w, h);
+        // His card beside the tag, standing on the same line.
+        var card = CardOf(_pcFor);
+        if (card != null)
+        {
+            const float cw = 44, ch = cw * 1.4f;
+            Menus.Art.Card(c, new Rect2(r.Position.X, r.End.Y - ch, cw, ch), card, _match.Teams[_match.All[_pcFor].Team].Info.Kit);
+            r.Position += new Vector2(cw + 8, 0);
+        }
         Color bg = _pcRole switch { Role.FWD => Style.Hex(0xd6453a), Role.MID => Style.Hex(0xe8bd25), _ => Style.Hex(0x2f9e4f) };
         Color fg = _pcRole == Role.MID ? Style.Hex(0x1b1a12) : Colors.White;
         Style.Box(c, r, bg, 4, 10);

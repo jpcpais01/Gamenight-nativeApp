@@ -513,7 +513,7 @@ public sealed class LeagueState
             var slot = f.Slots[i];
             var card = cl.Squad[i];
             var sp = Cards.ToSim(card, slot.Pos);
-            t.Players.Add(new SetupPlayer { Name = sp.Name, Number = sp.Number, Attrs = sp.Attrs, Look = sp.Look, Foot = sp.Foot, Role = Cards.RoleOf(slot.Pos), X = slot.X, Z = slot.Z });
+            t.Players.Add(new SetupPlayer { Name = sp.Name, Number = sp.Number, Attrs = sp.Attrs, Look = sp.Look, Foot = sp.Foot, Role = Cards.RoleOf(slot.Pos), X = slot.X, Z = slot.Z, Source = card });
             if (card.Overall > top)
             {
                 top = card.Overall;

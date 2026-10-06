@@ -617,10 +617,10 @@ public sealed class ClubState
         return info;
     }
 
-    static SetupPlayer ToSetup(SimPlayer p, FSlot slot) => new()
+    static SetupPlayer ToSetup(SimPlayer p, FSlot slot, Card c) => new()
     {
         Name = p.Name, Number = p.Number, Attrs = p.Attrs, Look = p.Look, Foot = p.Foot,
-        Role = Club.Cards.RoleOf(slot.Pos), X = slot.X, Z = slot.Z,
+        Role = Club.Cards.RoleOf(slot.Pos), X = slot.X, Z = slot.Z, Source = c,
     };
 
     public TeamSetup TeamSetup()
@@ -631,7 +631,7 @@ public sealed class ClubState
         {
             var slot = Slot(i);
             var c = s[i] ?? Club.Cards.Generate(new Rng(i + 1), Rarity.Common, slot.Pos, 45);
-            t.Players.Add(ToSetup(Club.Cards.ToSim(c, slot.Pos), slot));
+            t.Players.Add(ToSetup(Club.Cards.ToSim(c, slot.Pos), slot, c));
         }
         return t;
     }
@@ -659,7 +659,7 @@ public sealed class ClubState
                 top = c.Overall;
                 t.Captain = i;
             }
-            t.Players.Add(ToSetup(Club.Cards.ToSim(c, slot.Pos), slot));
+            t.Players.Add(ToSetup(Club.Cards.ToSim(c, slot.Pos), slot, c));
         }
         // Their bench: a keeper and cover across the pitch, a little below the XI.
         t.Bench = new();

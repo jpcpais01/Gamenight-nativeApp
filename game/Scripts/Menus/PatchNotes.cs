@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.87", "The scorer's big player card now rises over the new score after a goal, and your player's card sits beside his name at the bottom left. Goals after a save or a deflection now go to the man who shot, so he celebrates and the replay follows him."),
         ("0.86", "Quieter ball: you only hear it when it is passed, shot, crossed, headed or received. Bounces, dribble touches and deflections are silent now."),
         ("0.85", "Sound settings are volume bars now: MASTER, CROWD, MATCH (ball, whistle, nets, goal explosions) and MENUS, ten steps each in the pause menu. Slide or tap the bars; tap a name to mute it. Saved between sessions."),
         ("0.84", "Phone controllers now pair with a 4-digit code shown on the PC (PHONE CONTROLLER on its home screen). Type it once and the phone remembers it; scanning the PC's QR code pairs by itself. NEW CODE makes every phone pair again."),

@@ -1131,7 +1131,11 @@ public sealed partial class Match
             int side = p.X > 0 ? 1 : -1;
             int scoringTeam = Teams[0].Dir == side ? 0 : 1;
             Teams[scoringTeam].Score++;
-            Scorer = LastTouch != null && LastTouch.Team == scoringTeam ? LastTouch : ByJob(scoringTeam, 9);
+            // The last of the scoring side to touch it; past a save or a deflection, the man who
+            // shot. Only an own goal with no shot behind it goes down to their striker.
+            Scorer = LastTouch != null && LastTouch.Team == scoringTeam ? LastTouch
+                : ShotBy != null && ShotBy.Team == scoringTeam ? ShotBy
+                : ByJob(scoringTeam, 9);
             Phase = Phase.Goal;
             PhaseT = 0;
             Owner = null;

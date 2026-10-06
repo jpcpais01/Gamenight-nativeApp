@@ -135,6 +135,8 @@ public sealed class SetupPlayer
     public double X, Z;
     /// <summary>His own position, for the bench list ("CB", "ST"...).</summary>
     public string Pos = "";
+    /// <summary>Where he came from (the game's player card), carried for the HUD; the engine never reads it.</summary>
+    public object? Source;
 }
 
 public sealed class TeamSetup

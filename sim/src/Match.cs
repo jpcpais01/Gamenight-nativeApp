@@ -294,6 +294,7 @@ public sealed partial class Match
                     var p = new Player(Players.Count, t, i, sp.Role, sp.X, sp.Z, sp.Attrs, sp.Look);
                     p.Name = sp.Name;
                     p.Number = sp.Number;
+                    p.Source = sp.Source;
                     p.Foot = sp.Foot == -1 ? -1 : 1;
                     team.Players.Add(p);
                     Players.Add(p);
