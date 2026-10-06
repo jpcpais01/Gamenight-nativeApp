@@ -923,8 +923,13 @@ public sealed partial class AI
         const double reach = PlayerK.Reach * 0.8;
         // A pass played to him: he comes to it, taking it at the first point he safely can at his
         // feet (not drifting off with it for a few metres more).
-        bool toHim = m.PassTarget == q && !m.PassIntoSpace && m.LastKicker?.Team == q.Team;
-        double progress = toHim ? 0 : MeetProgress;
+        bool mine = m.PassTarget == q && m.LastKicker?.Team == q.Team;
+        bool toHim = mine && !m.PassIntoSpace;
+        // Any pass meant for him (into space included: it was weighted for where they meet), and
+        // any ball for the player you control, he takes at the first point he safely can, rather
+        // than racing ahead to let it run on to him.
+        bool yours = q == m.Controlled && q.Team == m.HumanTeam && !m.AutoPlay;
+        double progress = mine || yours ? 0 : MeetProgress;
         int best = -1;
         double bestV = -1e9;
         for (int i = Math.Max(0, from); i < n; i++)
