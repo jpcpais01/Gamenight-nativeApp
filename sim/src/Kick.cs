@@ -624,7 +624,7 @@ public static class Kick
 
     static double[]? lobTimes;
 
-    /// <summary>Flight time of a ThroughLob that comes down `dist` metres away (table every 2 m, 0..80).</summary>
+    /// <summary>Flight time of a ThroughLob that comes down `dist` metres away (table every 2 m to 50, on in a line past it).</summary>
     public static double ThroughLobTime(double dist)
     {
         var t = lobTimes;
@@ -634,15 +634,15 @@ public static class Kick
             {
                 if (lobTimes == null)
                 {
-                    var a = new double[41];
+                    var a = new double[26];
                     for (int i = 0; i < a.Length; i++) a[i] = i == 0 ? 0 : ThroughLob(new V3(0, 0.11, 0), i * 2, 0).Time;
                     lobTimes = a;
                 }
                 t = lobTimes;
             }
         }
-        double f = M.Clamp(dist / 2, 0, t.Length - 1.001);
-        int k = (int)f;
+        double f = Math.Max(0, dist / 2);
+        int k = (int)Math.Min(t.Length - 2, f);
         return t[k] + (t[k + 1] - t[k]) * (f - k);
     }
 
