@@ -505,14 +505,13 @@ public sealed partial class Match
 
     /// <summary>
     /// How hard a player is going at a ball in the air, 0..1: running onto it (a jump with a
-    /// run-up reaches further and lands with more force), or pressing for it.
+    /// run-up reaches further and lands with more force).
     /// </summary>
     double AttackingBall(Player p, double d)
     {
         var b = Ball.Pos;
         double closing = d > 0.01 ? (p.Vel.X * (b.X - p.Pos.X) + p.Vel.Z * (b.Z - p.Pos.Z)) / d : 0;
-        double pressing = p == Controlled && PressHeld ? 0.5 : 0;
-        return M.Clamp(closing / 4 + pressing, 0, 1);
+        return M.Clamp(closing / 4, 0, 1);
     }
 
     void Deflect(Player p)
