@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("1.4", "New stand set HAUNT for Halloween: purple brick and black iron, a glowing orange band, jack-o'-lanterns grinning along the balcony, iron spikes on the roof, bats over it, giant cobwebs with spiders across the corners and a crooked lit spire behind each end."),
         ("1.3", "New stand set FINAL: a colossal three-tier bowl for final nights. A roof ring reaches far over the seats, a midnight-blue skin and roof front twinkle with stars under the floodlights, and each end hangs a giant ring of stars. Build it in STANDS; it carries the giant tifo too."),
         ("1.2", "Getting up looks real now: after a slide a player sits up on a hand, tucks a leg under and rises through one knee; knocked flat on his front he pushes up on both hands first. No more floating up off the grass. Slides keep him down a touch longer."),
         ("1.1", "A gift of 1,000,000 coins for every club. The squad board now shows real mini cards: each player's own card finish (bronze to icon, and event themes), portrait and name, without the stats, bigger on the pitch and on the bench."),

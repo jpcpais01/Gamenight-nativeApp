@@ -13,14 +13,14 @@ public readonly record struct Venue(float Size, float Roof, float Near)
     public static readonly Venue Default = new(1, 0.7f, 0.6f);
 
     /// <summary>The stand sets of the stadium builder, in Kit.Sets order: Arena, Terrace, Curva,
-    /// The Wall, Citadel, Harbour, Pagoda, Deco, Crater, Orbital, Membrane, Brutalist, Barrio, Timber, Lumen, Nest, Arch, Neon, Adobe, Meadow, Final.</summary>
+    /// The Wall, Citadel, Harbour, Pagoda, Deco, Crater, Orbital, Membrane, Brutalist, Barrio, Timber, Lumen, Nest, Arch, Neon, Adobe, Meadow, Final, Haunt.</summary>
     static readonly Venue[] Sets =
     {
         new(1, 0.7f, 0.6f), new(0.6f, 0.55f, 1), new(0.9f, 0.15f, 0.2f), new(1, 0.6f, 0.9f), new(1, 0.9f, 0.7f),
         new(0.7f, 0.4f, 0.7f), new(0.8f, 0.6f, 0.6f), new(0.8f, 0.6f, 0.7f), new(0.9f, 0.2f, 0.3f), new(1, 0.85f, 0.5f),
         new(0.8f, 0.8f, 0.6f), new(1, 0.8f, 0.6f), new(1, 0.05f, 0.9f), new(0.6f, 0.9f, 0.9f), new(1, 0.9f, 0.6f),
         new(1, 0.85f, 0.7f), new(1, 0.85f, 0.6f), new(0.9f, 0.8f, 0.8f), new(0.6f, 0.1f, 0.8f), new(0.3f, 0.05f, 0.5f),
-        new(1, 0.95f, 0.55f),
+        new(1, 0.95f, 0.55f), new(0.8f, 0.7f, 0.7f),
     };
 
     /// <summary>A ground by id; a built stadium by its eight stand sets (the ends count double:
