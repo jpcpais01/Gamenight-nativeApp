@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.113", "A loose ball coming your way: your player now attacks it, running at the ball instead of to the spot it will reach, and no longer pulls up there to wait for it."),
         ("0.112", "Through balls pulled back a little more: they meet the runner about 7% shorter along his run than before (12% shorter than in 0.92)."),
         ("0.111", "Loose balls: your player runs at the ball and bends onto it as he closes, instead of heading off to where it is going. Just as quick to get there."),
         ("0.110", "PC: the GameNight icon now shows on the taskbar button and in Alt+Tab while the game is open, loaded by Windows straight from the game file."),

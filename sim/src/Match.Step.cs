@@ -573,25 +573,44 @@ public sealed partial class Match
             }
             AI.MeetPoint(c, tmpV);
             // He runs at the ball, leading it only half way to where he'd cut it off: the run
-            // bends onto it as he closes, rather than heading off to where it's going (as quick
-            // over 180 loose balls, 2.38 s against 2.42 s).
+            // bends onto it as he closes, rather than heading off to where it's going. One coming
+            // his way he attacks: he heads for it, not for where it'll reach him, and doesn't
+            // pull up to wait for it.
+            double bs = JsMath.Hypot(Ball.Vel.X, Ball.Vel.Z);
+            double coming = d > 0.01 && bs > 0.01 ? (Ball.Vel.X * (c.Pos.X - Ball.Pos.X) + Ball.Vel.Z * (c.Pos.Z - Ball.Pos.Z)) / (d * bs) : 0;
+            bool attack = d >= 3 && bs > 1.5 && coming > 0.5;
             if (d >= 3)
             {
-                tmpV.X = Ball.Pos.X + (tmpV.X - Ball.Pos.X) * 0.5;
-                tmpV.Z = Ball.Pos.Z + (tmpV.Z - Ball.Pos.Z) * 0.5;
+                double k = attack ? 0.25 : 0.5;
+                tmpV.X = Ball.Pos.X + (tmpV.X - Ball.Pos.X) * k;
+                tmpV.Z = Ball.Pos.Z + (tmpV.Z - Ball.Pos.Z) * k;
             }
             double dx = tmpV.X - c.Pos.X;
             double dz = tmpV.Z - c.Pos.Z;
             double dd = JsMath.Hypot(dx, dz);
-            if (dd < 0.25) return;
+            if (dd < 0.25 && !attack) return;
+            if (dd < 0.01)
+            {
+                dx = Ball.Pos.X - c.Pos.X;
+                dz = Ball.Pos.Z - c.Pos.Z;
+                dd = d;
+            }
             tx = dx / dd;
             tz = dz / dd;
-            // Flat out, but no faster than he can still pull up from, so he arrives on it
-            // rather than past it (running on with it when it's rolling his way).
             var ip = AI.Intercept[c.Id];
             speed = c.TopSpeed;
-            double along = Math.Max(0, d < 3 ? Ball.Vel.X * tx + Ball.Vel.Z * tz : ip.VX * tx + ip.VZ * tz);
-            speed = Math.Min(speed, Math.Sqrt(along * along + 2 * PlayerK.Brake * dd) + 0.6);
+            if (attack)
+            {
+                // Hard at it from range, easing to a firm stride for the touch.
+                speed *= M.Clamp(d / 6, 0.6, 1);
+            }
+            else
+            {
+                // Flat out, but no faster than he can still pull up from, so he arrives on it
+                // rather than past it (running on with it when it's rolling his way).
+                double along = Math.Max(0, d < 3 ? Ball.Vel.X * tx + Ball.Vel.Z * tz : ip.VX * tx + ip.VZ * tz);
+                speed = Math.Min(speed, Math.Sqrt(along * along + 2 * PlayerK.Brake * dd) + 0.6);
+            }
             burst = d < 2.5;
         }
 
