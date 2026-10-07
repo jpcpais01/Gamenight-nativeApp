@@ -263,15 +263,17 @@ public sealed class MatchCamera
     }
 
     /// <summary>
-    /// Lining up a free kick, penalty or goal kick: the camera drops in behind the taker, over
-    /// the shoulder on the ball's side, looking down the line of the shot at the goal (or up the
-    /// pitch, for a goal kick). The moment he sets off on his run-up it eases back up.
+    /// Lining up a free kick, penalty, corner or goal kick: the camera drops in behind the taker,
+    /// over the shoulder on the ball's side, looking down the line of the shot at the goal (into
+    /// the box for a corner, up the pitch for a goal kick). It holds still
+    /// through his run-up, and the moment the ball is struck it eases back up.
     /// </summary>
     void UpdatePov(MatchSnapshot a, MatchSnapshot b, float alpha, float dt)
     {
         int t = b.DeadBallTaker;
         bool want = t >= 0 && b.SetPiece != null;
-        if (want)
+        // On his run-up the camera holds still where it was and lets him run into the ball.
+        if (want && !(b.DeadBallRun && _pov > 0))
         {
             float tx = Mathf.Lerp(a.X[t], b.X[t], alpha), tz = Mathf.Lerp(a.Z[t], b.Z[t], alpha);
             float gx = b.DeadBallX, gz = b.DeadBallZ;
@@ -282,10 +284,13 @@ public sealed class MatchCamera
             uz /= n;
             float rx = -uz, rz = ux;
             float side = b.Foot[t], h = b.Height[t];
-            bool gk = b.DeadBallKind == SetPieceKind.GoalKick;
-            _povPos = new Vector3(tx - ux * 2.7f + rx * side * 1.05f, (gk ? 2.25f : 1.95f) * h, tz - uz * 2.7f + rz * side * 1.05f);
+            bool gk = b.DeadBallKind == SetPieceKind.GoalKick, corner = b.DeadBallKind == SetPieceKind.Corner;
+            // (A corner a little higher, to see over the crowd in the box.)
+            // (A corner a touch closer in: the flag is right by the advertising boards.)
+            float back = corner ? 2.1f : 2.7f;
+            _povPos = new Vector3(tx - ux * back + rx * side * 1.05f, (gk ? 2.25f : corner ? 2.4f : 1.95f) * h, tz - uz * back + rz * side * 1.05f);
             // Between the ball and the goal mouth: ball low in the frame, goal and wall above it.
-            float k = b.SetPiece == SetPieceKind.Penalty ? 0.75f : gk ? 0.3f : 0.62f;
+            float k = b.SetPiece == SetPieceKind.Penalty ? 0.75f : gk ? 0.3f : corner ? 0.55f : 0.62f;
             _povLook = new Vector3(Mathf.Lerp(b.SetPieceX, gx, k), 1.05f, Mathf.Lerp(b.SetPieceZ, gz, k));
         }
         // Quick cut in, a smooth crane back out as he runs up.

@@ -9,7 +9,7 @@ public enum Look
 {
     Plain = 0, Roof = 1, Glass = 2, Curtain = 3, Fascia = 4, Ribbon = 5, Lamp = 6, RoofLight = 7,
     Board = 8, Tier = 9, Screen = 10, Cloth = 11, Stipple = 12, Unlit = 13, Arcade = 14, Coffer = 15, Wall = 16, Brick = 17, Decal = 18, House = 19,
-    Tower = 20, Skyline = 21, Water = 22, Road = 23, Cushion = 24, Neon = 25,
+    Tower = 20, Skyline = 21, Water = 22, Road = 23, Cushion = 24, Neon = 25, Stars = 26,
 }
 
 /// <summary>

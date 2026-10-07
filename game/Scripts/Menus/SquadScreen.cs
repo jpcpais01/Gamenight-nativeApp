@@ -43,6 +43,7 @@ public sealed partial class SquadScreen : PxCanvas
     public void Opened()
     {
         Unpick();
+        CloseSkills();
         _roster.ResetScroll();
     }
 
@@ -59,6 +60,19 @@ public sealed partial class SquadScreen : PxCanvas
 
     float TokenH => Mathf.Clamp(_pitch.Size.Y * 0.205f, 40, 86);
 
+    /// <summary>A player's mini card on its own layer: drawn once, then only moved (the dragged
+    /// one rides on top) until something on it changes.</summary>
+    void Token(string key, Rect2 r, Card c, Pos slot, Kit kit, bool selected, bool captain, bool lifted)
+    {
+        if (c == null)
+        {
+            Art.Token(this, r, null, slot, kit, selected, false);
+            return;
+        }
+        var stamp = (c.Id, Club.Rev, slot, selected, captain);
+        Layer(key, r, stamp, (ci, lr) => Art.Token(ci, lr, c, slot, kit, selected, captain), lifted);
+    }
+
     Rect2 TokenRect(Vector2 at)
     {
         float th = TokenH, tw = th * 0.82f;
@@ -67,6 +81,11 @@ public sealed partial class SquadScreen : PxCanvas
 
     protected override void Paint()
     {
+        if (_skills)
+        {
+            PaintSkills();
+            return;
+        }
         float W = Size.X, H = Size.Y;
         NightBackdrop(new[] { Px.Hex(0x0a0820), Px.Hex(0x100d30), Px.Hex(0x161242), Px.Hex(0x1b1652) });
         float cw = Mathf.Min(W - 24, 1180), x0 = (W - cw) / 2;
@@ -103,7 +122,7 @@ public sealed partial class SquadScreen : PxCanvas
         var badge = TeamBadge(new Rect2(rx + 7, 12, 82, 36));
         Lines(new Rect2(badge.End.X + 5, 12, room.End.X - 7 - badge.End.X - 5, 36), Club.Starters());
         RosterHead(new Vector2(rx + 7, 56), side - 14);
-        float listTop = 106, foot = 44 + (Selected >= 0 && Club.Starters()[Selected] != null || Club.HasCustom ? 34 : 0);
+        float listTop = 106, foot = 78 + (Selected >= 0 && Club.Starters()[Selected] != null || Club.HasCustom ? 34 : 0);
         DrawRect(new Rect2(rx + 3, listTop - 2, side - 6, 1), Px.Line);
         _roster.Position = new Vector2(rx + 3, listTop);
         _roster.Size = new Vector2(side - 6, room.End.Y - listTop - foot);
@@ -205,7 +224,7 @@ public sealed partial class SquadScreen : PxCanvas
             var r = TokenRect(at);
             int idx = i;
             DrawColoredPolygon(Px.Ellipse(new Vector2(r.GetCenter().X + 2, r.End.Y + 1), r.Size.X * 0.55f, 3, 12), new Color(0, 0, 0, 0.3f));
-            Art.Token(this, r, starters[i], s.Pos, kit, i == Selected, i == cap && starters[i] != null);
+            Token("t" + i, r, starters[i], s.Pos, kit, i == Selected, i == cap && starters[i] != null, i == _drag && _dragMoved);
             Tap("t" + i, r, () => TapToken(idx));
         }
     }
@@ -239,7 +258,7 @@ public sealed partial class SquadScreen : PxCanvas
                 Px.Frame(this, r, new Color(1, 1, 1, 0.04f), new Color(1, 1, 1, 0.18f), null, 2, 0);
                 Px.TextC(this, Px.Small, r.GetCenter().X, r.GetCenter().Y + 3, "EMPTY", 7, Px.InkDim);
             }
-            else Art.Token(this, r, c, c.Position, kit, SelSeat == i, false);
+            else Token("s" + i, r, c, c.Position, kit, SelSeat == i, false, 100 + i == _drag && _dragMoved);
             Tap("seat" + i, _seats[i], () => TapSeat(seat));
         }
     }
@@ -266,6 +285,8 @@ public sealed partial class SquadScreen : PxCanvas
             GhostButton("resetpos", new Rect2(r.Position.X, y, r.Size.X, 28), "RESET SPOTS", 16, () => Club.ResetPositions());
             y += 34;
         }
+        GhostButton("skills", new Rect2(r.Position.X, y, r.Size.X, 28), "SKILL MOVES", 16, OpenSkills, Px.Gold, Px.Gold);
+        y += 34;
         GoldButton("auto", new Rect2(r.Position.X, y, r.Size.X, 30), "AUTO-PICK BEST XI", 18, () =>
         {
             Unpick();

@@ -31,7 +31,7 @@ public sealed class MatchSnapshot
     public readonly float[] KickContact = new float[N], KickStretch = new float[N], KickBallF = new float[N], KickBallL = new float[N];
     public readonly bool[] KickLofted = new bool[N], ThrowIn = new bool[N];
     /// <summary>Slide: when the grass stops it; tackle leg direction; keeper: catch height and dive pose.</summary>
-    public readonly float[] SlideStop = new float[N], LegX = new float[N], LegZ = new float[N], CatchY = new float[N], CatchF = new float[N], CatchL = new float[N], DiveFly = new float[N];
+    public readonly float[] SlideStop = new float[N], LegX = new float[N], LegZ = new float[N], CatchY = new float[N], CatchF = new float[N], CatchL = new float[N], DiveFly = new float[N], ReachIn = new float[N], ReachF = new float[N], ReachL = new float[N], ReachY = new float[N];
     public readonly float[] DiveRoll = new float[N], DiveLift = new float[N];
     /// <summary>For the skeleton: forward acceleration, time since and height of the last touch,
     /// the last shirt pull (direction and match time, -1 = none), the strike's power, height and
@@ -40,6 +40,9 @@ public sealed class MatchSnapshot
     public readonly float[] PullX = new float[N], PullZ = new float[N], PullT = new float[N];
     public readonly float[] KickPower = new float[N], KickHeight = new float[N], KickRel = new float[N], SlideV0 = new float[N];
     public readonly bool[] Sprinting = new bool[N];
+    /// <summary>The skill move being animated (Action = Trick) and its exit side (+1 left, -1 right).</summary>
+    public readonly SkillMove[] Trick = new SkillMove[N];
+    public readonly sbyte[] TrickSide = new sbyte[N];
     public readonly float[] Stamina = new float[N];
     /// <summary>Yellow cards; 3 = sent off (walking off, or gone).</summary>
     public readonly byte[] Cards = new byte[N];
@@ -90,6 +93,8 @@ public sealed class MatchSnapshot
     public int DeadBallTaker = -1;
     public float DeadBallX, DeadBallZ;
     public SetPieceKind DeadBallKind;
+    /// <summary>The taker is on his run-up: the view stays as it was lined up.</summary>
+    public bool DeadBallRun;
     /// <summary>The human is aiming a corner / goal kick / dead-ball shot (Match.AimingCorner, ...).</summary>
     public bool AimingCorner, AimingGoalKick, AimingShot;
     /// <summary>The dead-ball shot's aim point on the goal mouth (Match.AimPoint()).</summary>
@@ -117,6 +122,8 @@ public sealed class MatchSnapshot
     public float KickMax;
     public int Whistle, Goal = -1, Foul, Card, Offside, Sub;
     public float Post, Net, Bounce, Save, Tackle;
+    /// <summary>A skill move sold its dummy: its stars (one more for a man left on the floor).</summary>
+    public float Skill;
 
     public void CopyFrom(MatchSnapshot o)
     {
@@ -131,12 +138,13 @@ public sealed class MatchSnapshot
         Array.Copy(o.KickLeg, KickLeg, N); Array.Copy(o.KickType, KickType, N); Array.Copy(o.KickContact, KickContact, N);
         Array.Copy(o.KickStretch, KickStretch, N); Array.Copy(o.KickBallF, KickBallF, N); Array.Copy(o.KickBallL, KickBallL, N);
         Array.Copy(o.KickLofted, KickLofted, N); Array.Copy(o.ThrowIn, ThrowIn, N);
-        Array.Copy(o.SlideStop, SlideStop, N); Array.Copy(o.LegX, LegX, N); Array.Copy(o.LegZ, LegZ, N); Array.Copy(o.CatchY, CatchY, N); Array.Copy(o.CatchF, CatchF, N); Array.Copy(o.CatchL, CatchL, N); Array.Copy(o.DiveFly, DiveFly, N);
+        Array.Copy(o.SlideStop, SlideStop, N); Array.Copy(o.LegX, LegX, N); Array.Copy(o.LegZ, LegZ, N); Array.Copy(o.CatchY, CatchY, N); Array.Copy(o.CatchF, CatchF, N); Array.Copy(o.CatchL, CatchL, N); Array.Copy(o.DiveFly, DiveFly, N); Array.Copy(o.ReachIn, ReachIn, N); Array.Copy(o.ReachF, ReachF, N); Array.Copy(o.ReachL, ReachL, N); Array.Copy(o.ReachY, ReachY, N);
         Array.Copy(o.DiveRoll, DiveRoll, N); Array.Copy(o.DiveLift, DiveLift, N);
         Array.Copy(o.AccelFwd, AccelFwd, N); Array.Copy(o.SinceTouch, SinceTouch, N); Array.Copy(o.TouchH, TouchH, N);
         Array.Copy(o.PullX, PullX, N); Array.Copy(o.PullZ, PullZ, N); Array.Copy(o.PullT, PullT, N);
         Array.Copy(o.KickPower, KickPower, N); Array.Copy(o.KickHeight, KickHeight, N); Array.Copy(o.KickRel, KickRel, N); Array.Copy(o.SlideV0, SlideV0, N);
         Array.Copy(o.Sprinting, Sprinting, N); Array.Copy(o.Stamina, Stamina, N); Array.Copy(o.Cards, Cards, N);
+        Array.Copy(o.Trick, Trick, N); Array.Copy(o.TrickSide, TrickSide, N);
         Array.Copy(o.Team, Team, N); Array.Copy(o.Index, Index, N); Array.Copy(o.Number, Number, N);
         Array.Copy(o.Role, Role, N); Array.Copy(o.Foot, Foot, N);
         Array.Copy(o.Height, Height, N); Array.Copy(o.Build, Build, N);
@@ -154,7 +162,7 @@ public sealed class MatchSnapshot
         CelebrationOpen = o.CelebrationOpen; HumanScored = o.HumanScored; KeeperButtons = o.KeeperButtons;
         SetPiece = o.SetPiece; SetPieceTeam = o.SetPieceTeam; SetPieceTaker = o.SetPieceTaker; SetPieceX = o.SetPieceX; SetPieceZ = o.SetPieceZ;
         SetPieceDirect = o.SetPieceDirect; HasSetPieceTarget = o.HasSetPieceTarget; SetPieceTargetX = o.SetPieceTargetX; SetPieceTargetZ = o.SetPieceTargetZ;
-        DeadBallTaker = o.DeadBallTaker; DeadBallX = o.DeadBallX; DeadBallZ = o.DeadBallZ; DeadBallKind = o.DeadBallKind;
+        DeadBallTaker = o.DeadBallTaker; DeadBallX = o.DeadBallX; DeadBallZ = o.DeadBallZ; DeadBallKind = o.DeadBallKind; DeadBallRun = o.DeadBallRun;
         AimingCorner = o.AimingCorner; AimingGoalKick = o.AimingGoalKick; AimingShot = o.AimingShot;
         HasAimPoint = o.HasAimPoint; AimX = o.AimX; AimY = o.AimY; AimZ = o.AimZ;
         HasArc = o.HasArc; ArcCount = o.ArcCount; ArcRingX = o.ArcRingX; ArcRingZ = o.ArcRingZ;
@@ -164,7 +172,7 @@ public sealed class MatchSnapshot
         KickCount = o.KickCount; KickMax = o.KickMax;
         InvaderT = o.InvaderT; InvaderSeed = o.InvaderSeed;
         Whistle = o.Whistle; Goal = o.Goal; Foul = o.Foul; Card = o.Card; Offside = o.Offside; Sub = o.Sub;
-        Post = o.Post; Net = o.Net; Bounce = o.Bounce; Save = o.Save; Tackle = o.Tackle;
+        Post = o.Post; Net = o.Net; Bounce = o.Bounce; Save = o.Save; Tackle = o.Tackle; Skill = o.Skill;
     }
 
     /// <summary>Fold another step's events into these (a frame that spans several steps keeps them all).</summary>
@@ -183,6 +191,7 @@ public sealed class MatchSnapshot
         Bounce = Math.Max(Bounce, (float)e.Bounce);
         Save = Math.Max(Save, (float)e.Save);
         Tackle = Math.Max(Tackle, (float)e.Tackle);
+        Skill = Math.Max(Skill, (float)e.Skill);
     }
 
     public void ClearEvents()
@@ -191,7 +200,7 @@ public sealed class MatchSnapshot
         KickMax = 0;
         Whistle = Foul = Card = Offside = Sub = 0;
         Goal = -1;
-        Post = Net = Bounce = Save = Tackle = 0;
+        Post = Net = Bounce = Save = Tackle = Skill = 0;
     }
 }
 
@@ -224,6 +233,8 @@ public sealed partial class Match
             s.ActionDur[i] = (float)p.ActionDur;
             s.ActionDirX[i] = (float)p.ActionDirX;
             s.ActionDirZ[i] = (float)p.ActionDirZ;
+            s.Trick[i] = p.Action == ActionKind.Trick ? p.Trick : SkillMove.None;
+            s.TrickSide[i] = (sbyte)p.TrickSide;
             s.KickLeg[i] = (sbyte)p.KickLeg;
             s.KickType[i] = p.KickType;
             s.KickContact[i] = (float)p.KickContact;
@@ -249,6 +260,10 @@ public sealed partial class Match
             s.CatchF[i] = (float)p.CatchF;
             s.CatchL[i] = (float)p.CatchL;
             s.DiveFly[i] = (float)p.DiveFly;
+            s.ReachIn[i] = (float)p.ReachIn;
+            s.ReachF[i] = (float)p.ReachF;
+            s.ReachL[i] = (float)p.ReachL;
+            s.ReachY[i] = (float)p.ReachY;
             s.DiveRoll[i] = (float)AI.DiveRoll[i];
             s.DiveLift[i] = (float)AI.DiveLift[i];
             s.Sprinting[i] = p.Sprinting;
@@ -316,6 +331,7 @@ public sealed partial class Match
         s.DeadBallX = (float)(view?.x ?? 0);
         s.DeadBallZ = (float)(view?.z ?? 0);
         s.DeadBallKind = view?.kind ?? SetPieceKind.Kickoff;
+        s.DeadBallRun = view?.running ?? false;
         s.AimingCorner = AimingCorner;
         s.AimingGoalKick = AimingGoalKick;
         s.AimingShot = AimingShot;

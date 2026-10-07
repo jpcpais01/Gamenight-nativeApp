@@ -112,6 +112,12 @@ public sealed partial class Hud : Control
     }
     readonly Mark[] _marks = { new(), new() };
 
+    // A skill move: its name and stars floating over the man doing it.
+    int _trickId = -1;
+    SkillMove _trick;
+    double _trickAt = -99;
+    Vector2? _trickHead;
+
     // Frame rate.
     string _fpsText = "";
     int _frames;
@@ -711,12 +717,64 @@ public sealed partial class Hud : Control
             mk.A = Math.Clamp(mk.A + (btn >= 0 ? 1 : -1) * dt / 0.12f, 0, 1);
             dirty |= mk.Head != null || mk.A > 0;
         }
-        if (dirty || _aim != null) _overlay.QueueRedraw();
+        // A skill move starting (anyone's): name it over his head for a moment.
+        for (int i = 0; i < MatchSnapshot.N; i++)
+        {
+            if (!b.Active[i] || b.Trick[i] == SkillMove.None || b.ActionT[i] > 0.2f) continue;
+            if (i == _trickId && b.Trick[i] == _trick && _now - _trickAt < 0.5) continue;
+            _trickId = i;
+            _trick = b.Trick[i];
+            _trickAt = _now;
+        }
+        bool had = _trickHead != null;
+        _trickHead = null;
+        if (_trickId >= 0 && _now - _trickAt < 1.3 && b.Active[_trickId] && b.Phase == Phase.Play)
+        {
+            int t = _trickId;
+            _trickHead = View.WorldToUnits(new Vector3(Mathf.Lerp(a.X[t], b.X[t], alpha), 2.45f * b.Height[t], Mathf.Lerp(a.Z[t], b.Z[t], alpha)));
+        }
+        if (dirty || _aim != null || had || _trickHead != null) _overlay.QueueRedraw();
+    }
+
+    /// <summary>The move's name with its stars beside it, rising a little and fading.</summary>
+    void DrawTrick(Painter c, Vector2 head)
+    {
+        float t = (float)(_now - _trickAt);
+        float op = Style.EaseOut(t / 0.15f) * (1 - Style.Smooth((t - 1.0f) / 0.3f));
+        if (op <= 0) return;
+        const int size = 13;
+        var f = Style.Font(true, size * 0.06f);
+        string name = Skills.Name(_trick).ToUpperInvariant();
+        int tier = Skills.Tier(_trick);
+        float tw = Style.Width(f, name, size);
+        const float star = 4.2f, gap = 2;
+        float sw = tier * (star * 2 + gap);
+        float w = tw + 6 + sw;
+        var at = head - new Vector2(w / 2, 20 + 8 * Style.EaseOut(t / 0.6f));
+        c.DrawString(f, at + new Vector2(1, 1), name, HorizontalAlignment.Left, -1, size, new Color(0, 0, 0, 0.55f * op));
+        c.DrawString(f, at, name, HorizontalAlignment.Left, -1, size, new Color(Style.Ink, op));
+        var col = new Color(Style.Accent, op);
+        for (int k = 0; k < tier; k++)
+        {
+            var ctr = at + new Vector2(tw + 6 + star + k * (star * 2 + gap), -size * 0.32f);
+            var pts = new Vector2[10];
+            for (int j = 0; j < 10; j++)
+            {
+                float ang = -MathF.PI / 2 + j * MathF.PI / 5;
+                float rr = j % 2 == 0 ? star : star * 0.45f;
+                pts[j] = ctr + new Vector2(MathF.Cos(ang), MathF.Sin(ang)) * rr;
+            }
+            var shadow = new Vector2[10];
+            for (int j = 0; j < 10; j++) shadow[j] = pts[j] + new Vector2(1, 1);
+            c.DrawColoredPolygon(shadow, new Color(0, 0, 0, 0.5f * op));
+            c.DrawColoredPolygon(pts, col);
+        }
     }
 
     void DrawOverlay(Painter c)
     {
         if (_aim is Vector2 am) DrawAim(c, am);
+        if (_trickHead is Vector2 th) DrawTrick(c, th);
         foreach (var mk in _marks)
         {
             // Stamina: very small and thin, just over his head.

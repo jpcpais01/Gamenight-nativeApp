@@ -11,6 +11,8 @@ namespace GameNight.Render;
 ///   wants it: met at the height it was caught, gathered into the chest, cradled on the walk,
 ///   held out for a punt, hugged on landing from a dive-catch, held overhead for a throw-in;
 /// - a one-arm throw carries it in the throwing hand;
+/// - not holding it, the hands still go out to meet a ball he's stepped across for, and are where
+///   they beat one away on a parry;
 /// - the ball is drawn in the hands, and eased back onto its real flight once it's let go.
 /// </summary>
 public sealed partial class PlayersView
@@ -118,10 +120,41 @@ public sealed partial class PlayersView
         ref float armL, ref float armR, ref float outL, ref float outR, ref float elbL, ref float elbR, ref float rotL, ref float rotR)
     {
         bool gk = b.Role[id] == Role.GK;
-        if (!isHeld && !(gk && action == ActionKind.Catch)) return false;
         var side = C.Basis.Column0.Normalized();
         var up = C.Basis.Column1.Normalized();
         var fwd = C.Basis.Column2.Normalized();
+        float cf = MathF.Cos(facing), sf = MathF.Sin(facing);
+        if (gk && !isHeld && (action == ActionKind.Parry || action == ActionKind.None && b.ReachIn[id] > 0))
+        {
+            // Not holding it: the hands go out to meet a ball on its way (a save on his feet), or
+            // are where they beat it away (a parry), and come back.
+            float w, F, L, Y;
+            if (action == ActionKind.Parry)
+            {
+                w = 1 - Smooth(0.08f, 0.32f, b.ActionT[id]);
+                F = b.CatchF[id]; L = b.CatchL[id]; Y = b.CatchY[id];
+            }
+            else
+            {
+                w = Smooth(0.4f, 0.06f, b.ReachIn[id]);
+                F = b.ReachF[id]; L = b.ReachL[id]; Y = b.ReachY[id];
+            }
+            if (w <= 0.001f) return false;
+            F = Clamp(F, 0.15f, 0.9f);
+            L = Clamp(L, -1.1f, 1.1f);
+            var at = new Vector3(x + cf * F - sf * L, Clamp(Y, 0.1f, 2.6f), z + sf * F + cf * L);
+            float sc0 = C.Basis.Column1.Length();
+            var back0 = -fwd * 0.05f * sc0;
+            float half0 = 0.12f * sc0;
+            float ml = armL, mo = outL, me = elbL, mr = rotL;
+            SolveArm(C, 1, shoulder, torsoL, armLen, at + side * half0 + back0, ref ml, ref mo, ref me, ref mr);
+            float nl = armR, no = outR, ne = elbR, nr = rotR;
+            SolveArm(C, -1, shoulder, torsoL, armLen, at - side * half0 + back0, ref nl, ref no, ref ne, ref nr);
+            armL = Lerp(armL, ml, w); outL = Lerp(outL, mo, w); elbL = Lerp(elbL, me, w); rotL = Lerp(rotL, mr, w);
+            armR = Lerp(armR, nl, w); outR = Lerp(outR, no, w); elbR = Lerp(elbR, ne, w); rotR = Lerp(rotR, nr, w);
+            return false;
+        }
+        if (!isHeld && !(gk && action == ActionKind.Catch)) return false;
         var pL = Palm(C, 1, shoulder, torsoL, armLen, armL, outL, elbL, rotL, wxL, g);
         var pR = Palm(C, -1, shoulder, torsoL, armLen, armR, outR, elbR, rotR, wxR, g);
         float sc = C.Basis.Column1.Length();
@@ -140,7 +173,6 @@ public sealed partial class PlayersView
         if (action == ActionKind.Catch)
         {
             // Met where it was caught, then brought in to the chest.
-            float cf = MathF.Cos(facing), sf = MathF.Sin(facing);
             float F = Clamp(b.CatchF[id], -0.3f, 1.1f), L = Clamp(b.CatchL[id], -1.2f, 1.2f);
             var contact = new Vector3(x + cf * F - sf * L, b.CatchY[id], z + sf * F + cf * L);
             ball = contact.Lerp(cradle, Smooth(0.2f, 0.8f, pr));

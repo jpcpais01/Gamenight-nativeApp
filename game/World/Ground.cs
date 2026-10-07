@@ -53,6 +53,10 @@ public abstract class Ground
     /// <summary>How far the camera sees (its far plane): further for a ground with a horizon to show.</summary>
     public float ViewRange { get; protected set; } = 600;
     protected float Haze = 1f;
+    /// <summary>The ground's own sky (see <see cref="Atmosphere.Heaven"/>).</summary>
+    protected int Heaven;
+    /// <summary>The ground builds all its own land (it drops below the usual level: a caldera).</summary>
+    protected bool NoLand;
     /// <summary>The height map's extent (must cover every caster, the near stand included).</summary>
     protected Rect2 BakeArea = new(-130, -120, 260, 230);
     /// <summary>The land beyond the pitch's apron (sRGB): the grey track, or grass.</summary>
@@ -229,7 +233,7 @@ public abstract class Ground
         // The motto is the ultras' big drop banner (the last banner slot).
         if (Art.Motto is var (mt, mbg, mfg) && Banners.Length >= 10) Banners[9] = new BannerArt(mt, mbg, mfg, 2);
         parent.AddChild(Root);
-        Atmosphere = new Atmosphere(Root) { FloodScale = FloodScale, FogRange = FogRange, Haze = Haze };
+        Atmosphere = new Atmosphere(Root) { FloodScale = FloodScale, FogRange = FogRange, Haze = Haze, Heaven = Heaven };
         RenderingServer.GlobalShaderParameterSet("gn_home", Lin(HomeColor));
         RenderingServer.GlobalShaderParameterSet("gn_away", Lin(AwayColor));
         RenderingServer.GlobalShaderParameterSet("gn_land", Land);
@@ -242,8 +246,8 @@ public abstract class Ground
         var clock = System.Diagnostics.Stopwatch.StartNew();
         Build();
         // The land runs on to the horizon under everything (the pitch's own plane stops at 160 m).
-        Static.Hex(((uint)(Land.X * 255) << 16) | ((uint)(Land.Y * 255) << 8) | (uint)(Land.Z * 255));
-        Static.Quad(new Vector3(-1500, -0.08f, 1500), new Vector3(1500, -0.08f, 1500), new Vector3(1500, -0.08f, -1500), new Vector3(-1500, -0.08f, -1500), 3000, 3000);
+        if (!NoLand) Static.Hex(((uint)(Land.X * 255) << 16) | ((uint)(Land.Y * 255) << 8) | (uint)(Land.Z * 255));
+        if (!NoLand) Static.Quad(new Vector3(-1500, -0.08f, 1500), new Vector3(1500, -0.08f, 1500), new Vector3(1500, -0.08f, -1500), new Vector3(-1500, -0.08f, -1500), 3000, 3000);
         long tBuild = clock.ElapsedMilliseconds;
         if (Crowd.Fans > 0) _steamSpots = Crowd.Sample(240);
         if (Crowd.Fans > 0 && _hasBench) Pitchside.Staff(Crowd);
@@ -331,7 +335,7 @@ public abstract class Ground
         RenderingServer.GlobalShaderParameterSet("gn_excite", s.Excitement);
         // The photographers follow the replay's tape while one shows, the live game otherwise.
         _bench?.Update(s, dt, _main?.ReplayView);
-        _birds?.Update(s, dt, Atmosphere.Weather != Weather.Rain && Atmosphere.Night < 0.55f ? 1 : 0);
+        _birds?.Update(s, dt, Atmosphere.Weather != Weather.Rain && Atmosphere.Night < 0.55f && Atmosphere.Heaven == 0 ? 1 : 0);
         // After dark: phones held up all round the ground as the teams come out, and again at
         // the final whistle.
         bool walkout = s.Phase == Phase.Kickoff && s.Minute == 0 && s.Half <= 1;

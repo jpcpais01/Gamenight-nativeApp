@@ -199,6 +199,12 @@ function move(id, p) {
     const dn = p.y - sprintStart.y, left = sprintStart.x - p.x, k = 28 * C;
     const stage = left > k && left > dn ? 2 : dn > k ? 1 : 0;
     if (stage > sprintSwipe) { sprintSwipe = stage; tackleId++; tackle = stage; }
+  } else if (r === 'sprint' && mode === 0 && sprintSwipe === 0) {
+    const dx = p.x - sprintStart.x, dy = p.y - sprintStart.y;
+    if (Math.hypot(dx, dy) > 28 * C) {
+      const k = Math.abs(dy) >= Math.abs(dx) ? (dy < 0 ? 0 : 3) : (dx < 0 ? 1 : 2);
+      sprintSwipe = k + 1; tackleId++; tackle = 3 + k;
+    }
   } else if (r === 0 || r === 1) swipe[r] = startY[r] - p.y > 26 * C;
 }
 function up(id) {
@@ -302,6 +308,13 @@ function draw(sec) {
     if (i < 2 && swipe[i]) { g.beginPath(); g.arc(c.x, c.y, r - 4, -Math.PI * 0.85, -Math.PI * 0.15); g.strokeStyle = ACCENT; g.lineWidth = 3; g.stroke(); }
     label(c.x, c.y + (defend && i === 3 ? -6 * C : 0), labels[i], size, cel && picked === i ? '#3b2100' : INK);
     if (defend && i === 3) label(c.x, c.y + 13 * C, '▼ TACKLE · ◀ SLIDE', 10 * C, INK);
+    if (i === 3 && mode === 0) for (let k = 0; k < 4; k++) {
+      const ux = [0, -1, 1, 0][k], uy = [-1, 0, 0, 1][k], tx = c.x + ux * (r - 3 * C), ty = c.y + uy * (r - 3 * C);
+      g.beginPath(); g.moveTo(tx, ty);
+      g.lineTo(tx - ux * 5 * C - uy * 4 * C, ty - uy * 5 * C + ux * 4 * C);
+      g.lineTo(tx - ux * 5 * C + uy * 4 * C, ty - uy * 5 * C - ux * 4 * C);
+      g.fillStyle = sprintSwipe === k + 1 ? ACCENT : 'rgba(244,239,227,0.4)'; g.fill();
+    }
   }
   if (!defend && !cel && held[2]) {
     const c = btnC(2), p = Math.min(1, holdT[2] / 0.85), r = (RAD[2] + 5) * C;

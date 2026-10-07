@@ -59,6 +59,8 @@ public sealed class ClubSave
     public long FreePackAt;
     /// <summary>Best streak per training drill.</summary>
     public Dictionary<string, int> DrillBest = new();
+    /// <summary>The skill move on each slide of SPRINT: up, left, right, down (None = empty).</summary>
+    public SkillMove[] SkillSlots = (SkillMove[])Skills.DefaultSlots.Clone();
     /// <summary>One-time gifts already given to this club (see ClubState.Gifts).</summary>
     public List<string> Gifts = new();
 }
@@ -159,8 +161,12 @@ public sealed class ClubState
         if (l.Slots.Any(s => s == null)) FillGaps();
     }
 
+    /// <summary>Goes up on every change to the club (menus redraw what they cached).</summary>
+    public int Rev;
+
     public void Save()
     {
+        Rev++;
         try
         {
             // Write a fresh file then swap it in, so a crash mid-write never loses the club.
@@ -511,6 +517,17 @@ public sealed class ClubState
     public void SetBanner(Banner b)
     {
         S.Banner = b;
+        Save();
+    }
+
+    /// <summary>Puts a move in a skill slot (0 up, 1 left, 2 right, 3 down); a move already in
+    /// another slot leaves it, so each move sits in one slot at most.</summary>
+    public void SetSkillSlot(int slot, SkillMove move)
+    {
+        if (S.SkillSlots is not { Length: 4 }) S.SkillSlots = (SkillMove[])Skills.DefaultSlots.Clone();
+        for (int i = 0; i < 4; i++)
+            if (move != SkillMove.None && S.SkillSlots[i] == move) S.SkillSlots[i] = SkillMove.None;
+        S.SkillSlots[slot] = move;
         Save();
     }
 

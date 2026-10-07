@@ -98,9 +98,11 @@ public sealed partial class Match
         else input2?.Events.Clear();
         AI.Update();
         TryStretches();
+        TricksIntent();
 
         // Locomotion.
         foreach (var p in Players) p.Move(DT);
+        TricksFacing();
         CollidePlayers();
         ConfineToPitch();
         KeepRestartDistance();
@@ -132,6 +134,7 @@ public sealed partial class Match
             ball.Step(DT);
             ConsumeBallEvents();
             CloseControl();
+            TricksBall();
             if (Phase == Phase.Play || Phase == Phase.Goal || Phase == Phase.Fulltime || Phase == Phase.Halftime) BallTouches();
         }
 
@@ -376,13 +379,36 @@ public sealed partial class Match
                 }
             }
         }
+        // Double tap SPRINT on the ball: his own signature skill (4 and 5-star men). Off the
+        // ball SPRINT is only ever pressing.
+        if (sprintDown && attacking && Owner == c && Phase == Phase.Play && SetPiece == null)
+        {
+            var sig = SignatureOf(c);
+            if (sig != SkillMove.None && Time - seat.LastSprintTap < 0.32)
+            {
+                bool idle = m < 0.3;
+                TryTrick(c, idle ? 0 : input.MoveX / m, idle ? 0 : -input.MoveY / m, idle, sig);
+                seat.LastSprintTap = -10;
+            }
+            else seat.LastSprintTap = Time;
+        }
         // One button: going hard. Whenever the ball isn't ours, that's pressing for it.
         seat.PressHeld = input.Sprint && Owner?.Team != c.Team;
         input.Events.Clear();
-        // Sliding down on Sprint commits to a tackle; sliding left commits to a slide tackle.
+        // Sliding on Sprint. Defence: down commits to a tackle, left to a slide tackle. On the ball:
+        // the skill move in that slot (whatever the stick says; it only steers the way out).
         if (input.TackleSwipe != TackleSwipe.None)
         {
-            if (!attacking)
+            if (input.TackleSwipe >= TackleSwipe.SkillUp)
+            {
+                var move = seat.Slots[input.TackleSwipe - TackleSwipe.SkillUp];
+                if (attacking && Owner == c && move != SkillMove.None && Skills.Knows(Math.Max(1, c.Attrs.Skill), move))
+                {
+                    bool idle = m < 0.3;
+                    TryTrick(c, idle ? 0 : input.MoveX / m, idle ? 0 : -input.MoveY / m, idle, move);
+                }
+            }
+            else if (!attacking)
             {
                 if (seat.LungeOn && input.TackleSwipe == TackleSwipe.Slide) seat.LungeSlide = true;
                 else
@@ -411,12 +437,15 @@ public sealed partial class Match
             var sp = SetPiece;
             if (AimingCorner && m > 0.12)
             {
-                // The ring moves with the stick as you see it: right is right, up is away.
+                // The ring moves with the stick as you see it from behind the taker: up is away
+                // from him, right is his right.
                 var t = sp.Target!;
                 double dir = Teams[sp.Team].Dir;
                 double gx = Pitch.HalfL * dir;
-                t.X += input.MoveX * 9 * DT;
-                t.Z -= input.MoveY * 9 * DT;
+                double fl = JsMath.Or1(JsMath.Hypot(t.X - sp.X, t.Z - sp.Z));
+                double fx = (t.X - sp.X) / fl, fz = (t.Z - sp.Z) / fl;
+                t.X += (input.MoveY * fx - input.MoveX * fz) * 9 * DT;
+                t.Z += (input.MoveY * fz + input.MoveX * fx) * 9 * DT;
                 double depth = M.Clamp((gx - t.X) * dir, 1.5, 32);
                 t.X = gx - dir * depth;
                 t.Z = M.Clamp(t.Z, -Pitch.HalfW + 2.5, Pitch.HalfW - 2.5);
@@ -805,6 +834,8 @@ public sealed partial class Match
     /// </summary>
     public void StartTackle(Player p, double dx, double dz, bool slide)
     {
+        // Sold a dummy: he's on the wrong foot.
+        if (p.FooledT > 0) return;
         double want = JsMath.Atan2(dz, dx);
         double sp = p.Speed;
         double body = want;

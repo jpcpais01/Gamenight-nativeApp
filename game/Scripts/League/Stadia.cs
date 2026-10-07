@@ -45,7 +45,7 @@ public static class Stadia
             : first == Kit.ClubPaint ? new[] { 0xeceae4u, 0x2a2c33u, 0x8c8f95u }[r.Next(3)] : Kit.ClubPaint;
         plan.SetPaint(a, first);
         if (b != a) plan.SetPaint(b, other);
-        plan.Area = r.Next(Surroundings.Names.Length);
+        plan.Area = r.Next(Surroundings.Real);
         return plan;
     }
 

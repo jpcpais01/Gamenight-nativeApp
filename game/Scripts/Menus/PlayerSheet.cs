@@ -1,4 +1,5 @@
 using Godot;
+using GameNight.Sim;
 using GameNight.Club;
 
 namespace GameNight.Menus;
@@ -42,6 +43,23 @@ public sealed partial class PlayerSheet : Modal
                 bx += Px.Width(Px.Small, l, 8);
             }
             bx += 16;
+        }
+        // Skill moves: his stars; 4 and 5-star men also have a signature skill.
+        int stars = SkillStars.Of(c);
+        y += 22;
+        Px.Text(this, Px.Small, new Vector2(x, y - 1), "SKILL MOVES", 8, Px.InkDim);
+        bx = x + Px.Width(Px.Small, "SKILL MOVES", 8) + 8;
+        for (int i = 0; i < 5; i++) Art.Star(this, new Vector2(bx + 7 + i * 15, y - 5), 6.5f, i < stars ? Px.Gold : new Color(1, 1, 1, 0.14f));
+        var sig = SkillStars.Signature(c);
+        if (sig != SkillMove.None)
+        {
+            y += 20;
+            Px.Text(this, Px.Small, new Vector2(x, y - 1), "SIGNATURE", 8, Px.InkDim);
+            bx = x + Px.Width(Px.Small, "SKILL MOVES", 8) + 8;
+            string sn = Skills.Name(sig).ToUpperInvariant();
+            Px.Text(this, Px.Big, new Vector2(bx, y + 1), sn, 18, Px.Cyan);
+            bx += Px.Width(Px.Big, sn, 18) + 8;
+            for (int i = 0; i < Skills.Tier(sig); i++) Art.Star(this, new Vector2(bx + 6 + i * 13, y - 5), 5.5f, Px.Gold);
         }
         var traits = Cards.Traits(c);
         if (traits.Count > 0)

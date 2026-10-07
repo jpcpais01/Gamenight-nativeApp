@@ -23,7 +23,8 @@ public static class KeeperPose
     /// <summary>Chooses the dive (roll, lift) whose body line passes through a ball at lateral offset a, height y.</summary>
     public static (double roll, double lift, double reach) PlanDive(double a, double y, double height)
     {
-        double lift = M.Clamp(y - 1.9, 0, 0.5);
+        // Anything above the knee he springs up to: the body flies level with the ball.
+        double lift = M.Clamp((y - 0.6) * 0.55, 0, 0.75);
         double up = System.Math.Max(0.08, y - lift);
         double L = 1.85 * height; // aim the forearms, not the fingertips
         double reach = System.Math.Sqrt(System.Math.Max(0, L * L - up * up));

@@ -73,6 +73,9 @@ public sealed class Atmosphere
     /// <summary>The ground's own haze (fog start/end, strength), for the evening.</summary>
     public Vector2 FogRange = new(110, 340);
     public float Haze = 1f;
+    /// <summary>The ground's own sky over whatever the weather: 0 the weather's, 1 space (black and
+    /// full of stars), 2 a Halloween night (moonlit, purple, whatever the forecast).</summary>
+    public int Heaven;
     public Weather Weather { get; private set; }
 
     // Evening key colours: kick-off (a), dusk (b), night (c). sRGB.
@@ -168,6 +171,26 @@ public sealed class Atmosphere
             case Weather.Sunny: SetSunny(); break;
             case Weather.Rain: SetRain(); break;
             default: SetEvening(t); break;
+        }
+        Heavens();
+    }
+
+    void Heavens()
+    {
+        if (Heaven == 1)
+        {
+            // No air: a black sky thick with stars, no clouds, and the haze is the dark.
+            _cloudShade = 0;
+            SetSky(C(0x000003), C(0x080a14), Vector3.Zero, 1, 0);
+            RenderingServer.GlobalShaderParameterSet("gn_fog", V(C(0x0a0c16)));
+            RenderingServer.GlobalShaderParameterSet("gn_haze", 0.3f);
+        }
+        else if (Heaven == 2 && Weather != Weather.Rain)
+        {
+            // Halloween: always night, a cold moon, the floodlights on, purple haze on the horizon.
+            Globals(C(0xb9b4ff), 0.42f, C(0x4a3a78) * 0.5f, C(0x241c30) * 0.55f, Mathf.Max(FloodScale, 0.6f), C(0x3a2850), 1, FogRange, Haze * 0.8f);
+            _cloudShade = 0;
+            SetSky(C(0x0d0820), C(0x6a2f52), Vector3.Zero, 1, 0.25f);
         }
     }
 

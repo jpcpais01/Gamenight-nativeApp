@@ -286,6 +286,8 @@ public static class Cards
                 Keeping = slot == Position.GK ? Unit(s.Keeping) : 0.2,
                 Height = h,
                 Weight = c.Weight,
+                Skill = SkillStars.Of(c),
+                Signature = SkillStars.Signature(c),
             },
             Look = new Look
             {

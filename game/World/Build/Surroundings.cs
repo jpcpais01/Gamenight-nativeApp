@@ -52,7 +52,8 @@ static partial class Surroundings
     static readonly uint[] Cars = { 0xe8e8e4, 0x1e2024, 0x9aa0a6, 0x5d6268, 0xb8322a, 0x2f5fb8, 0x2a4a3a, 0xd8c49a, 0x7a1f3a, 0xe0b030 };
 
     /// <summary>The areas a club can build its stadium in, in the order the builder lists them.</summary>
-    public static readonly string[] Names = { "Seaside", "Downtown", "Old Town", "Docklands", "Countryside", "Alpine", "Alentejo", "Fjord", "Tropical" };
+    public static readonly string[] Names = { "Seaside", "Downtown", "Old Town", "Docklands", "Countryside", "Alpine", "Alentejo", "Fjord", "Tropical",
+        "Mill Town", "Paris", "Island", "Kyoto", "Desert", "Haunted", "Moon Base", "Christmas" };
 
     public static readonly string[] About =
     {
@@ -65,6 +66,14 @@ static partial class Surroundings
         "A WHITE PORTUGUESE HILL TOWN: A CASTLE, CORK OAKS, OLIVES, VINES AND WINDMILLS",
         "A FJORD: SHEER ROCK WALLS, WATERFALLS, A WOODEN VILLAGE AND THE FERRY",
         "A TROPICAL CITY: COLOURFUL HOUSES UP THE HILLS, GRANITE PEAKS AND THE BEACH",
+        "AN ENGLISH MILL TOWN: TERRACED STREETS, THE VIADUCT, THE MILL CHIMNEY AND THE MOORS",
+        "PARIS: AVENUES OF PLANE TREES, STONE BLOCKS, THE SEINE AND THE WHITE BASILICA",
+        "A GREEK ISLAND: A WHITE TOWN ON THE CALDERA CLIFFS, BLUE DOMES AND THE DEEP BLUE SEA",
+        "KYOTO: WOODEN STREETS, CHERRY BLOSSOM, A PAGODA, RED GATES AND THE SNOWY CONE",
+        "A DESERT CITY: SANDSTONE STREETS, A GOLDEN DOME, PALMS, TOWERS AND THE DUNES",
+        "A HAUNTED HOLLOW: A GRAVEYARD, PUMPKIN FIELDS, DEAD TREES, THE MANSION AND THE MOON",
+        "A BASE ON THE MOON: CRATERS, DOMES, A ROCKET AND THE EARTH IN A BLACK SKY",
+        "A SNOWY CHRISTMAS VILLAGE: THE GREAT TREE, THE MARKET, A FROZEN LAKE AND LIGHTS",
     };
 
     /// <summary>The colour of the land that runs on under everything (and round the pitch).</summary>
@@ -77,8 +86,19 @@ static partial class Surroundings
         6 => new Vector3(0xb5, 0xa0, 0x62) / 255f,
         7 => new Vector3(0x4c, 0x76, 0x36) / 255f,
         8 => new Vector3(0x8a, 0x8a, 0x84) / 255f,
+        9 => new Vector3(0x3c, 0x3d, 0x40) / 255f,
+        10 => new Vector3(0xb8, 0xad, 0x94) / 255f,
+        11 => new Vector3(0xc9, 0xb4, 0x8a) / 255f,
+        12 => new Vector3(0x9a, 0x94, 0x88) / 255f,
+        13 => new Vector3(0xd6, 0xc2, 0x9a) / 255f,
+        14 => new Vector3(0x2e, 0x36, 0x2a) / 255f,
+        15 => new Vector3(0x8c, 0x8c, 0x8a) / 255f,
+        16 => new Vector3(0xe8, 0xee, 0xf4) / 255f,
         _ => new Vector3(0x46, 0x5f, 0x35) / 255f,
     };
+
+    /// <summary>The real places come first; the special ones (Halloween, the Moon, Christmas) after.</summary>
+    public const int Real = 14;
 
     public static int Clamp(int area) => Math.Clamp(area, 0, Names.Length - 1);
 
@@ -95,6 +115,14 @@ static partial class Surroundings
             case 6: Alentejo(m, rng, home); return;
             case 7: FjordArea(m, rng, home); return;
             case 8: Tropical(m, rng, home); return;
+            case 9: MillTown(m, rng, home); return;
+            case 10: Paris(m, rng, home); return;
+            case 11: Island(m, rng, home); return;
+            case 12: Kyoto(m, rng, home); return;
+            case 13: Desert(m, rng, home); return;
+            case 14: Haunted(m, rng, home); return;
+            case 15: MoonBase(m, rng, home); return;
+            case 16: Christmas(m, rng, home); return;
         }
         Ground(m);
         Approaches(m, rng, home);

@@ -128,6 +128,12 @@ public static class Art
         ["frost"] = new[] { 0, 0.07f, 0.2f, 0.015f, 0.5f, 0, 0.8f, 0.015f, 1, 0.07f, 1, 0.85f, 0.88f, 0.885f, 0.83f, 0.95f, 0.77f, 0.9f, 0.64f, 0.94f, 0.5f, 1, 0.36f, 0.94f, 0.23f, 0.9f, 0.17f, 0.95f, 0.12f, 0.885f, 0, 0.85f },
         ["carnival"] = new[] { 0, 0.12f, 0.07f, 0.02f, 0.19f, 0.09f, 0.31f, 0, 0.41f, 0.075f, 0.5f, 0, 0.59f, 0.075f, 0.69f, 0, 0.81f, 0.09f, 0.93f, 0.02f, 1, 0.12f, 1, 0.86f, 0.5f, 1, 0, 0.86f },
         ["cosmic"] = new[] { 0.16f, 0.035f, 0.5f, 0, 0.84f, 0.035f, 1, 0.13f, 1, 0.86f, 0.84f, 0.955f, 0.5f, 1, 0.16f, 0.955f, 0, 0.86f, 0, 0.13f },
+        // Flame tongues across the top.
+        ["inferno"] = new[] { 0, 0.11f, 0.06f, 0.04f, 0.1f, 0.08f, 0.17f, 0.01f, 0.25f, 0.075f, 0.33f, 0.02f, 0.42f, 0.06f, 0.5f, 0, 0.58f, 0.06f, 0.67f, 0.02f, 0.75f, 0.075f, 0.83f, 0.01f, 0.9f, 0.08f, 0.94f, 0.04f, 1, 0.11f, 1, 0.86f, 0.5f, 1, 0, 0.86f },
+        // Chamfered corners and a notch, like a neon sign.
+        ["neon"] = new[] { 0.09f, 0, 0.38f, 0, 0.42f, 0.03f, 0.58f, 0.03f, 0.62f, 0, 0.91f, 0, 1, 0.065f, 1, 0.9f, 0.88f, 0.97f, 0.12f, 0.97f, 0, 0.9f, 0, 0.065f },
+        // A pagoda roof with upturned eaves.
+        ["dragon"] = new[] { 0, 0.03f, 0.08f, 0.075f, 0.3f, 0.06f, 0.5f, 0, 0.7f, 0.06f, 0.92f, 0.075f, 1, 0.03f, 1, 0.86f, 0.5f, 1, 0, 0.86f },
     };
 
     static Vector2[] Shape(Rect2 r, int tier) => Shape(r, Shapes[Math.Clamp(tier, 0, 4)]);
@@ -149,8 +155,49 @@ public static class Art
     /// <summary>Fill the part of poly that lies inside the card's shape.</summary>
     static void Clip(CanvasItem ci, Vector2[] poly, Vector2[] shape, Color c)
     {
-        foreach (var part in Geometry2D.IntersectPolygons(poly, shape))
-            if (part.Length >= 3 && Area(part) > 0.5f) ci.DrawColoredPolygon(part, c);
+        foreach (var part in Clipped(poly, shape)) ci.DrawColoredPolygon(part, c);
+    }
+
+    // Cards are drawn every frame, each clipping dozens of bands and texture pieces to its shape
+    // (a call into the engine apiece): remember the pieces, relative to the shape's first point,
+    // so a card that hasn't changed size costs nothing but the drawing.
+    static readonly System.Collections.Generic.Dictionary<(long, long), Vector2[][]> Clips = new();
+
+    static System.Collections.Generic.IEnumerable<Vector2[]> Clipped(Vector2[] poly, Vector2[] shape)
+    {
+        var o = shape[0];
+        long h1 = 17, h2 = 31;
+        void Mix(Vector2[] pts)
+        {
+            foreach (var v in pts)
+            {
+                long x = (long)Mathf.Round((v.X - o.X) * 8), y = (long)Mathf.Round((v.Y - o.Y) * 8);
+                h1 = h1 * 1000003 + x * 92821 + y;
+                h2 = (h2 ^ (x * 2654435761L + y * 40503)) * 1099511628211L;
+            }
+            h1 = h1 * 7 + pts.Length;
+            h2 = h2 * 13 + pts.Length;
+        }
+        Mix(poly);
+        Mix(shape);
+        if (!Clips.TryGetValue((h1, h2), out var parts))
+        {
+            var list = new System.Collections.Generic.List<Vector2[]>();
+            foreach (var part in Geometry2D.IntersectPolygons(poly, shape))
+                if (part.Length >= 3 && Area(part) > 0.5f)
+                {
+                    for (int i = 0; i < part.Length; i++) part[i] -= o;
+                    list.Add(part);
+                }
+            if (Clips.Count > 6000) Clips.Clear();
+            Clips[(h1, h2)] = parts = list.ToArray();
+        }
+        foreach (var part in parts)
+        {
+            var moved = new Vector2[part.Length];
+            for (int i = 0; i < part.Length; i++) moved[i] = part[i] + o;
+            yield return moved;
+        }
     }
 
     static Vector2[] Quad(float x0, float y0, float x1, float y1) => new[] { new Vector2(x0, y0), new Vector2(x1, y0), new Vector2(x1, y1), new Vector2(x0, y1) };
@@ -274,18 +321,23 @@ public static class Art
         ci.DrawRect(new Rect2(plate.Position.X, plate.End.Y, plate.Size.X, Mathf.Max(1, u * 0.1f)), plateLine);
         int ns = (int)(u * 1.5f);
         Px.TextC(ci, Px.Big, plate.GetCenter().X, plate.GetCenter().Y + ns * 0.36f, Px.Fit(Px.Big, c.LastName.ToUpperInvariant(), ns, plate.Size.X - u * 0.6f), ns, ink);
-        // Six stats, two columns of three, split by a rule.
+        // Six stats, two columns of three split by a rule, each column centred in its half and
+        // kept above where the card's sides start to taper in.
         var fs = Cards.FaceStats(c);
-        int vs = (int)(u * 1.2f), ls = (int)(u * 0.9f);
+        int vs = (int)(u * 1.1f), ls = (int)(u * 0.8f);
+        float valW = Px.Width(Px.Big, "99", vs), gapW = u * 0.3f, labW = 0;
+        for (int i = 0; i < 6; i++) labW = Mathf.Max(labW, Px.Width(Px.Big, fs[i].Item1, ls));
+        float blockW = valW + gapW + labW;
         for (int i = 0; i < 6; i++)
         {
-            float x = p.X + u * (i < 3 ? 1.35f : 5.55f);
-            float y = p.Y + u * (10.35f + (i % 3) * 0.98f);
+            float cx = ir.Position.X + ir.Size.X * (i < 3 ? 0.27f : 0.73f);
+            float x0 = cx - blockW / 2;
+            float y = p.Y + u * (10.05f + (i % 3) * 0.86f);
             string v = fs[i].Item2.ToString();
-            Px.Text(ci, Px.Big, new Vector2(x, y), v, vs, ink);
-            Px.Text(ci, Px.Big, new Vector2(x + u * 1.75f, y), fs[i].Item1, ls, new Color(ink, 0.75f));
+            Px.TextR(ci, Px.Big, x0 + valW, y, v, vs, ink);
+            Px.Text(ci, Px.Big, new Vector2(x0 + valW + gapW, y), fs[i].Item1, ls, new Color(ink, 0.75f));
         }
-        ci.DrawRect(new Rect2(U(4.95f, 9.6f), new Vector2(Mathf.Max(1, u * 0.1f), u * 2.75f)), new Color(ink, 0.3f));
+        ci.DrawRect(new Rect2(ir.Position.X + ir.Size.X * 0.5f - Mathf.Max(1, u * 0.1f) / 2, p.Y + u * 9.55f, Mathf.Max(1, u * 0.1f), u * 2.55f), new Color(ink, 0.3f));
         if (u >= 6) Px.TextC(ci, Px.Small, ir.GetCenter().X, p.Y + u * 12.95f, ev?.Label ?? Cards.Label(c.Rarity).ToUpperInvariant(), Math.Max(7, (int)(u * 0.6f)), ev != null ? acc : new Color(ink, 0.7f));
     }
 
@@ -314,11 +366,27 @@ public static class Art
         int ns = (int)(plate.Size.Y * 0.8f);
         if (ns >= 12) Px.TextC(ci, Px.Big, plate.GetCenter().X, plate.GetCenter().Y + ns * 0.36f, Px.Fit(Px.Big, name, ns, plate.Size.X - 4), ns, ink);
         else Px.TextC(ci, Px.Small, plate.GetCenter().X, plate.GetCenter().Y + 4, Px.Fit(Px.Small, name, 7, plate.Size.X - 2), 7, ink);
-        // Room under the plate for the skill-move stars (their own thread fills it); then the tier.
+        // Under the plate: his skill-move stars (gold, the rest dim); then the tier.
         float below = plate.End.Y + (ir.End.Y - plate.End.Y) * 0.72f;
-        string tier = ev?.Label ?? Cards.Label(c.Rarity).ToUpperInvariant();
+        {
+            int stars = SkillStars.Of(c);
+            float sr = Mathf.Clamp(u * 0.42f, 2, 6), sg = sr * 0.5f;
+            float sy = ir.End.Y - plate.End.Y >= 14 ? plate.End.Y + (below - 4 - plate.End.Y) * 0.55f : (plate.End.Y + ir.End.Y) / 2;
+            float sx = ir.GetCenter().X - (5 * sr * 2 + 4 * sg) / 2 + sr;
+            for (int i = 0; i < 5; i++)
+                Star(ci, new Vector2(sx + i * (sr * 2 + sg), sy), sr, i < stars ? Px.Gold : new Color(ink, 0.18f));
+            // A signature skill: a cyan gem after the stars.
+            if (SkillStars.Signature(c) != GameNight.Sim.SkillMove.None)
+            {
+                var g = new Vector2(sx + 5 * (sr * 2 + sg) - sr * 0.3f, sy);
+                ci.DrawColoredPolygon(new[] { g + new Vector2(0, -sr), g + new Vector2(sr * 0.75f, 0), g + new Vector2(0, sr), g + new Vector2(-sr * 0.75f, 0) }, Px.Cyan);
+            }
+        }
+        // The tier; for a man with a signature skill, its name instead, in cyan.
+        var sig = SkillStars.Signature(c);
+        string tier = sig != GameNight.Sim.SkillMove.None ? GameNight.Sim.Skills.Name(sig).ToUpperInvariant() : ev?.Label ?? Cards.Label(c.Rarity).ToUpperInvariant();
         if (ir.End.Y - plate.End.Y >= 14)
-            Px.TextC(ci, Px.Small, ir.GetCenter().X, below + 3, Px.Fit(Px.Small, tier, 6, ir.Size.X - 4), 6, ev != null ? acc : new Color(ink, 0.7f));
+            Px.TextC(ci, Px.Small, ir.GetCenter().X, below + 3, Px.Fit(Px.Small, tier, 6, ir.Size.X - 4), 6, sig != GameNight.Sim.SkillMove.None ? Px.Cyan : ev != null ? acc : new Color(ink, 0.7f));
     }
 
     /// <summary>An event pack's badge picture: a jack-o'-lantern, a snowflake, a carnival mask, a
@@ -363,6 +431,30 @@ public static class Art
                 ci.DrawColoredPolygon(new[] { c + new Vector2(-s, -s * 0.15f), c + new Vector2(s, -s * 0.15f), c + new Vector2(s * 0.85f, s * 0.35f), c + new Vector2(s * 0.15f, s * 0.45f), c + new Vector2(0, s * 0.25f), c + new Vector2(-s * 0.15f, s * 0.45f), c + new Vector2(-s * 0.85f, s * 0.35f) }, light);
                 ci.DrawColoredPolygon(Px.Ellipse(c + new Vector2(-s * 0.45f, s * 0.08f), s * 0.24f, s * 0.15f, 10), dark);
                 ci.DrawColoredPolygon(Px.Ellipse(c + new Vector2(s * 0.45f, s * 0.08f), s * 0.24f, s * 0.15f, 10), dark);
+                break;
+            case "inferno":
+                ci.DrawColoredPolygon(new[] { c + new Vector2(0, -s * 1.15f), c + new Vector2(s * 0.45f, -s * 0.45f), c + new Vector2(s * 0.35f, -s * 0.85f), c + new Vector2(s * 0.85f, -s * 0.05f), c + new Vector2(s * 0.75f, s * 0.6f), c + new Vector2(0, s), c + new Vector2(-s * 0.75f, s * 0.6f), c + new Vector2(-s * 0.85f, -s * 0.15f), c + new Vector2(-s * 0.45f, -s * 0.6f), c + new Vector2(-s * 0.3f, -s * 0.2f) }, Px.Hex(0xff5a1a));
+                ci.DrawColoredPolygon(new[] { c + new Vector2(0, -s * 0.5f), c + new Vector2(s * 0.45f, s * 0.2f), c + new Vector2(s * 0.3f, s * 0.75f), c + new Vector2(-s * 0.3f, s * 0.75f), c + new Vector2(-s * 0.45f, s * 0.2f) }, Px.Hex(0xffd23a));
+                ci.DrawColoredPolygon(Px.Ellipse(c + new Vector2(0, s * 0.45f), s * 0.18f, s * 0.25f, 10), Px.Hex(0xfff6d0));
+                break;
+            case "neon":
+            {
+                ci.DrawColoredPolygon(Px.Ellipse(c + new Vector2(0, -s * 0.15f), s * 0.85f, s * 0.85f, 22), Px.Hex(0xff3ad8));
+                var half = new Vector2[13];
+                for (int i = 0; i < 13; i++) half[i] = c + new Vector2(0, -s * 0.15f) + new Vector2(Mathf.Cos(Mathf.Pi + i * Mathf.Pi / 12), Mathf.Sin(Mathf.Pi + i * Mathf.Pi / 12)) * s * 0.85f;
+                ci.DrawColoredPolygon(half, Px.Hex(0xffd447));
+                for (int i = 0; i < 3; i++) ci.DrawRect(new Rect2(c.X - s, c.Y - s * 0.05f + i * s * 0.22f, s * 2, Mathf.Max(1, s * 0.07f + i * s * 0.03f)), dark);
+                ci.DrawRect(new Rect2(c.X - s * 1.2f, c.Y + s * 0.7f, s * 2.4f, Mathf.Max(1, u * 0.25f)), light);
+                for (int i = -2; i <= 2; i++) ci.DrawLine(c + new Vector2(i * s * 0.25f, s * 0.7f), c + new Vector2(i * s * 0.6f, s * 1.15f), light, Mathf.Max(1, u * 0.15f));
+                break;
+            }
+            case "dragon":
+                ci.DrawLine(c + new Vector2(0, -s * 1.2f), c + new Vector2(0, -s * 0.8f), Px.Hex(0xffd447), Mathf.Max(1, u * 0.2f));
+                ci.DrawColoredPolygon(Px.Ellipse(c, s * 0.85f, s * 0.75f, 20), Px.Hex(0xff3a2a));
+                ci.DrawColoredPolygon(Px.Ellipse(c, s * 0.35f, s * 0.75f, 14), Px.Hex(0xe0201c));
+                ci.DrawRect(new Rect2(c.X - s * 0.55f, c.Y - s * 0.9f, s * 1.1f, s * 0.22f), Px.Hex(0xffd447));
+                ci.DrawRect(new Rect2(c.X - s * 0.55f, c.Y + s * 0.68f, s * 1.1f, s * 0.22f), Px.Hex(0xffd447));
+                for (int i = -1; i <= 1; i++) ci.DrawLine(c + new Vector2(i * s * 0.2f, s * 0.9f), c + new Vector2(i * s * 0.25f, s * 1.3f), Px.Hex(0xffd447), Mathf.Max(1, u * 0.15f));
                 break;
             default:
                 ci.DrawColoredPolygon(Px.Ellipse(c, s * 0.7f, s * 0.7f, 18), Px.Hex(0xffb84a));
@@ -481,6 +573,92 @@ public static class Art
                 Clip(ci, Px.Ellipse(pc, u * 0.85f, u * 0.85f, 16), shape, Px.Hex(0xffb84a));
                 Bar(pc + new Vector2(-u * 1.5f, u * 0.35f), pc + new Vector2(u * 1.5f, -u * 0.35f), Mathf.Max(1, u * 0.18f), new Color(trim, 0.9f));
                 Bar(U(0.6f, 1.2f), U(2.8f, 2.4f), Mathf.Max(1, u * 0.12f), new Color(1, 1, 1, 0.6f));
+                break;
+            }
+            case "inferno":
+            {
+                // A furnace glow behind the portrait, glowing cracks, flames licking up, embers.
+                Clip(ci, Px.Ellipse(U(6.5f, 5.0f), u * 3.6f, u * 3.6f, 26), shape, new Color(1, 0.35f, 0.08f, 0.2f));
+                Clip(ci, Px.Ellipse(U(6.5f, 5.0f), u * 2.4f, u * 2.4f, 24), shape, new Color(1, 0.7f, 0.2f, 0.14f));
+                foreach (var crack in new[] { new[] { (0.2f, 3.0f), (1.4f, 3.6f), (1.0f, 4.8f), (2.2f, 5.6f) }, new[] { (9.8f, 6.2f), (8.8f, 7.0f), (9.3f, 8.0f), (8.2f, 9.2f) }, new[] { (0.4f, 9.8f), (1.8f, 10.6f), (3.0f, 10.1f), (4.4f, 11.2f) } })
+                    for (int i = 0; i < crack.Length - 1; i++) Bar(U(crack[i].Item1, crack[i].Item2), U(crack[i + 1].Item1, crack[i + 1].Item2), Mathf.Max(1, u * 0.16f), new Color(acc, 0.75f));
+                for (int i = 0; i < 9; i++)
+                {
+                    float x = 0.2f + i * 1.15f, hgt = 1.6f + (i * 7 % 4) * 0.55f;
+                    Clip(ci, new[] { U(x - 0.7f, 14), U(x + 0.7f, 14), U(x + 0.15f, 14 - hgt), U(x, 14 - hgt - 0.6f) }, shape, new Color(trim, 0.55f));
+                    Clip(ci, new[] { U(x - 0.35f, 14), U(x + 0.35f, 14), U(x, 14 - hgt * 0.6f) }, shape, new Color(acc, 0.6f));
+                }
+                for (int i = 0; i < 12; i++) ci.DrawRect(new Rect2(U(0.5f + (i * 31 % 90) / 10f, 1.0f + (i * 47 % 100) / 10f), Vector2.One * Mathf.Max(1, u * 0.2f)), new Color(i % 2 == 0 ? acc : trim, 0.75f));
+                break;
+            }
+            case "neon":
+            {
+                // A synthwave sun sliced by the horizon, a grid running away, a scan of light.
+                var sc = U(6.4f, 5.4f);
+                float sr = u * 3.1f;
+                Clip(ci, Px.Ellipse(sc, sr, sr, 28), shape, new Color(1, 0.84f, 0.3f, 0.5f));
+                Clip(ci, Quad(sc.X - sr, sc.Y, sc.X + sr, sc.Y + sr), shape, new Color(acc, 0.45f));
+                for (int i = 0; i < 4; i++)
+                {
+                    float y = sc.Y - sr * 0.15f + i * sr * 0.24f;
+                    Clip(ci, Quad(sc.X - sr, y, sc.X + sr, y + Mathf.Max(1, u * 0.12f + i * u * 0.05f)), shape, new Color(Px.Hex(0x14062e), 0.85f));
+                }
+                float hy = 9.4f;
+                Bar(U(0, hy), U(10, hy), Mathf.Max(1, u * 0.14f), new Color(trim, 0.9f));
+                for (int i = -6; i <= 6; i++) Bar(U(5 + i * 0.5f, hy), U(5 + i * 2.2f, 14), lw, new Color(trim, 0.45f));
+                for (int k = 1; k <= 4; k++)
+                {
+                    float y = hy + k * k * 0.3f;
+                    Bar(U(0, y), U(10, y), lw, new Color(trim, 0.4f));
+                }
+                for (float y = 0.6f; y < hy; y += 0.9f) Clip(ci, Quad(U(0, y).X, U(0, y).Y, U(10, y).X, U(0, y).Y + Mathf.Max(1, u * 0.06f)), shape, new Color(1, 1, 1, 0.05f));
+                // City skyline along the horizon.
+                foreach (var (x, w, h) in new[] { (0.2f, 0.9f, 1.4f), (1.2f, 0.7f, 2.2f), (2.0f, 1.0f, 1.0f), (7.9f, 0.8f, 1.9f), (8.8f, 1.2f, 1.2f) })
+                    Clip(ci, Quad(U(x, hy - h).X, U(x, hy - h).Y, U(x + w, hy).X, U(x, hy).Y), shape, new Color(Px.Hex(0x0a0320), 0.9f));
+                for (int i = 0; i < 8; i++) ci.DrawRect(new Rect2(U(0.4f + (i * 3 % 10) * 0.25f + (i > 4 ? 7.6f : 0), hy - 0.4f - (i % 3) * 0.45f), Vector2.One * Mathf.Max(1, u * 0.14f)), new Color(i % 2 == 0 ? trim : acc, 0.9f));
+                break;
+            }
+            case "dragon":
+            {
+                // Gold scales, a lantern hanging each side, lucky coins and a curl of cloud.
+                for (int row = 0; row < 14; row++)
+                    for (int col = 0; col < 7; col++)
+                    {
+                        var c = U(col * 1.6f + (row % 2) * 0.8f, 1.2f + row * 0.95f);
+                        var arc = new Vector2[7];
+                        for (int i = 0; i < 7; i++)
+                        {
+                            float a = i / 6f * Mathf.Pi;
+                            arc[i] = c + new Vector2(-Mathf.Cos(a) * u * 0.8f, Mathf.Sin(a) * u * 0.55f);
+                        }
+                        for (int i = 0; i < 6; i++) Bar(arc[i], arc[i + 1], lw, new Color(trim, 0.13f));
+                    }
+                // Gold eaves under the roof line, and clouds curling in at the sides.
+                Clip(ci, Quad(U(0, 0.95f).X, U(0, 0.95f).Y, U(10, 0.95f).X, U(0, 1.25f).Y), shape, new Color(trim, 0.85f));
+                Clip(ci, Quad(U(0, 1.45f).X, U(0, 1.45f).Y, U(10, 1.45f).X, U(0, 1.55f).Y), shape, new Color(trim, 0.6f));
+                foreach (var (x, y, f) in new[] { (0.9f, 6.6f, 1f), (9.1f, 3.4f, -1f), (9.0f, 6.9f, -1f) })
+                {
+                    var o = U(x, y);
+                    var curl = new Vector2[10];
+                    for (int i = 0; i < 10; i++)
+                    {
+                        float a = i / 9f * Mathf.Tau * 0.85f, rr = u * (0.75f - i * 0.055f);
+                        curl[i] = o + new Vector2(Mathf.Cos(a) * f, Mathf.Sin(a)) * rr;
+                    }
+                    for (int i = 0; i < 9; i++) Bar(curl[i], curl[i + 1], Mathf.Max(1, u * 0.15f), new Color(trim, 0.7f));
+                    Bar(o + new Vector2(u * 0.75f * f, 0), o + new Vector2(u * 1.9f * f, 0), Mathf.Max(1, u * 0.15f), new Color(trim, 0.7f));
+                }
+                Clip(ci, Px.Ellipse(U(6.5f, 4.8f), u * 3.2f, u * 3.2f, 26), shape, new Color(1, 0.85f, 0.4f, 0.14f));
+                foreach (var (x, y) in new[] { (1.0f, 8.6f), (8.9f, 9.0f), (2.2f, 12.4f), (7.8f, 12.6f) })
+                {
+                    Clip(ci, Px.Ellipse(U(x, y), u * 0.45f, u * 0.45f, 12), shape, new Color(trim, 0.85f));
+                    Clip(ci, Quad(U(x - 0.12f, y).X, U(x, y - 0.12f).Y, U(x + 0.12f, y).X, U(x, y + 0.12f).Y), shape, Px.Hex(0x8a0e12));
+                }
+                for (int i = 0; i < 3; i++)
+                {
+                    var o = U(4.2f + i * 0.9f, 12.9f);
+                    Clip(ci, Px.Ellipse(o, u * 0.7f, u * 0.45f, 14), shape, new Color(acc, 0.22f));
+                }
                 break;
             }
         }
@@ -1017,5 +1195,21 @@ public static class Art
         Px.TextC(ci, Px.Big, inner.GetCenter().X, inner.Position.Y + inner.Size.Y * 0.8f, p.Emblem, es, c2.Darkened(0.3f));
         if (u >= 8) Px.TextC(ci, Px.Small, inner.GetCenter().X, inner.Position.Y + inner.Size.Y * 0.9f, $"{p.Cards} PLAYERS", Math.Max(8, (int)(u * 0.7f)), c2.Darkened(0.2f));
         if (charge > 0) ci.DrawRect(inner, new Color(1, 1, 1, 0.12f * charge));
+    }
+
+    /// <summary>A five-pointed star (skill moves), with a hard pixel shadow.</summary>
+    public static void Star(CanvasItem c, Vector2 centre, float r, Color col)
+    {
+        var pts = new Vector2[10];
+        var sh = new Vector2[10];
+        for (int j = 0; j < 10; j++)
+        {
+            float a = -Mathf.Pi / 2 + j * Mathf.Pi / 5;
+            float rr = j % 2 == 0 ? r : r * 0.45f;
+            pts[j] = centre + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * rr;
+            sh[j] = pts[j] + new Vector2(1, 1);
+        }
+        if (col.A > 0.5f) c.DrawColoredPolygon(sh, new Color(0, 0, 0, 0.5f));
+        c.DrawColoredPolygon(pts, col);
     }
 }

@@ -69,6 +69,7 @@ public sealed class FrameCodec
         H(s.PullX); H(s.PullZ); F(s.PullT);
         H(s.KickPower); H(s.KickHeight); H(s.KickRel); H(s.SlideV0);
         B(s.Sprinting); H(s.Stamina);
+        E(s.Trick); Sb(s.TrickSide);
         Y(s.Cards); Y(s.Team); Y(s.Index); Y(s.Number);
         E(s.Role);
         Sb(s.Foot);
@@ -95,6 +96,7 @@ public sealed class FrameCodec
         B(ref s.SetPieceDirect); B(ref s.HasSetPieceTarget); F(ref s.SetPieceTargetX); F(ref s.SetPieceTargetZ);
         I(ref s.DeadBallTaker); F(ref s.DeadBallX); F(ref s.DeadBallZ);
         s.DeadBallKind = (SetPieceKind)I((int)s.DeadBallKind);
+        B(ref s.DeadBallRun);
         B(ref s.AimingCorner); B(ref s.AimingGoalKick); B(ref s.AimingShot);
         B(ref s.HasAimPoint); F(ref s.AimX); F(ref s.AimY); F(ref s.AimZ);
         B(ref s.HasArc); I(ref s.ArcCount);
@@ -112,7 +114,7 @@ public sealed class FrameCodec
         // This frame's events (everything since the last frame sent, folded together).
         I(ref s.KickCount); F(ref s.KickMax);
         I(ref s.Whistle); I(ref s.Goal); I(ref s.Foul); I(ref s.Card); I(ref s.Offside); I(ref s.Sub);
-        F(ref s.Post); F(ref s.Net); F(ref s.Bounce); F(ref s.Save); F(ref s.Tackle);
+        F(ref s.Post); F(ref s.Net); F(ref s.Bounce); F(ref s.Save); F(ref s.Tackle); F(ref s.Skill);
     }
 
     void F(float[] a)

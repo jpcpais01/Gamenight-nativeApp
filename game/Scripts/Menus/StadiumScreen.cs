@@ -452,7 +452,7 @@ public sealed partial class StadiumScreen : PxCanvas
         float x = r.Position.X, y = r.End.Y, w = r.Size.X, h = r.Size.Y;
         Vector2 P(float fx, float fy) => new(Mathf.Round(x + fx * w), Mathf.Round(y - fy * h));
         ci.DrawRect(r, Px.Hex(0x9cc7e8));
-        var land = Px.Hex(area switch { 1 => 0x6b6e6a, 3 => 0x5a6250, 4 => 0x6f9440, 5 => 0x5f8a3e, 6 => 0xb5a062, 7 => 0x4c7636, 8 => 0x8a8a84, _ => 0x557a3c });
+        var land = Px.Hex(area switch { 1 => 0x6b6e6a, 3 => 0x5a6250, 4 => 0x6f9440, 5 => 0x5f8a3e, 6 => 0xb5a062, 7 => 0x4c7636, 8 => 0x8a8a84, 9 => 0x3c3d40, 10 => 0xb8ad94, 11 => 0xc9b48a, 12 => 0x9a9488, 13 => 0xd6c29a, 14 => 0x2e362a, 15 => 0x8c8c8a, 16 => 0xe8eef4, _ => 0x557a3c });
         switch (area)
         {
             case 1: // towers
@@ -522,6 +522,66 @@ public sealed partial class StadiumScreen : PxCanvas
                     ci.DrawRect(new Rect2(P(fx, fy), new Vector2(w * 0.05f, h * 0.06f)), Px.Hex(new[] { 0xe8c84a, 0xd85a4a, 0x5aa8d8, 0xf0f0ea, 0xe88a3a }[i % 5]));
                 }
                 ci.DrawRect(new Rect2(P(0, 0.28f), new Vector2(w, h * 0.1f)), Px.Hex(0xe6d6a8));
+                break;
+            case 9: // terraced rows, the viaduct, the mill chimney, the moors
+                ci.DrawColoredPolygon(new[] { P(0, 0.4f), P(0.4f, 0.62f), P(0.8f, 0.5f), P(1, 0.6f), P(1, 0.2f), P(0, 0.2f) }, Px.Hex(0x6a5a6a));
+                for (int i = 0; i < 9; i++) ci.DrawRect(new Rect2(P(0.04f + i * 0.11f, 0.5f), new Vector2(w * 0.03f, h * 0.24f)), Px.Hex(0x7c3626));
+                ci.DrawRect(new Rect2(P(0, 0.52f), new Vector2(w, h * 0.05f)), Px.Hex(0x7c3626));
+                ci.DrawRect(new Rect2(P(0.78f, 0.9f), new Vector2(w * 0.04f, h * 0.7f)), Px.Hex(0x6f3324));
+                for (int i = 0; i < 3; i++) ci.DrawRect(new Rect2(P(0, 0.2f + i * 0.08f), new Vector2(w, h * 0.04f)), Px.Hex(i % 2 == 0 ? 0x8a3d2a : 0x4a4f58));
+                break;
+            case 10: // stone blocks, the iron tower, the basilica
+                ci.DrawColoredPolygon(new[] { P(0.62f, 0.2f), P(0.72f, 0.95f), P(0.82f, 0.2f), P(0.78f, 0.2f), P(0.72f, 0.5f), P(0.66f, 0.2f) }, Px.Hex(0x6b5a48));
+                ci.DrawRect(new Rect2(P(0.2f, 0.56f), new Vector2(w * 0.14f, h * 0.18f)), Px.Hex(0xf2efe6));
+                ci.DrawCircle(P(0.27f, 0.58f), h * 0.08f, Px.Hex(0xf2efe6));
+                for (int i = 0; i < 6; i++) ci.DrawRect(new Rect2(P(0.02f + i * 0.17f, 0.38f), new Vector2(w * 0.14f, h * 0.18f)), Px.Hex(0xe6dcc4));
+                for (int i = 0; i < 6; i++) ci.DrawRect(new Rect2(P(0.02f + i * 0.17f, 0.42f), new Vector2(w * 0.14f, h * 0.05f)), Px.Hex(0x6b7178));
+                break;
+            case 11: // white town on red cliffs over the deep blue
+                ci.DrawRect(new Rect2(P(0, 0.42f), new Vector2(w, h * 0.3f)), Px.Hex(0x1f5a8e));
+                ci.DrawColoredPolygon(new[] { P(0, 0.75f), P(0.3f, 0.7f), P(0.36f, 0.42f), P(0, 0.42f) }, Px.Hex(0x8a4a36));
+                ci.DrawColoredPolygon(new[] { P(1, 0.8f), P(0.66f, 0.72f), P(0.6f, 0.42f), P(1, 0.42f) }, Px.Hex(0x4a403a));
+                for (int i = 0; i < 6; i++) ci.DrawRect(new Rect2(P(0.68f + i * 0.05f, 0.82f + (i % 2) * 0.03f), new Vector2(w * 0.04f, h * 0.06f)), Px.Hex(0xf6f4ef));
+                ci.DrawCircle(P(0.82f, 0.88f), h * 0.04f, Px.Hex(0x1f5fb8));
+                break;
+            case 12: // the snowy cone, the pagoda, cherry blossom
+                ci.DrawColoredPolygon(new[] { P(0.15f, 0.3f), P(0.45f, 0.95f), P(0.75f, 0.3f) }, Px.Hex(0x6a6a70));
+                ci.DrawColoredPolygon(new[] { P(0.38f, 0.8f), P(0.45f, 0.95f), P(0.52f, 0.8f) }, Px.Hex(0xf2f4f6));
+                for (int i = 0; i < 4; i++) ci.DrawRect(new Rect2(P(0.78f - i * 0.01f, 0.3f + i * 0.13f), new Vector2(w * (0.12f - i * 0.02f), 3)), Px.Hex(0x2a2c30));
+                ci.DrawRect(new Rect2(P(0.82f, 0.82f), new Vector2(w * 0.03f, h * 0.55f)), Px.Hex(0xc9442e));
+                for (int i = 0; i < 4; i++) ci.DrawCircle(P(0.08f + i * 0.14f, 0.28f), h * 0.07f, Px.Hex(0xf2b8c8));
+                break;
+            case 13: // the golden dome, minarets, glass towers, dunes
+                ci.DrawRect(new Rect2(P(0, 0.3f), new Vector2(w, h * 0.12f)), Px.Hex(0xe0b878));
+                ci.DrawCircle(P(0.3f, 0.42f), h * 0.16f, Px.Hex(0xd9a83a));
+                ci.DrawRect(new Rect2(P(0.16f, 0.42f), new Vector2(w * 0.28f, h * 0.12f)), Px.Hex(0xf0e6d0));
+                foreach (float x2 in new[] { 0.1f, 0.5f }) ci.DrawRect(new Rect2(P(x2, 0.78f), new Vector2(w * 0.03f, h * 0.48f)), Px.Hex(0xf0e6d0));
+                for (int i = 0; i < 4; i++) ci.DrawRect(new Rect2(P(0.64f + i * 0.09f, 0.5f + (i % 2) * 0.35f), new Vector2(w * 0.06f, h * (0.2f + (i % 2) * 0.35f))), Px.Hex(0x8aa6b8));
+                break;
+            case 14: // the full moon over the mansion on its hill
+                ci.DrawRect(r, Px.Hex(0x2a1640));
+                ci.DrawCircle(P(0.72f, 0.72f), h * 0.2f, Px.Hex(0xfaf0cc));
+                ci.DrawColoredPolygon(new[] { P(0, 0.2f), P(0.35f, 0.45f), P(0.7f, 0.25f), P(1, 0.2f), P(1, 0), P(0, 0) }, Px.Hex(0x15121a));
+                ci.DrawRect(new Rect2(P(0.26f, 0.62f), new Vector2(w * 0.18f, h * 0.2f)), Px.Hex(0x15121a));
+                ci.DrawColoredPolygon(new[] { P(0.24f, 0.62f), P(0.29f, 0.78f), P(0.34f, 0.62f) }, Px.Hex(0x15121a));
+                ci.DrawRect(new Rect2(P(0.3f, 0.54f), new Vector2(3, 3)), Px.Hex(0xffc04a));
+                ci.DrawCircle(P(0.12f, 0.16f), h * 0.05f, Px.Hex(0xe0681a));
+                break;
+            case 15: // the Earth in a black sky, domes, the rocket
+                ci.DrawRect(r, Px.Hex(0x05060c));
+                ci.DrawCircle(P(0.28f, 0.75f), h * 0.14f, Px.Hex(0x2f6ad0));
+                ci.DrawCircle(P(0.25f, 0.78f), h * 0.05f, Px.Hex(0x4f9a4a));
+                ci.DrawRect(new Rect2(P(0, 0.3f), new Vector2(w, h * 0.3f)), Px.Hex(0x8c8c8a));
+                ci.DrawCircle(P(0.45f, 0.3f), h * 0.1f, Px.Hex(0xeef0f2));
+                ci.DrawRect(new Rect2(P(0.78f, 0.8f), new Vector2(w * 0.05f, h * 0.5f)), Px.Hex(0xf4f4f2));
+                ci.DrawColoredPolygon(new[] { P(0.78f, 0.8f), P(0.805f, 0.92f), P(0.83f, 0.8f) }, Px.Hex(0xf4f4f2));
+                break;
+            case 16: // the great tree, snowy hills, warm windows
+                ci.DrawColoredPolygon(new[] { P(0, 0.4f), P(0.3f, 0.6f), P(0.7f, 0.45f), P(1, 0.55f), P(1, 0.2f), P(0, 0.2f) }, Px.Hex(0xeef2f6));
+                ci.DrawColoredPolygon(new[] { P(0.38f, 0.22f), P(0.5f, 0.88f), P(0.62f, 0.22f) }, Px.Hex(0x1f5a32));
+                ci.DrawCircle(P(0.5f, 0.9f), h * 0.04f, Px.Hex(0xffd23a));
+                for (int i = 0; i < 5; i++) ci.DrawRect(new Rect2(P(0.44f + (i % 3) * 0.05f, 0.35f + i * 0.1f), new Vector2(3, 3)), Px.Hex(i % 2 == 0 ? 0xff3a2a : 0xffd23a));
+                foreach (float x2 in new[] { 0.08f, 0.75f }) { ci.DrawRect(new Rect2(P(x2, 0.36f), new Vector2(w * 0.14f, h * 0.14f)), Px.Hex(0x7a4a2e)); ci.DrawRect(new Rect2(P(x2 + 0.04f, 0.3f), new Vector2(3, 3)), Px.Hex(0xffd27a)); }
                 break;
             default: // a skyline across the bay, a beach
                 for (int i = 0; i < 6; i++) ci.DrawRect(new Rect2(P(0.45f + i * 0.08f, 0.45f + (i % 3) * 0.1f), new Vector2(w * 0.06f, h * (0.12f + (i % 3) * 0.1f))), Px.Hex(0x8a96a3));
@@ -704,6 +764,22 @@ public sealed partial class StadiumScreen : PxCanvas
                 ci.DrawCircle(P(0.77f, 0.62f), h * 0.2f, Px.Hex(0x3f6e30));
                 ci.DrawRect(new Rect2(P(0.4f, 0.9f), new Vector2(2, h * 0.65f)), Px.Hex(0x8a8f96));
                 ci.DrawRect(new Rect2(P(0.37f, 0.92f), new Vector2(8, 4)), Px.Hex(0xfff2c8));
+                break;
+            case 20: // three tiers stacked high under a roof, a skin of stars
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.08f), P(0.3f, 0.3f), P(0.3f, 0.36f), P(0.52f, 0.56f), P(0.52f, 0.62f), P(0.74f, 0.86f), P(0.82f, 0.9f), P(0.82f, 0) }, c);
+                ci.DrawRect(new Rect2(P(0.28f, 0.36f), new Vector2(w * 0.04f, 2)), Px.Ink);
+                ci.DrawRect(new Rect2(P(0.5f, 0.62f), new Vector2(w * 0.04f, 2)), Px.Ink);
+                ci.DrawColoredPolygon(new[] { P(0.4f, 0.97f), P(0.4f, 0.93f), P(0.9f, 0.9f), P(0.9f, 0.95f) }, c.Darkened(0.4f));
+                for (int i = 0; i < 9; i++) ci.DrawRect(new Rect2(P(0.84f + (i % 3) * 0.045f, 0.12f + i * 0.08f), new Vector2(2, 2)), Px.Ink);
+                break;
+            case 21: // a purple stand, a pumpkin, a spire and a bat
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.1f), P(0.62f, 0.5f), P(0.62f, 0.6f), P(0.72f, 0.6f), P(0.72f, 0) }, c);
+                ci.DrawRect(new Rect2(P(0.2f, 0.26f), new Vector2(w * 0.08f, 2)), Px.Hex(0xff7a1a));
+                ci.DrawCircle(P(0.3f, 0.3f), h * 0.07f, Px.Hex(0xe8701a));
+                ci.DrawRect(new Rect2(P(0.78f, 0.7f), new Vector2(w * 0.12f, h * 0.7f)), c.Darkened(0.2f));
+                ci.DrawColoredPolygon(new[] { P(0.76f, 0.7f), P(0.84f, 1), P(0.92f, 0.7f) }, Px.Hex(0x16121c));
+                ci.DrawRect(new Rect2(P(0.82f, 0.5f), new Vector2(3, 3)), Px.Hex(0xffc23a));
+                ci.DrawColoredPolygon(new[] { P(0.3f, 0.85f), P(0.38f, 0.8f), P(0.46f, 0.85f), P(0.38f, 0.78f) }, Px.Hex(0x16121c));
                 break;
             default: // walls, battlements and a keep
                 ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.62f, 0.55f), P(0.62f, 0.6f), P(0.7f, 0.6f), P(0.7f, 0) }, c);

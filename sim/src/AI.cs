@@ -1778,6 +1778,8 @@ public sealed partial class AI
 
     void CarrierThink(Player p)
     {
+        // In the middle of a skill move: the move has him.
+        if (p.Action == ActionKind.Trick) return;
         var team = m.Teams[p.Team];
         double dir = team.Dir;
         double gx = Pitch.HalfL * dir;
@@ -1827,6 +1829,13 @@ public sealed partial class AI
             {
                 Shoot(p, distGoal);
                 return;
+            }
+
+            // Taking his man on: a skill move now and then, before he looks for a ball.
+            if (pressure < 3 && m.Time >= p.TrickReady && m.Rng.Next() < 0.3)
+            {
+                ChooseDribble(p, pressure);
+                if (TryTrick(p, pressure, distGoal)) return;
             }
 
             // Cross? Wide near the byline with someone attacking the box.
@@ -1917,6 +1926,7 @@ public sealed partial class AI
             // Closed down, he decides again sooner.
             if (risk > 0.3) nextDecision[p.Id] = m.Time + 0.12 + m.Rng.Next() * 0.08;
             ChooseDribble(p, pressure);
+            if (TryTrick(p, pressure, distGoal)) return;
         }
         Dribble(p, false);
     }
@@ -2036,6 +2046,35 @@ public sealed partial class AI
     }
 
     readonly double[] dribHold = new double[22];
+
+    /// <summary>Where he dribbles next (after a skill move: on the way the move took him).</summary>
+    public void SetDribble(Player p, double x, double z)
+    {
+        dribX[p.Id] = x;
+        dribZ[p.Id] = z;
+    }
+
+    /// <summary>
+    /// The computer's dribbler keeping it with a man right in front of him: now and then (the more
+    /// skill stars, the more often; never in his own third) he takes him on with a skill move toward
+    /// the way he wants to go; in shooting range, sometimes the fake shot.
+    /// </summary>
+    bool TryTrick(Player p, double pressure, double distGoal)
+    {
+        if (pressure > 3.8 || m.Time < p.TrickReady) return false;
+        double dir = m.Teams[p.Team].Dir;
+        if (m.Ball.Pos.X * dir < -Pitch.HalfL / 3) return false;
+        // Not into a tackle that's already coming in.
+        foreach (var q in m.Teams[1 - p.Team].Players)
+            if ((q.Action == ActionKind.Tackle || q.Action == ActionKind.Slide) && M.Dist2D(q.Pos.X, q.Pos.Z, p.Pos.X, p.Pos.Z) < 3) return false;
+        int stars = Math.Max(1, p.Attrs.Skill);
+        if (m.Rng.Next() >= 0.04 + 0.035 * stars) return false;
+        bool idle = distGoal < 24 && m.Rng.Next() < 0.35;
+        // Now and then his own signature skill instead.
+        var sig = Match.SignatureOf(p);
+        if (!idle && sig != SkillMove.None && m.Rng.Next() < 0.3) return m.TryTrick(p, dribX[p.Id], dribZ[p.Id], false, sig);
+        return m.TryTrick(p, dribX[p.Id], dribZ[p.Id], idle);
+    }
 
     void Dribble(Player p, bool settle)
     {

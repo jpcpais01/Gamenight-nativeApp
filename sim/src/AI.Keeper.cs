@@ -29,9 +29,9 @@ public sealed partial class AI
     readonly double[] claimFor = { -10, -10 };
     readonly bool[] claimGo = new bool[2];
     /// <summary>For tuning: per kind (see KeeperMoveNames), how many times a keeper went for it.</summary>
-    public readonly int[] KeeperMoves = new int[10];
-    public static readonly string[] KeeperMoveNames = { "feet-save", "dive", "smother", "rush", "claim", "sweep-out", "punch", "catch", "dive-catch", "parry" };
-    readonly double[,] moveStamp = new double[10, 2];
+    public readonly int[] KeeperMoves = new int[14];
+    public static readonly string[] KeeperMoveNames = { "feet-save", "dive", "smother", "rush", "claim", "sweep-out", "punch", "catch", "dive-catch", "parry-wide", "tip", "block", "spill", "brushed" };
+    readonly double[,] moveStamp = new double[14, 2];
 
     /// <summary>Counts a move once per ball (per kick).</summary>
     void Note(int kind, Player k)
@@ -50,6 +50,7 @@ public sealed partial class AI
     {
         k.SquareUp = true;
         k.Burst = false;
+        k.ReachIn = -1;
         // Coming for a high ball: committed until someone touches it.
         Claiming[k.Team] = claimGo[k.Team] && claimFor[k.Team] == m.LastKickTime && m.Owner == null && m.HeldBy == null;
 
@@ -60,6 +61,7 @@ public sealed partial class AI
         }
         holding[k.Team] = false;
         if (k.Action == ActionKind.Dive) return;
+        if (!k.IsBusy) leap[k.Team] = false;
 
         // A team-mate's pass to him: meet it and play it with his feet, like an outfielder.
         if (m.PassTarget == k && m.LastKicker != null && m.LastKicker.Team == k.Team && m.Owner == null)
@@ -217,61 +219,321 @@ public sealed partial class AI
         return p;
     }
 
-    // ------------------------------------------------------------------ shots
+    // ------------------------------------------------------------------ reading the ball
+
+    /// <summary>The ball's flight as each keeper reads it: his own fresh prediction, every 2 DT.</summary>
+    const int PathN = 150;
+    readonly double[][] kpX = { new double[PathN], new double[PathN] };
+    readonly double[][] kpY = { new double[PathN], new double[PathN] };
+    readonly double[][] kpZ = { new double[PathN], new double[PathN] };
+    readonly int[] kpN = new int[2];
+    readonly double[] kpAt = { -10, -10 }, kpKick = { -10, -10 }, kpTouchAt = { -10, -10 };
+    readonly Player?[] kpTouch = new Player?[2];
+    /// <summary>Bodies between the strike and him: he picks the ball up a beat later.</summary>
+    readonly bool[] kpScreened = new bool[2];
+    /// <summary>Wrong-footed by the strike: the read comes a beat late when it goes away from him.</summary>
+    readonly bool[] kpWrong = new bool[2];
+    /// <summary>Going up for a ball over his head (a lob, a dipping shot): his hands reach a jump higher.</summary>
+    readonly bool[] leap = new bool[2];
 
     /// <summary>
-    /// A ball coming at him: where it passes through his frontal plane (height, offset to his
-    /// left, seconds from now). False when nothing is coming, or it's going well wide or over.
+    /// What a keeper makes of a ball coming his way: where it crosses his line, and where on its
+    /// way he can meet it: with his feet and hands (step across, the body behind it), or only at
+    /// the end of a dive.
     /// </summary>
-    bool Incoming(Player k, out double cy, out double lat, out double ct)
+    struct ShotRead
     {
-        cy = lat = ct = 0;
-        var b = m.Ball;
-        double own = OwnSide(k);
-        if (m.Owner != null || m.HeldBy != null) return false;
-        if (b.Vel.X * own < 3 || JsMath.Hypot(b.Vel.X, b.Vel.Z) < 5) return false;
-        double fx = JsMath.Cos(k.Facing), fz = JsMath.Sin(k.Facing);
-        double ago = m.Time - InterceptAt;
-        // Does it get to the goal mouth (or near it)? A slow ball that dies first still counts
-        // when it's coming right at him.
-        bool onGoal = false;
-        double gl = own * Pitch.HalfL;
-        for (int i = 1; i < sampleCount; i++)
+        /// <summary>Crossing the goal mouth (or close enough that he has to treat it as if).</summary>
+        public bool On;
+        public double GT, GY, GZ;
+        /// <summary>The meeting point (world), when it gets there (s from now), and in his frame.</summary>
+        public double T, X, Y, Z, Lat, Depth, V;
+        /// <summary>0: let it go; 1: on his feet; 2: a dive; 3: at full stretch, it's probably beyond him.</summary>
+        public int How;
+        /// <summary>On his feet: where to stand (the ball's line through his body, or as near as he gets).</summary>
+        public double SX, SZ;
+        public bool Leap;
+    }
+
+    void ReadPath(Player k)
+    {
+        int t = k.Team;
+        if (m.LastTouch != kpTouch[t])
         {
-            if ((SX[i] - gl) * own >= 0 && (SX[i - 1] - gl) * own < 0)
+            kpTouch[t] = m.LastTouch;
+            kpTouchAt[t] = m.Time;
+        }
+        if (m.Time - kpAt[t] < 0.05 && kpKick[t] == m.LastKickTime && kpTouchAt[t] < kpAt[t]) return;
+        bool fresh = kpKick[t] != m.LastKickTime || kpTouchAt[t] >= kpAt[t];
+        kpAt[t] = m.Time;
+        kpKick[t] = m.LastKickTime;
+        var b = m.Ball;
+        var pb = Kick.LoadPrediction(b);
+        double[] X = kpX[t], Y = kpY[t], Z = kpZ[t];
+        int n = 0;
+        while (n < PathN)
+        {
+            X[n] = pb.Pos.X;
+            Y[n] = pb.Pos.Y;
+            Z[n] = pb.Pos.Z;
+            n++;
+            if (Math.Abs(pb.Pos.X) > Pitch.HalfL + 0.3) break;
+            pb.Step(DT * 2);
+        }
+        kpN[t] = n;
+        if (fresh)
+        {
+            // He's half-guessed where it's going as it's struck; now and then the striker's
+            // fooled him and his weight's on the wrong foot.
+            kpWrong[t] = m.LastKicker != null && m.LastKicker.Team != t && m.Rng.Next() > 0.45 + 0.25 * k.Attrs.Keeping;
+            // Unsighted: someone in the line between the ball and his eyes.
+            kpScreened[t] = false;
+            double lx = k.Pos.X - b.Pos.X, lz = k.Pos.Z - b.Pos.Z;
+            double l2 = lx * lx + lz * lz;
+            if (l2 > 4)
+                foreach (var q in m.Players)
+                {
+                    if (q == k || q == m.LastTouch) continue;
+                    double u = ((q.Pos.X - b.Pos.X) * lx + (q.Pos.Z - b.Pos.Z) * lz) / l2;
+                    if (u < 0.1 || u > 0.85) continue;
+                    if (M.Dist2D(q.Pos.X, q.Pos.Z, b.Pos.X + lx * u, b.Pos.Z + lz * u) < 0.45) kpScreened[t] = true;
+                }
+        }
+    }
+
+    /// <summary>How long before he can move for the ball just struck or deflected: reading it.</summary>
+    double ReactLeft(Player k)
+    {
+        double react = 0.33 - 0.08 * k.Attrs.Keeping - 0.05 * k.Attrs.Agility + (kpScreened[k.Team] ? 0.09 : 0) + (kpWrong[k.Team] ? 0.15 : 0);
+        double since = Math.Max(m.LastKickTime, kpTouchAt[k.Team]);
+        return Math.Max(0, since + react - m.Time);
+    }
+
+    /// <summary>
+    /// How far he gets (m) along (ux, uz) in `tau` s on his feet: quick side-steps from where his
+    /// momentum has him, backpedalling slower.
+    /// </summary>
+    static double MoveCap(Player k, double ux, double uz, double tau)
+    {
+        if (tau <= 0) return 0;
+        double v0 = k.Vel.X * ux + k.Vel.Z * uz;
+        double back = -(JsMath.Cos(k.Facing) * ux + JsMath.Sin(k.Facing) * uz);
+        double vmax = (back > 0.6 ? 3.8 : 5.0) + 0.6 * k.Attrs.Agility;
+        double a = k.AccelRate + 1.5;
+        if (v0 < 0)
+        {
+            // Going the wrong way first: stop, then go.
+            double stop = -v0 / PlayerK.Brake;
+            if (tau <= stop) return v0 * tau + 0.5 * PlayerK.Brake * tau * tau;
+            return v0 * stop * 0.5 + MoveCap0(a, vmax, 0, tau - stop);
+        }
+        return MoveCap0(a, vmax, Math.Min(v0, vmax), tau);
+    }
+
+    static double MoveCap0(double a, double vmax, double v0, double tau)
+    {
+        double tA = (vmax - v0) / a;
+        if (tau <= tA) return v0 * tau + 0.5 * a * tau * tau;
+        return v0 * tA + 0.5 * a * tA * tA + vmax * (tau - tA);
+    }
+
+    /// <summary>A dive's spring: how fast the push off the near foot carries him sideways (m/s).</summary>
+    static double Spring(Player k) => 2.8 + 1.2 * k.Attrs.Keeping + 1.0 * k.Attrs.Jumping;
+
+    /// <summary>How far to his side, laid out, his hands get to a ball at height y (no push yet). -1: over him.</summary>
+    static double DiveReach(Player k, double y)
+    {
+        double h = k.Look.Height;
+        if (y > 2.15 * h + 0.5) return -1;
+        return KeeperPose.PlanDive(9, y, h).reach + 0.12;
+    }
+
+    /// <summary>
+    /// Reads the ball on its way into his goal. False when nothing's coming (it's going wide or
+    /// over, it dies before it gets there, it's a team-mate's pass to his feet).
+    /// </summary>
+    bool ReadShot(Player k, out ShotRead r)
+    {
+        r = default;
+        var b = m.Ball;
+        if (m.Owner != null || m.HeldBy != null) return false;
+        double own = OwnSide(k);
+        if (b.Pos.X * own < 12 || b.Vel.Len() < 1.5) return false;
+        // A team-mate's deliberate kick back to him is for his feet.
+        if (m.LastKickFoot && m.LastKicker != null && m.LastKicker.Team == k.Team && m.LastKicker != k && m.LastTouch == m.LastKicker) return false;
+        ReadPath(k);
+        int t = k.Team;
+        int n = kpN[t];
+        double[] X = kpX[t], Y = kpY[t], Z = kpZ[t];
+        double t0 = kpAt[t] - m.Time;
+        double gl = own * Pitch.HalfL;
+        int jEnd = -1;
+        for (int j = 1; j < n; j++)
+        {
+            if ((X[j] - gl) * own >= 0 && (X[j - 1] - gl) * own < 0)
             {
-                double f = (gl - SX[i - 1]) / (SX[i] - SX[i - 1]);
-                double gz = SZ[i - 1] + (SZ[i] - SZ[i - 1]) * f;
-                double gy = SY[i - 1] + (SY[i] - SY[i - 1]) * f;
-                onGoal = Math.Abs(gz) < Pitch.GoalHalfWidth + 0.9 && gy < Pitch.GoalHeight + 0.5;
+                double f = (gl - X[j - 1]) / (X[j] - X[j - 1]);
+                r.GZ = Z[j - 1] + (Z[j] - Z[j - 1]) * f;
+                r.GY = Y[j - 1] + (Y[j] - Y[j - 1]) * f;
+                r.GT = t0 + (j - 1 + f) * DT * 2;
+                jEnd = j;
                 break;
             }
         }
-        for (int i = 1; i < sampleCount; i++)
+        if (jEnd < 0 || r.GT <= 0) return false;
+        double G = Pitch.GoalHalfWidth;
+        r.On = Math.Abs(r.GZ) < G + 0.2 && r.GY < Pitch.GoalHeight + 0.12;
+        if (Math.Abs(r.GZ) > G + 1.2 || r.GY > Pitch.GoalHeight + 0.8) return false;
+
+        double react = ReactLeft(k);
+        double h = k.Look.Height;
+        double jump = 0.25 + 0.4 * k.Attrs.Jumping;
+        double fx = JsMath.Cos(k.Facing), fz = JsMath.Sin(k.Facing);
+        double spring = Spring(k);
+        int feetJ = -1, fullJ = -1, diveJ = -1;
+        double diveBest = -1e9;
+        bool feetLeap = false;
+        for (int j = 0; j <= jEnd; j++)
         {
-            double a = (SX[i - 1] - k.Pos.X) * fx + (SZ[i - 1] - k.Pos.Z) * fz;
-            double c = (SX[i] - k.Pos.X) * fx + (SZ[i] - k.Pos.Z) * fz;
-            if (a > 0 && c <= 0)
+            double tj = t0 + j * DT * 2;
+            double px = X[j], py = Y[j], pz = Z[j];
+            if (j == jEnd)
             {
-                double f = a / (a - c);
-                double px = SX[i - 1] + (SX[i] - SX[i - 1]) * f;
-                double pz = SZ[i - 1] + (SZ[i] - SZ[i - 1]) * f;
-                cy = SY[i - 1] + (SY[i] - SY[i - 1]) * f;
-                lat = -(px - k.Pos.X) * fz + (pz - k.Pos.Z) * fx;
-                ct = (i - 1 + f) * SampleDT - ago;
-                if (ct < 0) return false;
-                if (!onGoal && (Math.Abs(lat) > 1.6 || cy > 2.4)) return false;
-                return Math.Abs(lat) < 6 && cy < Pitch.GoalHeight + 0.9;
+                // The goal line itself: the last place to stop it.
+                px = gl - own * 0.15;
+                py = r.GY;
+                pz = r.GZ;
+                tj = r.GT;
+            }
+            if (tj < 0.02) continue;
+            if (Pitch.HalfL - px * own > Pitch.BoxDepth) continue;
+            double vj = j + 1 < n ? JsMath.Hypot(X[j + 1] - X[j], Y[j + 1] - Y[j], Z[j + 1] - Z[j]) / (DT * 2) : b.Vel.Len();
+            double dx = px - k.Pos.X, dz = pz - k.Pos.Z;
+            double d = JsMath.Hypot(dx, dz);
+            double ux = d > 1e-6 ? dx / d : fx, uz = d > 1e-6 ? dz / d : fz;
+            double move = tj - react - 0.03;
+            double cap = MoveCap(k, ux, uz, move);
+            bool canLeap = move > 0.3;
+            double reach = HandsReach(k, py, 0, vj);
+            bool leapNeed = false;
+            if (reach < 0 && canLeap)
+            {
+                reach = HandsReach(k, py, jump, vj);
+                leapNeed = reach > 0;
+            }
+            if (reach > 0)
+            {
+                // (Already in reach of his hands, he doesn't throw himself about: they go to it.)
+                if (feetJ < 0 && (d - reach * 0.9 <= cap || d < reach && move < 0.2))
+                {
+                    feetJ = j;
+                    feetLeap = leapNeed;
+                }
+                if (fullJ < 0 && py < 1.9 * h && d <= cap * 0.85 + 0.2) fullJ = j;
+            }
+            double dr = DiveReach(k, py);
+            // A dive takes a moment to get off the ground.
+            if (dr > 0 && move > 0.12)
+            {
+                double fly = Math.Min(move, 0.5);
+                double margin = dr + spring * Math.Max(0, fly - 0.12) + MoveCap(k, ux, uz, move - fly) * 0.8 - d;
+                if (margin > diveBest)
+                {
+                    diveBest = margin;
+                    diveJ = j;
+                }
             }
         }
-        return false;
+
+        void At(ref ShotRead s, int j)
+        {
+            if (j == jEnd)
+            {
+                s.X = gl - own * 0.15;
+                s.Y = s.GY;
+                s.Z = s.GZ;
+                s.T = s.GT;
+            }
+            else
+            {
+                s.X = X[j];
+                s.Y = Y[j];
+                s.Z = Z[j];
+                s.T = t0 + j * DT * 2;
+            }
+            double ax = s.X - k.Pos.X, az = s.Z - k.Pos.Z;
+            s.Depth = ax * fx + az * fz;
+            s.Lat = -ax * fz + az * fx;
+            int j1 = Math.Min(n - 1, j + 1), j0 = j1 - 1;
+            double vx = X[j1] - X[j0], vz = Z[j1] - Z[j0];
+            s.V = j0 >= 0 ? JsMath.Hypot(vx, Y[j1] - Y[j0], vz) / (DT * 2) : b.Vel.Len();
+            // Where to stand: on its line where it passes nearest him (before it reaches the goal
+            // line), his body behind it, and never back in his own net.
+            double best = 1e9;
+            for (int i = 1; i <= jEnd; i++)
+            {
+                double x0 = X[i - 1], z0 = Z[i - 1];
+                double x1 = i == jEnd ? gl - own * 0.4 : X[i], z1 = i == jEnd ? s.GZ : Z[i];
+                double sx = x1 - x0, sz = z1 - z0;
+                double l2 = sx * sx + sz * sz;
+                double u = l2 > 1e-9 ? M.Clamp(((k.Pos.X - x0) * sx + (k.Pos.Z - z0) * sz) / l2, 0, 1) : 0;
+                double qx = x0 + sx * u, qz = z0 + sz * u;
+                double dd = M.Dist2D(qx, qz, k.Pos.X, k.Pos.Z);
+                if (dd < best)
+                {
+                    best = dd;
+                    s.SX = qx;
+                    s.SZ = qz;
+                }
+            }
+            if (best > 1e8)
+            {
+                s.SX = s.X;
+                s.SZ = s.Z;
+            }
+            if (s.SX * own > Pitch.HalfL - 0.4) s.SX = own * (Pitch.HalfL - 0.4);
+        }
+
+        // A ball he can get his body behind in good time: he goes and meets it (a slow one,
+        // he walks onto it). A quicker one: across onto its line, or as far as he gets and the
+        // hands take the rest. Only when his feet can't get him there, the dive.
+        double sp = b.Vel.Len();
+        if (fullJ >= 0 && sp < 13)
+        {
+            At(ref r, fullJ);
+            r.How = 1;
+        }
+        else if (feetJ >= 0)
+        {
+            At(ref r, feetJ);
+            r.How = 1;
+            r.Leap = feetLeap;
+        }
+        else if (diveJ >= 0 && diveBest > -0.1)
+        {
+            At(ref r, diveJ);
+            r.How = 2;
+        }
+        else if (r.On && diveJ >= 0)
+        {
+            At(ref r, diveJ);
+            r.How = 3;
+        }
+        else
+        {
+            At(ref r, jEnd);
+            r.How = 0;
+        }
+        return true;
     }
 
-    /// <summary>The old goal-line form (world z) for the training drill.</summary>
+    /// <summary>The old goal-line form (world z) for the human's dive in the drill.</summary>
     public bool ShotCrossing(Player k, out double cy, out double cz, out double ct)
     {
-        bool has = Incoming(k, out cy, out double lat, out ct);
-        cz = k.Pos.Z + lat * JsMath.Cos(k.Facing);
+        bool has = ReadShot(k, out var r) && r.How != 0;
+        cy = r.Y;
+        cz = r.Z;
+        ct = r.T;
         return has;
     }
 
@@ -295,76 +557,118 @@ public sealed partial class AI
     bool Save(Player k)
     {
         if (m.PassTarget == k) return false;
-        if (!Incoming(k, out double cy, out double lat, out double ct)) return false;
+        if (!ReadShot(k, out var r)) return false;
         // Coming for a high ball: he takes it in the air (Claim), no diving under it.
-        if (Claiming[k.Team] && cy > 1.5) return false;
-        var lk = m.LastKicker;
-        bool theirs = lk == null || lk.Team != k.Team;
+        if (Claiming[k.Team] && r.Y > 1.5) return false;
         k.LookTarget.Copy(m.Ball.Pos);
         k.LookAt = k.LookTarget;
-        // The moment it's struck he can't move yet: feet set, reading it.
-        double react = 0.2 - 0.07 * k.Attrs.Keeping - 0.04 * k.Attrs.Agility;
-        if (theirs && m.Time - m.LastKickTime < react)
+        k.SquareUp = true;
+        double react = ReactLeft(k);
+        if (react > 0)
         {
+            // The moment it's struck: feet set, reading it (his momentum carries on).
             k.WantSpeed = 0;
             return true;
         }
         double fx = JsMath.Cos(k.Facing), fz = JsMath.Sin(k.Facing);
         double lx = -fz, lz = fx;
-        double a = Math.Abs(lat);
-        double side = JsMath.Or1(JsMath.Sign(lat));
-        double y = M.Clamp(cy, 0.12, 2.6);
-        // On his feet if his feet can get him there: side-steps, the body behind the ball.
-        double slack = a - HandsReach(k, y, 0, m.Ball.Vel.Len()) * 0.85;
-        double shuffle = Math.Max(0, ct - 0.06);
-        double steps = Math.Min(4.4 * shuffle, 0.5 * 10 * shuffle * shuffle);
-        if (slack <= steps)
+        double side = JsMath.Or1(JsMath.Sign(r.Lat));
+        double a = Math.Abs(r.Lat);
+        switch (r.How)
         {
-            double off = a < 0.25 ? 0 : side * Math.Max(0, a - 0.1);
-            // A slow ball: go and meet it rather than wait for it.
-            double meet = m.Ball.Vel.Len() < 10 && ct > 0.35 ? Math.Min(2, ct * 2) : 0;
-            MoveTo(k, k.Pos.X + lx * off + fx * meet, k.Pos.Z + lz * off + fz * meet, true, true);
-            if (a < 0.25 && meet == 0) k.WantSpeed = 0;
-            Note(0, k);
-            return true;
+            case 0:
+                if (r.On)
+                {
+                    // Over his head and dropping in (a lob, a dipping one): back to his line and up.
+                    leap[k.Team] = true;
+                    MoveTo(k, OwnSide(k) * (Pitch.HalfL - 0.3), M.Clamp(r.GZ, -Pitch.GoalHalfWidth + 0.3, Pitch.GoalHalfWidth - 0.3), true, true);
+                    k.Burst = true;
+                    return true;
+                }
+                // Wide or over: he watches it go, a step across to be sure.
+                if (Math.Abs(r.GZ) < Pitch.GoalHalfWidth + 0.6)
+                {
+                    double tz = M.Clamp(r.GZ, -Pitch.GoalHalfWidth, Pitch.GoalHalfWidth);
+                    double tx = OwnSide(k) * (Pitch.HalfL - 0.6);
+                    if (M.Dist2D(k.Pos.X, k.Pos.Z, tx, tz) < 3) MoveTo(k, k.Pos.X + (tx - k.Pos.X) * 0.3, k.Pos.Z + (tz - k.Pos.Z) * 0.3, false, true);
+                    else k.WantSpeed = 0;
+                }
+                else k.WantSpeed = 0;
+                return true;
+            case 1:
+            {
+                // On his feet: across onto its line (or meeting it), set as it arrives.
+                double dx = r.SX - k.Pos.X, dz = r.SZ - k.Pos.Z;
+                double d = JsMath.Hypot(dx, dz);
+                leap[k.Team] = r.Leap;
+                // Where his hands will meet it (for the pose): from where he'll be standing.
+                k.ReachIn = r.T;
+                double mx = r.X - r.SX, mz = r.Z - r.SZ;
+                k.ReachF = mx * fx + mz * fz;
+                k.ReachL = -mx * fz + mz * fx;
+                k.ReachY = r.Y;
+                if (d < 0.12) k.WantSpeed = 0;
+                else
+                {
+                    k.MoveX = dx / d;
+                    k.MoveZ = dz / d;
+                    // Quick, short steps: there in time, and no further.
+                    double need = d / Math.Max(0.08, r.T - 0.05);
+                    k.WantSpeed = Math.Min(6, Math.Max(need * 1.25, Math.Min(d * 5, 3.5)) + 0.2);
+                    k.Burst = need > 3;
+                }
+                Note(0, k);
+                return true;
+            }
+            default:
+            {
+                // A dive: shuffle across first, then go in the last moment so the full stretch
+                // arrives together with the ball.
+                double reachNow = DiveReach(k, r.Y);
+                double s = Math.Max(0, a - reachNow);
+                double fly = M.Clamp(s / Spring(k) + 0.08, 0.16, 0.5);
+                if (r.T > fly + 0.06)
+                {
+                    double step = Math.Max(0, Math.Min(a - 0.5, a - reachNow * 0.7));
+                    if (step < 0.1) k.WantSpeed = 0;
+                    else
+                    {
+                        k.MoveX = lx * side;
+                        k.MoveZ = lz * side;
+                        k.WantSpeed = 5.5;
+                    }
+                    return true;
+                }
+                if (m.Time > keeperDiveT[k.Team] + 0.8)
+                {
+                    CommitDive(k, lx * side, lz * side, a, M.Clamp(r.Y, 0.12, 2.6), Math.Max(0.14, r.T), r.Depth / Math.Max(0.2, r.T));
+                    Note(1, k);
+                }
+                return true;
+            }
         }
-        double reachNow = KeeperPose.PlanDive(a, y, k.Look.Height).reach;
-        // Shuffle across first; the dive goes in the last moment so the full stretch arrives
-        // together with the ball.
-        if (ct > 0.3 + 0.1 * (1 - k.Attrs.Keeping))
-        {
-            double step = side * (a - Math.Min(a, reachNow * 0.6));
-            MoveTo(k, k.Pos.X + lx * step, k.Pos.Z + lz * step, true, true);
-            return true;
-        }
-        if (m.Time > keeperDiveT[k.Team] + 0.8)
-        {
-            CommitDive(k, lx * side, lz * side, a, y, Math.Max(0.18, ct), 0);
-            Note(1, k);
-        }
-        return true;
     }
 
     /// <summary>
     /// Throw the body sideways along (ux, uz) (his left or right): at a ball `a` m that way and
-    /// `dh` high, getting there in `tt` s. `lunge` carries him forward too (smothering a ball at
-    /// a striker's feet).
+    /// `dh` high, getting there in `tt` s. `fwd` (m/s) carries him forward too: attacking a
+    /// ball in front of him, smothering one at a striker's feet.
     /// </summary>
-    void CommitDive(Player k, double ux, double uz, double a, double dh, double tt, double lunge)
+    void CommitDive(Player k, double ux, double uz, double a, double dh, double tt, double fwd)
     {
         keeperDiveT[k.Team] = m.Time;
         double h = k.Look.Height;
         double reachNow = KeeperPose.PlanDive(a, dh, h).reach;
-        double spring = 6 + k.Attrs.Keeping * 1.6 + k.Attrs.Jumping * 1.4;
-        double push = M.Clamp((a - reachNow) / tt, 0, spring);
+        double push = M.Clamp((a - reachNow) / tt, 0, Spring(k));
         var plan = KeeperPose.PlanDive(Math.Max(0, a - push * tt), dh, h);
         double fx = JsMath.Cos(k.Facing), fz = JsMath.Sin(k.Facing);
         k.DiveFly = Math.Min(0.75, tt + 0.15);
         // Down, a moment on the floor, and back up.
         k.StartAction(ActionKind.Dive, k.DiveFly + 0.95, ux, uz);
-        double fwd = 0.6 + lunge;
+        fwd = M.Clamp(fwd, -1, 3.5);
         k.Vel.Set(fx * fwd + ux * push, 0, fz * fwd + uz * push);
         k.Plan = null;
+        leap[k.Team] = false;
         DiveHeight[k.Id] = dh;
         DiveRoll[k.Id] = plan.roll;
         DiveLift[k.Id] = plan.lift;
@@ -376,7 +680,7 @@ public sealed partial class AI
         double fx = JsMath.Cos(k.Facing), fz = JsMath.Sin(k.Facing);
         double lx = -fz, lz = fx;
         double s = JsMath.Or1(JsMath.Sign(dz * lz + 1e-9 * lx));
-        CommitDive(k, lx * s, lz * s, Math.Abs(dz), dh, tt, 0);
+        CommitDive(k, lx * s, lz * s, Math.Abs(dz), dh, tt, 0.5);
     }
 
     /// <summary>
@@ -448,7 +752,7 @@ public sealed partial class AI
             double lat = -dx * fz + dz * fx;
             double depth = dx * fx + dz * fz;
             double s = JsMath.Or1(JsMath.Sign(lat));
-            CommitDive(k, -fz * s, fx * s, Math.Abs(lat) + 0.3, 0.2, 0.3, M.Clamp(depth - 0.5, 0, 2.5) / 0.8);
+            CommitDive(k, -fz * s, fx * s, Math.Abs(lat) + 0.3, 0.2, 0.3, 0.6 + M.Clamp(depth - 0.5, 0, 2.5) / 0.8);
             Note(2, k);
             return true;
         }
@@ -570,8 +874,9 @@ public sealed partial class AI
             double sweepMax = 8 + 6 * Sweepness(k);
             depth = M.Lerp(3.6, Math.Min(sweepMax, Math.Max(3.6, line - 6)), M.Smoothstep(30, 60, d));
         }
-        // Wide and deep (a cross coming): off the near post toward the middle, a step off his line.
-        double wide = M.Smoothstep(10, 16, Math.Abs(bz)) * (1 - M.Smoothstep(16, 24, bD));
+        // Wide and deep, by the byline (a cross coming): off the near post toward the middle, a
+        // step off his line. Further out at an angle it's a shooting position: the bisector holds.
+        double wide = M.Smoothstep(10, 16, Math.Abs(bz)) * (1 - M.Smoothstep(5, 11, bD));
         zc *= 1 - 0.45 * wide;
         depth = M.Lerp(depth, 1.7, wide);
         double vx = b.X - gx, vz = b.Z - zc;
@@ -595,7 +900,7 @@ public sealed partial class AI
         MoveTo(k, tx, tz, dd > 2.5, true);
         // Side-steps, not strides; feet set when someone's lining one up.
         k.WantSpeed = Math.Min(k.WantSpeed, dd > 2.5 ? 5.5 : 4.2);
-        if (danger && dd < 0.45) k.WantSpeed = 0;
+        if (danger && (dd < 0.45 || dd < 1.2 && carrier!.Plan != null && carrier.Plan.Type == KickType.Shot)) k.WantSpeed = 0;
     }
 
     // ------------------------------------------------------------------ contact
@@ -648,7 +953,7 @@ public sealed partial class AI
             double t = M.Clamp(((lat - la) * vl + (y - ya) * vy) / (vl * vl + vy * vy), 0, 1);
             return JsMath.Hypot(depth, lat - (la + vl * t), y - (ya + vy * t)) < r + R;
         }
-        double jump = Claiming[k.Team] ? 0.25 + 0.4 * k.Attrs.Jumping : 0;
+        double jump = Claiming[k.Team] || leap[k.Team] ? 0.25 + 0.4 * k.Attrs.Jumping : 0;
         // Hands first: in front of the body line, as far to the side as his arms (or a crouch) go.
         if (depth > -0.25 && depth < 0.75)
         {
@@ -719,87 +1024,152 @@ public sealed partial class AI
         }
 
         double speed = b.Vel.Len();
-        double kp = k.Attrs.Keeping;
+        double kp = k.Attrs.Keeping, ag = k.Attrs.Agility;
         k.TouchCooldown = 0.4;
         double y = b.Pos.Y;
-        // Comfortable: a ball he's set for, into the hands or at the body, is simply taken.
-        if (!diving && (hands ? speed < 7 + 4 * kp && edge < 0.8 : speed < 6))
-        {
-            if (Claiming[k.Team] && Crowded(k, 1.6) && m.Rng.Next() > 0.2 + 0.4 * kp)
-            {
-                Punch(k);
-                return true;
-            }
-            m.CatchBall(k);
-            KeeperMoves[7]++;
-            m.Events.Save = 0.3;
-            return true;
-        }
-        double saveP = 0.41 + kp * 0.4 - M.Clamp((speed - 16) / 16, 0, 1) * 0.3 - (edge > 0.85 ? 0.25 : 0) + (body ? 0.2 : 0);
-        var team = m.Teams[k.Team];
-        double outDir = team.Dir; // away from his goal
-        if (m.Rng.Next() < saveP)
-        {
-            bool high = y > Pitch.GoalHeight - 0.5;
-            double catchP = diving ? (high ? 0.08 : 0.32 + 0.25 * kp) * (1 - M.Smoothstep(12, 24, speed)) : (1 - M.Smoothstep(14, 26, speed)) * (0.55 + 0.4 * kp);
-            if (edge > 0.85) catchP *= 0.3;
-            if (hands && m.Rng.Next() < catchP)
-            {
-                m.CatchBall(k);
-                KeeperMoves[diving ? 8 : 7]++;
-            }
-            else if (Claiming[k.Team] && hands && y > 1.8)
-            {
-                Punch(k);
-                m.Events.Save = M.Clamp(speed / 30, 0.3, 1);
-                return true;
-            }
-            else if (high && hands)
-            {
-                // Fingertips over the bar: up and over, out for a corner.
-                double s = diving ? 1 : 0;
-                b.Vel.Set(-outDir * (2.5 + m.Rng.Next() * 1.5), 5 + m.Rng.Next() * 2, b.Vel.Z * 0.3 + (diving ? k.ActionDirZ * 1.5 * s : 0));
-            }
-            else if (diving)
-            {
-                // Pushed wide: the ball carries on the way he dived, away from goal, off the post.
-                double ux = k.ActionDirX, uz = k.ActionDirZ;
-                double side = 2 + m.Rng.Next() * 4;
-                b.Vel.Set(outDir * speed * (0.12 + m.Rng.Next() * 0.2) + ux * side, 0.8 + m.Rng.Next() * 2.5, uz * side + b.Vel.Z * 0.25);
-            }
-            else
-            {
-                // Beaten away in front of him.
-                b.Vel.Set(outDir * speed * (0.25 + m.Rng.Next() * 0.2), 1 + m.Rng.Next() * 2.5, b.Vel.Z * 0.3 + (m.Rng.Next() - 0.5) * 5);
-            }
-            if (m.HeldBy != k)
-            {
-                Touched(k);
-                KeeperMoves[9]++;
-            }
-            m.Events.Save = M.Clamp(speed / 30, 0.3, 1);
-            return true;
-        }
+        bool set = !diving && k.Vel.Len() < 2.2;
+        // What makes it hard to hold: its pace, how far out on his hands he meets it, being in the
+        // air or on the move, an awkward height (over his head, skidding at his feet).
+        double pace = M.Clamp((speed - 9) / 21, 0, 1);
+        double awkward = (y > 1.95 ? 0.12 : 0) + (y < 0.3 && speed > 12 ? 0.1 : 0);
+        m.Events.Save = M.Clamp(speed / 30, 0.3, 1);
         if (body)
         {
-            // Not held, but it still hits him: a real rebound off the body.
-            double vx = b.Vel.X;
-            b.Vel.X = -vx * 0.35;
-            b.Vel.Z *= 0.6;
-            b.Vel.Y = Math.Abs(b.Vel.Y) * 0.3 + 0.5;
-            b.OnGround = false;
-            b.Pos.X = k.Pos.X + JsMath.Sign(vx != 0 && !double.IsNaN(vx) ? vx : outDir) * -0.48;
-            m.LastTouch = k;
-            m.Events.Save = 0.3;
+            // It hits him, so it doesn't go through: a soft one he gathers into his body, anything
+            // with pace comes back off him.
+            if (!diving && speed < 11 + 4 * kp && m.Rng.Next() < 0.75 + 0.2 * kp)
+            {
+                m.CatchBall(k);
+                KeeperMoves[7]++;
+                return true;
+            }
+            Block(k, diving);
             return true;
         }
-        // Fingertips: a slight touch that doesn't stop it (the body can still be hit after).
-        k.TouchCooldown = 0.08;
-        b.Vel.Z += (m.Rng.Next() - 0.5) * 1.5;
-        b.Vel.Y += m.Rng.Next() * 0.6;
-        b.Vel.Scale(0.95);
-        m.LastTouch = k;
+        if (edge > 0.88 - (diving ? 0.3 : 0.1) * pace)
+        {
+            // Fingertips: the end of his reach (and a hard one bends back the wrist further in).
+            // A strong hand turns it away; a weak one only brushes it on its way.
+            if (m.Rng.Next() < 0.5 + 0.3 * kp + 0.1 * ag - pace * 0.3) Tip(k, y, diving);
+            else
+            {
+                k.TouchCooldown = 0.08;
+                double outZ = JsMath.Or1(JsMath.Sign(b.Pos.Z));
+                b.Vel.Z += outZ * (0.6 + m.Rng.Next() * 1.4);
+                b.Vel.Y += m.Rng.Next() * 0.7;
+                b.Vel.Scale(0.9);
+                m.LastTouch = k;
+                KeeperMoves[13]++;
+            }
+            return true;
+        }
+        // A cross he's come for with bodies round him: fists through it.
+        if (Claiming[k.Team] && !diving && Crowded(k, 1.6) && m.Rng.Next() > 0.3 + 0.45 * kp)
+        {
+            Punch(k);
+            return true;
+        }
+        double catchP = (diving ? 0.62 : 0.97) - pace * (diving ? 0.55 : 0.7) - edge * edge * 0.3 - awkward + kp * 0.22 + (set ? 0.04 : -0.04) + (Claiming[k.Team] ? 0.1 : 0);
+        if (m.Rng.Next() < M.Clamp(catchP, 0.03, 0.98))
+        {
+            m.CatchBall(k);
+            KeeperMoves[diving ? 8 : 7]++;
+            if (speed < 9) m.Events.Save = 0;
+            return true;
+        }
+        if (Claiming[k.Team] && y > 1.8)
+        {
+            Punch(k);
+            return true;
+        }
+        Parry(k, speed, y, diving, edge);
         return true;
+    }
+
+    /// <summary>
+    /// Not held: pushed away. A good keeper puts it somewhere safe (round the post, over the bar,
+    /// wide and out of play); otherwise it drops loose in front of him, a rebound for whoever's quickest.
+    /// </summary>
+    void Parry(Player k, double speed, double y, bool diving, double edge)
+    {
+        var b = m.Ball;
+        double outDir = m.Teams[k.Team].Dir;
+        double kp = k.Attrs.Keeping;
+        double safe = 0.15 + 0.45 * kp - M.Clamp((speed - 15) / 15, 0, 1) * 0.15 - edge * 0.1;
+        bool wide = m.Rng.Next() < safe;
+        if (y > Pitch.GoalHeight - 0.45 && (wide || b.Vel.Y > -1))
+        {
+            Tip(k, y, diving);
+            return;
+        }
+        double r1 = m.Rng.Next(), r2 = m.Rng.Next();
+        if (diving)
+        {
+            // On along the way he dived: round the post, or (spilled) down in front of him.
+            double ux = k.ActionDirX, uz = k.ActionDirZ;
+            if (wide) b.Vel.Set(outDir * speed * (0.08 + r1 * 0.12) + ux * (3 + r2 * 3), 0.8 + r1 * 2.2, uz * (3 + r2 * 3));
+            else b.Vel.Set(outDir * speed * (0.15 + r1 * 0.15) + ux * (0.5 + r2 * 1.5), 0.4 + r1 * 1.4, uz * (0.5 + r2 * 1.5));
+        }
+        else
+        {
+            // Beaten away: up and out to the side of the hand that met it, or dropped in front.
+            double fx = JsMath.Cos(k.Facing), fz = JsMath.Sin(k.Facing);
+            double lat = -(b.Pos.X - k.Pos.X) * fz + (b.Pos.Z - k.Pos.Z) * fx;
+            double s = JsMath.Or1(JsMath.Sign(lat));
+            double lx = -fz * s, lz = fx * s;
+            if (wide) b.Vel.Set(outDir * speed * (0.2 + r1 * 0.15) + lx * (2.5 + r2 * 3), 1.5 + r1 * 2, lz * (2.5 + r2 * 3));
+            else b.Vel.Set(outDir * speed * (0.1 + r1 * 0.12) + lx * (r2 - 0.3) * 2, 0.3 + r1 * 1.2, lz * (r2 - 0.3) * 2);
+            Reacts(k, ActionKind.Parry);
+        }
+        KeeperMoves[wide ? 9 : 12]++;
+        Touched(k);
+    }
+
+    /// <summary>Fingertips: over the bar for a high one, round the post for the rest.</summary>
+    void Tip(Player k, double y, bool diving)
+    {
+        var b = m.Ball;
+        double outDir = m.Teams[k.Team].Dir;
+        if (y > Pitch.GoalHeight - 0.6)
+            b.Vel.Set(b.Vel.X * (0.15 + m.Rng.Next() * 0.15), 4.5 + m.Rng.Next() * 2.5, b.Vel.Z * 0.3 + (diving ? k.ActionDirZ * 1.5 : 0));
+        else
+        {
+            double outZ = diving ? JsMath.Or1(JsMath.Sign(k.ActionDirZ)) : JsMath.Or1(JsMath.Sign(b.Pos.Z));
+            b.Vel.Set(b.Vel.X * (0.35 + m.Rng.Next() * 0.25), b.Vel.Y * 0.5 + m.Rng.Next() * 1.5, b.Vel.Z * 0.3 + outZ * (4 + m.Rng.Next() * 3));
+        }
+        if (!diving) Reacts(k, y > 1.8 ? ActionKind.Punch : ActionKind.Parry);
+        KeeperMoves[10]++;
+        Touched(k);
+    }
+
+    /// <summary>Off his body: back the way it came, most of its pace gone.</summary>
+    void Block(Player k, bool diving)
+    {
+        var b = m.Ball;
+        double outDir = m.Teams[k.Team].Dir;
+        double e = 0.22 + m.Rng.Next() * 0.2;
+        double vx = b.Vel.X;
+        b.Vel.X = -vx * e;
+        if (b.Vel.X * outDir < 1) b.Vel.X = outDir * (1 + m.Rng.Next() * 2);
+        b.Vel.Z = b.Vel.Z * 0.35 + (m.Rng.Next() - 0.5) * 3;
+        b.Vel.Y = Math.Abs(b.Vel.Y) * 0.3 + 0.4 + m.Rng.Next();
+        b.Pos.X = k.Pos.X + outDir * 0.45;
+        if (!diving) Reacts(k, ActionKind.Parry);
+        KeeperMoves[11]++;
+        Touched(k);
+    }
+
+    /// <summary>The body's answer to the ball (for the pose): where it met him, then the action.</summary>
+    void Reacts(Player k, ActionKind a)
+    {
+        if (k.IsBusy) return;
+        var b = m.Ball;
+        double dx = b.Pos.X - k.Pos.X, dz = b.Pos.Z - k.Pos.Z;
+        double fx = JsMath.Cos(k.Facing), fz = JsMath.Sin(k.Facing);
+        k.CatchY = b.Pos.Y;
+        k.CatchF = dx * fx + dz * fz;
+        k.CatchL = -dx * fz + dz * fx;
+        k.StartAction(a, a == ActionKind.Punch ? 0.5 : 0.36, m.Teams[k.Team].Dir, 0);
     }
 
     bool Crowded(Player k, double r)

@@ -50,7 +50,47 @@ public abstract partial class PxCanvas : Control
     public override void _Draw()
     {
         _hits.Clear();
+        foreach (var l in _layers.Values) l.Used = false;
         Paint();
+        foreach (var l in _layers.Values)
+            if (!l.Used && l.Visible) l.Visible = false;
+    }
+
+    /// <summary>A piece of the picture on its own layer above this surface, drawn once and only
+    /// redrawn when `stamp` changes (a heavy, mostly still thing such as a player card: moving it
+    /// is free; `top` keeps it above the others). `draw` gets the layer and the rect in its own coordinates.</summary>
+    protected void Layer(string key, Rect2 r, object stamp, Action<CanvasItem, Rect2> draw, bool top = false)
+    {
+        if (!_layers.TryGetValue(key, out var l))
+        {
+            _layers[key] = l = new LayerItem();
+            CallDeferred(Node.MethodName.AddChild, l);
+        }
+        l.Used = true;
+        if (!l.Visible) l.Visible = true;
+        var at = r.Position.Round();
+        if (l.Position != at) l.Position = at;
+        if (top && l.GetParent() == this && l.GetIndex() != GetChildCount() - 1) l.CallDeferred(CanvasItem.MethodName.MoveToFront);
+        var size = r.Size;
+        if (l.Size != size || !Equals(l.Stamp, stamp))
+        {
+            l.Stamp = stamp;
+            l.Size = size;
+            l.Draw = draw;
+            l.QueueRedraw();
+        }
+    }
+
+    readonly Dictionary<string, LayerItem> _layers = new();
+
+    sealed partial class LayerItem : Node2D
+    {
+        public bool Used;
+        public object Stamp;
+        public Vector2 Size;
+        public Action<CanvasItem, Rect2> Draw;
+
+        public override void _Draw() => Draw?.Invoke(this, new Rect2(Vector2.Zero, Size));
     }
 
     public override void _Process(double delta)

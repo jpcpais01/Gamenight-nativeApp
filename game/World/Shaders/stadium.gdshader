@@ -11,7 +11,7 @@ render_mode unshaded, cull_disabled, shadows_disabled, depth_draw_opaque;
 const float LOOK_ROOF = 1.0, LOOK_GLASS = 2.0, LOOK_CURTAIN = 3.0, LOOK_FASCIA = 4.0, LOOK_RIBBON = 5.0,
 	LOOK_LAMP = 6.0, LOOK_ROOFLIGHT = 7.0, LOOK_BOARD = 8.0, LOOK_TIER = 9.0, LOOK_SCREEN = 10.0,
 	LOOK_CLOTH = 11.0, LOOK_STIPPLE = 12.0, LOOK_UNLIT = 13.0, LOOK_ARCADE = 14.0, LOOK_COFFER = 15.0, LOOK_WALL = 16.0, LOOK_BRICK = 17.0,
-	LOOK_DECAL = 18.0, LOOK_HOUSE = 19.0, LOOK_TOWER = 20.0, LOOK_SKYLINE = 21.0, LOOK_WATER = 22.0, LOOK_ROAD = 23.0, LOOK_CUSHION = 24.0, LOOK_NEON = 25.0;
+	LOOK_DECAL = 18.0, LOOK_HOUSE = 19.0, LOOK_TOWER = 20.0, LOOK_SKYLINE = 21.0, LOOK_WATER = 22.0, LOOK_ROAD = 23.0, LOOK_CUSHION = 24.0, LOOK_NEON = 25.0, LOOK_STARS = 26.0;
 
 // The near stand's own draw (Ground.Near): cut where it would hide the pitch.
 uniform bool near_cut = false;
@@ -241,6 +241,18 @@ void fragment() {
 		vec3 c = par > 0.5 ? vec3(0.9, 0.95, 1.0) : mix(gn_home, vec3(1.0), 0.1) * 1.2;
 		alb = mix(alb, c * 0.5, tube);
 		emis = c * tube * wave * (0.12 + gn_flood * 1.1);
+	} else if (look == LOOK_STARS) {
+		// A night-sky skin: one star per 3 m cell (most of them), a few bigger with a sparkle
+		// cross, each twinkling at its own pace and blazing under the floodlights.
+		vec2 cell = floor(uv / 3.0);
+		vec2 d = abs(fract(uv / 3.0) - 0.5 - (vec2(world_hash(cell), world_hash(cell + 4.7)) - 0.5) * 0.4) * 3.0;
+		float big = step(0.62, world_hash(cell + 9.3));
+		float r = mix(0.3, 0.42, big);
+		float cross = big * (1.0 - step(0.1, min(d.x, d.y))) * (1.0 - step(r * 2.4, max(d.x, d.y)));
+		float star = max(1.0 - step(r, length(d)), cross) * step(0.2, world_hash(cell + 2.2));
+		float tw = 0.55 + 0.45 * sin(TIME * (0.8 + 2.2 * world_hash(cell + 1.3)) + world_hash(cell) * 6.28);
+		alb = mix(alb, vec3(0.85), star);
+		emis = vec3(0.92, 0.95, 1.0) * star * tw * (0.3 + gn_flood * 1.4);
 	} else if (look == LOOK_UNLIT) {
 		emis = alb;
 		alb = vec3(0.0);

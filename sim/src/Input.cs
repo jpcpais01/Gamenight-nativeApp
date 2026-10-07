@@ -15,7 +15,9 @@ public static class Btn
 
 public enum ButtonKind { Down, Up }
 
-public enum TackleSwipe { None, Tackle, Slide }
+/// <summary>A slide on the held SPRINT button. Defence: Tackle (down) / Slide (left). Attack, on
+/// the ball: SkillUp..SkillDown fire the skill move in that slot (Seat.Slots, same order).</summary>
+public enum TackleSwipe { None, Tackle, Slide, SkillUp, SkillLeft, SkillRight, SkillDown }
 
 public struct ButtonEvent
 {
@@ -46,6 +48,6 @@ public sealed class InputState
     /// <summary>Live: finger currently slid up on a held button.</summary>
     public readonly bool[] Swipe = new bool[3];
     public readonly List<ButtonEvent> Events = new List<ButtonEvent>();
-    /// <summary>Defence: finger slid on the held Sprint button (down = tackle, left = slide). Consumed by the match.</summary>
+    /// <summary>Finger slid on the held Sprint button (defence: down = tackle, left = slide; attack: a skill slot). Consumed by the match.</summary>
     public TackleSwipe TackleSwipe = TackleSwipe.None;
 }

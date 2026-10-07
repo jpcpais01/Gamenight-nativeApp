@@ -118,7 +118,8 @@ public static class Kit
     public static readonly StandSet[] Sets = { new Arena(), new Terrace(), new Curva(), new TheWall(), new Citadel(),
         new Harbour(), new Pagoda(), new Deco(), new Crater(), new Orbital(),
         new Membrane(), new Brutalist(), new Barrio(), new Timber(), new Lumen(),
-        new Nest(), new ArchStand(), new Neon(), new Adobe(), new Meadow() };
+        new Nest(), new ArchStand(), new Neon(), new Adobe(), new Meadow(),
+        new Final(), new Haunt() };
 
     /// <summary>Which way the builder's camera looks from to see a slot (yaw round the pitch).</summary>
     public static float ViewAngle(Slot s) => s switch
