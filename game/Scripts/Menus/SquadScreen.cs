@@ -60,6 +60,19 @@ public sealed partial class SquadScreen : PxCanvas
 
     float TokenH => Mathf.Clamp(_pitch.Size.Y * 0.205f, 40, 86);
 
+    /// <summary>A player's mini card on its own layer: drawn once, then only moved (the dragged
+    /// one rides on top) until something on it changes.</summary>
+    void Token(string key, Rect2 r, Card c, Pos slot, Kit kit, bool selected, bool captain, bool lifted)
+    {
+        if (c == null)
+        {
+            Art.Token(this, r, null, slot, kit, selected, false);
+            return;
+        }
+        var stamp = (c.Id, Club.Rev, slot, selected, captain);
+        Layer(key, r, stamp, (ci, lr) => Art.Token(ci, lr, c, slot, kit, selected, captain), lifted);
+    }
+
     Rect2 TokenRect(Vector2 at)
     {
         float th = TokenH, tw = th * 0.82f;
@@ -211,7 +224,7 @@ public sealed partial class SquadScreen : PxCanvas
             var r = TokenRect(at);
             int idx = i;
             DrawColoredPolygon(Px.Ellipse(new Vector2(r.GetCenter().X + 2, r.End.Y + 1), r.Size.X * 0.55f, 3, 12), new Color(0, 0, 0, 0.3f));
-            Art.Token(this, r, starters[i], s.Pos, kit, i == Selected, i == cap && starters[i] != null);
+            Token("t" + i, r, starters[i], s.Pos, kit, i == Selected, i == cap && starters[i] != null, i == _drag && _dragMoved);
             Tap("t" + i, r, () => TapToken(idx));
         }
     }
@@ -245,7 +258,7 @@ public sealed partial class SquadScreen : PxCanvas
                 Px.Frame(this, r, new Color(1, 1, 1, 0.04f), new Color(1, 1, 1, 0.18f), null, 2, 0);
                 Px.TextC(this, Px.Small, r.GetCenter().X, r.GetCenter().Y + 3, "EMPTY", 7, Px.InkDim);
             }
-            else Art.Token(this, r, c, c.Position, kit, SelSeat == i, false);
+            else Token("s" + i, r, c, c.Position, kit, SelSeat == i, false, 100 + i == _drag && _dragMoved);
             Tap("seat" + i, _seats[i], () => TapSeat(seat));
         }
     }

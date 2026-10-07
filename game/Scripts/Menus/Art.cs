@@ -149,8 +149,49 @@ public static class Art
     /// <summary>Fill the part of poly that lies inside the card's shape.</summary>
     static void Clip(CanvasItem ci, Vector2[] poly, Vector2[] shape, Color c)
     {
-        foreach (var part in Geometry2D.IntersectPolygons(poly, shape))
-            if (part.Length >= 3 && Area(part) > 0.5f) ci.DrawColoredPolygon(part, c);
+        foreach (var part in Clipped(poly, shape)) ci.DrawColoredPolygon(part, c);
+    }
+
+    // Cards are drawn every frame, each clipping dozens of bands and texture pieces to its shape
+    // (a call into the engine apiece): remember the pieces, relative to the shape's first point,
+    // so a card that hasn't changed size costs nothing but the drawing.
+    static readonly System.Collections.Generic.Dictionary<(long, long), Vector2[][]> Clips = new();
+
+    static System.Collections.Generic.IEnumerable<Vector2[]> Clipped(Vector2[] poly, Vector2[] shape)
+    {
+        var o = shape[0];
+        long h1 = 17, h2 = 31;
+        void Mix(Vector2[] pts)
+        {
+            foreach (var v in pts)
+            {
+                long x = (long)Mathf.Round((v.X - o.X) * 8), y = (long)Mathf.Round((v.Y - o.Y) * 8);
+                h1 = h1 * 1000003 + x * 92821 + y;
+                h2 = (h2 ^ (x * 2654435761L + y * 40503)) * 1099511628211L;
+            }
+            h1 = h1 * 7 + pts.Length;
+            h2 = h2 * 13 + pts.Length;
+        }
+        Mix(poly);
+        Mix(shape);
+        if (!Clips.TryGetValue((h1, h2), out var parts))
+        {
+            var list = new System.Collections.Generic.List<Vector2[]>();
+            foreach (var part in Geometry2D.IntersectPolygons(poly, shape))
+                if (part.Length >= 3 && Area(part) > 0.5f)
+                {
+                    for (int i = 0; i < part.Length; i++) part[i] -= o;
+                    list.Add(part);
+                }
+            if (Clips.Count > 6000) Clips.Clear();
+            Clips[(h1, h2)] = parts = list.ToArray();
+        }
+        foreach (var part in parts)
+        {
+            var moved = new Vector2[part.Length];
+            for (int i = 0; i < part.Length; i++) moved[i] = part[i] + o;
+            yield return moved;
+        }
     }
 
     static Vector2[] Quad(float x0, float y0, float x1, float y1) => new[] { new Vector2(x0, y0), new Vector2(x1, y0), new Vector2(x1, y1), new Vector2(x0, y1) };

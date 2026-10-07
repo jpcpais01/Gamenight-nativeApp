@@ -562,6 +562,9 @@ public partial class Main : Node
         _prof.Begin();
         _controls.Tick(dt);
         // The keyboard, a gamepad and a phone used as a controller play alongside the touch controls.
+        // The computer playing (a watched game, coach mode, SIMULATE REST FULL): no controls on
+        // screen, whatever else has shown them (the walk-out's prewarm, a replay ending).
+        if (ComputerPlays) _controls.Visible = false;
         bool live = Request?.Demo != true && Request?.Watch != true && !_coach && _controls.Visible && !_pause.IsOpen && !Directed && !_invaderShown;
         InputState input;
         if (Request?.Versus == true)
@@ -1004,7 +1007,8 @@ public partial class Main : Node
 
     const byte SimFast = (byte)'F', SimFull = (byte)'U', SimBack = (byte)'C';
     const byte SimRequest = (byte)'R', SimYes = (byte)'Y', SimNo = (byte)'N', SimDone = (byte)'D';
-    const string AutopilotNote = "THE COMPUTER IS PLAYING FOR YOU · TOUCH TO TAKE OVER";
+    const string AutopilotNote = "THE COMPUTER IS PLAYING FOR YOU · PAUSE TO TAKE OVER";
+    bool ComputerPlays => Request?.Watch == true || _coach || _autopilot;
     /// <summary>FULL: the computer is playing the user's side (or both, in a 1v1).</summary>
     bool _autopilot;
 
