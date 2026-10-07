@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("1.16", "Eight new places round your stadium: an English mill town, Paris, a Greek island caldera, Kyoto, a desert city, plus three specials: a haunted Halloween hollow under a giant moon, a moon base with the Earth in a black sky, and a snowy Christmas village."),
         ("1.15", "Signature skills: every 4-star and 5-star skill player has his own, done with a double tap on SPRINT. 4-star: Ronaldo Chop, McGeady Spin, Hocus Pocus. 5-star: Step Over Storm, Sombrero Flick, Panna through a defender's legs. See it on his card sheet; a cyan gem marks him on the squad board."),
         ("1.14", "No touch controls on screen while the computer plays: watched league matches, coach 1v1 and SIMULATE REST FULL. The pause button stays; take your side back from the pause menu."),
         ("1.13", "Smoother menus: the squad page draws each player's card once and just moves it, instead of redrawing all of them every frame, and the patch notes stop re-measuring every word, so both run at full frame rate again."),
