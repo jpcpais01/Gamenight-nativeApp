@@ -71,7 +71,7 @@ public sealed class ClubState
 {
     public const int StartCoins = 6000;
     /// <summary>One-time coin gifts: every club gets each once, on its next launch.</summary>
-    static readonly (string id, int coins)[] Gifts = { ("million-2026-10", 1_000_000) };
+    static readonly (string id, int coins)[] Gifts = { ("million-2026-10", 1_000_000), ("million-2026-10-07", 1_000_000) };
     public const int FreePackHours = 4;
     const string SaveFile = "club.json";
 
