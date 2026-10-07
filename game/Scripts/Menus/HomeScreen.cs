@@ -373,7 +373,7 @@ public sealed partial class HomeScreen : PxCanvas
         // The map fills the right of the tile, your league's pin in it.
         var tex = Lg.EuropeMap.Texture(Size);
         var def = lg.Def;
-        var pin = Lg.EuropeMap.Project(def.Lon, def.Lat);
+        var pin = Lg.EuropeMap.HomeProject(def.Lon, def.Lat);
         const int S = Lg.EuropeMap.Scale;
         var win = new Rect2(inner.Position.X + inner.Size.X * 0.3f, inner.Position.Y, inner.Size.X * 0.7f, inner.Size.Y);
         var src = new Rect2(((pin - win.Size * new Vector2(0.5f, 0.62f)) / S).Floor(), (win.Size / S).Floor());
@@ -392,7 +392,7 @@ public sealed partial class HomeScreen : PxCanvas
         if (lg.HasCareer) Lg.LeagueArt.Badge(this, new Rect2(p.X - 8, p.Y - 28, 16, 20), Club.S.Crest);
         else
         {
-            var tc = Px.Hex(Lg.Ladder.TierColors[def.Tier - 1]);
+            var tc = Px.Hex(def.Color);
             Px.Frame(this, new Rect2(p.X - 7, p.Y - 23, 14, 14), tc, tc.Darkened(0.55f), null, 2, 2);
         }
         DrawRect(new Rect2(inner.Position, new Vector2(inner.Size.X, 3)), Px.Neon);

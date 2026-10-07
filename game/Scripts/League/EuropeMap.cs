@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Godot;
 
 namespace GameNight.League;
@@ -7,24 +8,60 @@ namespace GameNight.League;
 /// <summary>
 /// Europe as a little pixel-art relief model, seen from the south at a tilt: hand-drawn coasts,
 /// mountain ranges as ridges of height, hillshade from the north-west, snow on the peaks, shallows
-/// and deep water. Baked once into an image at half the screen's resolution (two UI pixels per art
-/// pixel) by a voxel-column pass, nearest to farthest, so ranges stand up and hide what's behind.
-/// No shaders: one texture drawn flat, cheap on any phone.
+/// and deep water. It zooms: whatever the camera looks at is baked fresh at the same pixel density
+/// (two UI pixels per art pixel), so zooming in brings out more detail (ragged coasts, woods,
+/// smaller hills) instead of bigger pixels. A bake covers the view and a margin around it, so
+/// panning just slides it; a new one is made off the main thread when the view moves beyond it or
+/// the zoom changes, and until it lands the old one is drawn stretched. No shaders: one texture
+/// drawn flat, cheap on any phone.
 /// </summary>
 public static class EuropeMap
 {
     public const int Scale = 2;
     /// <summary>The panel on the right of the map screen, in UI pixels: Europe is fitted to the left of it.</summary>
     public const float PanelW = 272;
+    public const float MaxZoom = 5;
     const float Lon0 = -11.5f, Lat0 = 35.8f, Lat1 = 61.5f, LonSpan = 42f;
     const float CosLat = 0.66f, Tilt = 0.8f, Lift = 15f;
+    /// <summary>How far the camera may roam, and the latitude of world row 0.</summary>
+    const float BLon0 = -12.5f, BLon1 = 31.5f, BLat0 = 34.6f, BLat1 = 62.5f, LatTop = 66f;
 
-    static ImageTexture _tex;
-    static Vector2I _size;
-    static float _s, _ox, _oy;
-    static int _gw, _gh;
-    static float[] _h;
-    static bool[] _water;
+    /// <summary>A camera: the point at the middle of the map area and the zoom (1 = all of Europe).</summary>
+    public struct View
+    {
+        public float Lon, Lat, Zoom;
+
+        public View(float lon, float lat, float zoom)
+        {
+            Lon = lon;
+            Lat = lat;
+            Zoom = zoom;
+        }
+    }
+
+    /// <summary>One bake: a rectangle of world pixels at one scale, with the ground's heights.</summary>
+    sealed class Tile
+    {
+        public float S, Z;
+        public int X0, Y0, W, H;
+        /// <summary>Ground rows J0.. under columns X0..: heights and land, for pins and glints.</summary>
+        public int J0, Rows;
+        public float[] Hgt;
+        public bool[] Land, SeaPx;
+        public byte[] Rgb;
+        public ImageTexture Tex;
+
+        public ImageTexture Texture() => Tex ??= ImageTexture.CreateFromImage(Image.CreateFromData(W, H, false, Image.Format.Rgb8, Rgb));
+    }
+
+    static Vector2I _art;
+    static float _fit;
+    static Vector2 _centre;
+    static Tile _home, _tile;
+    static Task<Tile> _pending;
+    static View _now;
+
+    // ---------------------------------------------------------------- coasts (longitude, latitude)
 
     // ---------------------------------------------------------------- coasts (longitude, latitude)
 
@@ -144,64 +181,210 @@ public static class EuropeMap
         (0.3f, 0.5f, new[] { 24.5f, 64f, 30f, 62.5f }), // Finnish lakeland, gently
     };
 
-    // ---------------------------------------------------------------- the projection
+
+    // ---------------------------------------------------------------- the camera
 
     static void Layout(Vector2 size)
     {
-        int aw = Mathf.CeilToInt(size.X / Scale), ah = Mathf.CeilToInt(size.Y / Scale);
-        float uSpan = LonSpan * CosLat, vSpan = Lat1 - Lat0;
-        float mapW = aw - PanelW / Scale - 8;
-        _s = Mathf.Min(mapW / uSpan, (ah + 14) / (vSpan * Tilt));
-        _ox = 4 + (mapW - uSpan * _s) / 2;
-        _oy = ah - 3 - vSpan * _s * Tilt;
-        _gw = aw;
-        _gh = Mathf.CeilToInt((ah - _oy) / Tilt) + 4;
-        _size = new Vector2I(aw, ah);
+        var art = new Vector2I(Mathf.CeilToInt(size.X / Scale), Mathf.CeilToInt(size.Y / Scale));
+        if (art == _art) return;
+        _art = art;
+        float mapW = art.X - PanelW / Scale - 8;
+        _fit = Mathf.Min(mapW / (LonSpan * CosLat), (art.Y + 14) / ((Lat1 - Lat0) * Tilt));
+        _centre = new Vector2(4 + mapW / 2, art.Y / 2f);
+        _home = _tile = null;
+        _now = Home;
     }
 
-    static float LonAt(float x) => Lon0 + (x - _ox) / (_s * CosLat);
-    static float LatAt(float j) => Lat1 - j / _s;
+    static float Lifted(float z) => Lift * Mathf.Pow(z, 0.8f);
+    static float WX(float lon, float s) => (lon - Lon0) * CosLat * s;
+    static float WJ(float lat, float s) => (LatTop - lat) * s;
 
-    /// <summary>Where a place sits on the baked map, in UI pixels (on the ground, terrain height included).</summary>
-    public static Vector2 Project(float lon, float lat)
+    /// <summary>All of Europe on a screen of this size.</summary>
+    public static View HomeFor(Vector2 size)
     {
-        float x = _ox + (lon - Lon0) * CosLat * _s;
-        float j = (Lat1 - lat) * _s;
-        int ix = Mathf.Clamp((int)x, 0, _gw - 1), ij = Mathf.Clamp((int)j, 0, _gh - 1);
-        float h = _h != null && !_water[ij * _gw + ix] ? _h[ij * _gw + ix] : 0;
-        return new Vector2(x, _oy + j * Tilt - h * Lift) * Scale;
+        Layout(size);
+        return Home;
     }
+
+    /// <summary>All of Europe, as the map first opens.</summary>
+    public static View Home
+    {
+        get
+        {
+            float s = _fit;
+            return Clamp(new View(Lon0 + LonSpan / 2, Lat0 + (_art.Y - 3 - _centre.Y) / (s * Tilt), 1));
+        }
+    }
+
+    public static View Clamp(View v)
+    {
+        v.Zoom = Mathf.Clamp(v.Zoom, 1, MaxZoom);
+        float s = _fit * v.Zoom;
+        float hl = _centre.X / (s * CosLat), hb = _centre.Y / (s * Tilt);
+        v.Lon = BLon1 - BLon0 <= hl * 2 ? (BLon0 + BLon1) / 2 : Mathf.Clamp(v.Lon, BLon0 + hl, BLon1 - hl);
+        v.Lat = BLat1 - BLat0 <= hb * 2 ? (BLat0 + BLat1) / 2 : Mathf.Clamp(v.Lat, BLat0 + hb, BLat1 - hb);
+        return v;
+    }
+
+    /// <summary>Where world pixel (0, 0) sits on screen, in whole art pixels so bakes stay crisp.</summary>
+    static Vector2 Offset(View v)
+    {
+        float s = _fit * v.Zoom;
+        return new Vector2(Mathf.Round(_centre.X - WX(v.Lon, s)), Mathf.Round(_centre.Y - WJ(v.Lat, s) * Tilt));
+    }
+
+    /// <summary>The ground under a screen point (sea level), as longitude and latitude.</summary>
+    public static Vector2 Unproject(View v, Vector2 ui)
+    {
+        float s = _fit * v.Zoom;
+        var a = ui / Scale - Offset(v);
+        return new Vector2(Lon0 + a.X / (CosLat * s), LatTop - a.Y / (Tilt * s));
+    }
+
+    /// <summary>Zoom by `factor` keeping the ground under `ui` where it is.</summary>
+    public static View ZoomAbout(View v, Vector2 ui, float factor)
+    {
+        var p = Unproject(v, ui);
+        var n = v;
+        n.Zoom = Mathf.Clamp(v.Zoom * factor, 1, MaxZoom);
+        float s = _fit * n.Zoom;
+        n.Lon = p.X - (ui.X / Scale - _centre.X) / (CosLat * s);
+        n.Lat = p.Y + (ui.Y / Scale - _centre.Y) / (Tilt * s);
+        return Clamp(n);
+    }
+
+    /// <summary>Slide the map by a drag of `d` UI pixels.</summary>
+    public static View Pan(View v, Vector2 d)
+    {
+        float s = _fit * v.Zoom;
+        v.Lon -= d.X / Scale / (CosLat * s);
+        v.Lat += d.Y / Scale / (Tilt * s);
+        return Clamp(v);
+    }
+
+    /// <summary>Fly to a place: centred, at least this close.</summary>
+    public static View Focus(View v, float lon, float lat, float zoom) => Clamp(new View(lon, lat, Mathf.Max(v.Zoom, zoom)));
+
+    static float HeightIn(Tile t, float lon, float lat)
+    {
+        if (t?.Hgt == null) return 0;
+        int x = Mathf.FloorToInt(WX(lon, t.S)) - t.X0, j = Mathf.FloorToInt(WJ(lat, t.S)) - t.J0;
+        if (x < 0 || j < 0 || x >= t.W || j >= t.Rows) return 0;
+        int i = j * t.W + x;
+        return t.Land[i] ? t.Hgt[i] : 0;
+    }
+
+    static Vector2 ProjectIn(View v, Tile t, float lon, float lat)
+    {
+        float s = _fit * v.Zoom;
+        var o = Offset(v);
+        return new Vector2(o.X + WX(lon, s), o.Y + WJ(lat, s) * Tilt - HeightIn(t, lon, lat) * Lifted(v.Zoom)) * Scale;
+    }
+
+    /// <summary>Where a place sits on the map as last drawn, in UI pixels (on the ground, terrain height included).</summary>
+    public static Vector2 Project(float lon, float lat) => ProjectIn(_now, _tile, lon, lat);
 
     /// <summary>Is this UI point over open water? (For the sea's glints.)</summary>
     public static bool Sea(Vector2 ui)
     {
-        if (_img == null) return false;
-        int x = (int)(ui.X / Scale), y = (int)(ui.Y / Scale);
-        return x >= 0 && y >= 0 && x < _size.X && y < _size.Y && _seaPx[y * _size.X + x];
+        var t = _tile;
+        if (t?.SeaPx == null) return false;
+        float k = _fit * _now.Zoom / t.S;
+        var a = (ui / Scale - Offset(_now)) / k - new Vector2(t.X0, t.Y0);
+        int x = (int)a.X, y = (int)a.Y;
+        return x >= 0 && y >= 0 && x < t.W && y < t.H && t.SeaPx[y * t.W + x];
     }
 
-    static Image _img;
-    static bool[] _seaPx;
+    // ---------------------------------------------------------------- the home screen's window
 
-    /// <summary>The map for a screen of this size, baked on first use.</summary>
-    public static ImageTexture Texture(Vector2 size)
+    static Tile HomeTile(Vector2 size)
     {
-        int aw = Mathf.CeilToInt(size.X / Scale), ah = Mathf.CeilToInt(size.Y / Scale);
-        if (_tex != null && _size.X == aw && _size.Y == ah) return _tex;
         Layout(size);
-        Bake();
-        _tex = ImageTexture.CreateFromImage(_img);
-        return _tex;
+        if (_home != null) return _home;
+        var o = Offset(Home);
+        _home = Bake(_fit, 1, (int)-o.X, (int)-o.Y, _art.X, _art.Y);
+        return _home;
     }
+
+    /// <summary>All of Europe for a screen of this size, laid out as the map first opens.</summary>
+    public static ImageTexture Texture(Vector2 size) => HomeTile(size).Texture();
+
+    /// <summary>Where a place sits on Texture(), in UI pixels.</summary>
+    public static Vector2 HomeProject(float lon, float lat) => ProjectIn(Home, _home, lon, lat);
+
+    // ---------------------------------------------------------------- the map screen
+
+    /// <summary>The world rectangle (pixels at scale s) the camera may ever show, the panel's strip included.</summary>
+    static Rect2 Bounds(float s, float z)
+    {
+        float x0 = WX(BLon0, s), x1 = WX(BLon1, s) + PanelW / Scale + 4;
+        float y0 = WJ(BLat1, s) * Tilt - 1.4f * Lifted(z), y1 = WJ(BLat0, s) * Tilt + 4;
+        return new Rect2(x0, y0, x1 - x0, y1 - y0);
+    }
+
+    static Rect2 Visible(View v)
+    {
+        var o = Offset(v);
+        float s = _fit * v.Zoom;
+        return new Rect2(-o, _art).Intersection(Bounds(s, v.Zoom));
+    }
+
+    static bool Covers(Tile t, View v)
+    {
+        if (Mathf.Abs(t.S - _fit * v.Zoom) > 1e-4f) return false;
+        var vis = Visible(v);
+        return vis.Position.X >= t.X0 && vis.Position.Y >= t.Y0 && vis.End.X <= t.X0 + t.W && vis.End.Y <= t.Y0 + t.H;
+    }
+
+    /// <summary>The map for this view: a fresh bake if one is ready, else the last one slid and
+    /// stretched into place. `settled`: the fingers are off, so a new zoom is worth baking.</summary>
+    public static void Draw(CanvasItem ci, Vector2 size, View v, bool settled)
+    {
+        Layout(size);
+        _now = v;
+        ci.DrawRect(new Rect2(Vector2.Zero, size), Deep);
+        if (_pending is { IsCompleted: true })
+        {
+            if (_pending.Status == TaskStatus.RanToCompletion) _tile = _pending.Result;
+            _pending = null;
+        }
+        _tile ??= Covers(HomeTile(size), v) ? _home : Bake(Spec(v));
+        float s = _fit * v.Zoom;
+        bool sameScale = Mathf.Abs(_tile.S - s) < 1e-4f;
+        if (_pending == null && !Covers(_tile, v) && (settled || sameScale))
+        {
+            var spec = Spec(v);
+            _pending = Task.Run(() => Bake(spec));
+        }
+        float k = s / _tile.S;
+        var o = Offset(v);
+        var at = (o + new Vector2(_tile.X0, _tile.Y0) * k) * Scale;
+        ci.DrawTextureRect(_tile.Texture(), new Rect2(sameScale ? at.Round() : at, new Vector2(_tile.W, _tile.H) * k * Scale), false);
+    }
+
+    /// <summary>What to bake for a view: what it shows and half a screen around, inside the bounds.</summary>
+    static (float s, float z, int x0, int y0, int w, int h) Spec(View v)
+    {
+        var o = Offset(v);
+        float s = _fit * v.Zoom;
+        var r = new Rect2(-o - _art / 2, _art * 2).Intersection(Bounds(s, v.Zoom));
+        int x0 = Mathf.FloorToInt(r.Position.X), y0 = Mathf.FloorToInt(r.Position.Y);
+        return (s, v.Zoom, x0, y0, Mathf.CeilToInt(r.End.X) - x0, Mathf.CeilToInt(r.End.Y) - y0);
+    }
+
+    static Tile Bake((float s, float z, int x0, int y0, int w, int h) p) => Bake(p.s, p.z, p.x0, p.y0, p.w, p.h);
 
     // ---------------------------------------------------------------- baking
 
-    static void Fill(float[][] polys, bool[] mask, bool value)
+    /// <summary>Scanline fill of polygons into a grid whose cell (i, j) is world column gx0 + i,
+    /// ground row gj0 + j at scale s.</summary>
+    static void Fill(float[][] polys, bool[] mask, bool value, int gw, int gh, int gx0, int gj0, float s)
     {
         var xs = new List<float>();
-        for (int j = 0; j < _gh; j++)
+        for (int j = 0; j < gh; j++)
         {
-            float lat = LatAt(j + 0.5f);
+            float lat = LatTop - (gj0 + j + 0.5f) / s;
             foreach (var p in polys)
             {
                 xs.Clear();
@@ -211,22 +394,21 @@ public static class EuropeMap
                     float ay = p[i * 2 + 1], by = p[k * 2 + 1];
                     if ((ay > lat) == (by > lat)) continue;
                     float lon = p[i * 2] + (lat - ay) / (by - ay) * (p[k * 2] - p[i * 2]);
-                    xs.Add(_ox + (lon - Lon0) * CosLat * _s);
+                    xs.Add(WX(lon, s) - gx0);
                 }
                 xs.Sort();
                 for (int i = 0; i + 1 < xs.Count; i += 2)
                 {
-                    int a = Math.Max(0, (int)Mathf.Ceil(xs[i] - 0.5f)), b = Math.Min(_gw - 1, (int)Mathf.Floor(xs[i + 1] - 0.5f));
-                    for (int x = a; x <= b; x++) mask[j * _gw + x] = value;
+                    int a = Math.Max(0, (int)Mathf.Ceil(xs[i] - 0.5f)), b = Math.Min(gw - 1, (int)Mathf.Floor(xs[i + 1] - 0.5f));
+                    for (int x = a; x <= b; x++) mask[j * gw + x] = value;
                 }
             }
         }
     }
 
     /// <summary>Two-pass chamfer distance (in cells) to the nearest cell where `from` is true.</summary>
-    static float[] Distance(bool[] from)
+    static float[] Distance(bool[] from, int w, int h)
     {
-        int w = _gw, h = _gh;
         var d = new float[w * h];
         for (int i = 0; i < d.Length; i++) d[i] = from[i] ? 0 : 1e6f;
         const float A = 1, B = 1.414f;
@@ -261,6 +443,21 @@ public static class EuropeMap
         return d;
     }
 
+    /// <summary>Each range's reach, in (u, lat), to skip the far ones fast.</summary>
+    static readonly Rect2[] RidgeBox = Array.ConvertAll(Ridges, r =>
+    {
+        float x0 = 1e9f, y0 = 1e9f, x1 = -1e9f, y1 = -1e9f;
+        for (int k = 0; k + 1 < r.line.Length; k += 2)
+        {
+            x0 = Math.Min(x0, r.line[k] * CosLat);
+            x1 = Math.Max(x1, r.line[k] * CosLat);
+            y0 = Math.Min(y0, r.line[k + 1]);
+            y1 = Math.Max(y1, r.line[k + 1]);
+        }
+        float m = r.w * 2.6f;
+        return new Rect2(x0 - m, y0 - m, x1 - x0 + m * 2, y1 - y0 + m * 2);
+    });
+
     static float Hash(int x, int y)
     {
         uint h = (uint)(x * 374761393 + y * 668265263);
@@ -293,123 +490,185 @@ public static class EuropeMap
     static readonly Color Desert = C(0xc9a868), Hills = C(0x8c8150), HillsN = C(0x667846), Rock = C(0x857a70), High = C(0xa59b91), Snow = C(0xf1f4f7);
     static readonly Color Haze = C(0x9cc0d4);
 
-    static void Bake()
-    {
-        int n = _gw * _gh;
-        var land = new bool[n];
-        Fill(Lands, land, true);
-        Fill(Seas, land, false);
-        _water = new bool[n];
-        for (int i = 0; i < n; i++) _water[i] = !land[i];
-        var toWater = Distance(_water);
-        var toLand = Distance(land);
 
-        // Height: rising from the coast, ranges as ridges, a little noise for texture.
-        _h = new float[n];
-        for (int j = 0; j < _gh; j++)
+    /// <summary>Bake world pixels [x0, x0 + w) x [y0, y0 + h) at scale s (zoom z). Distances are
+    /// worked out over a margin around it, so coasts just off the edge still shade the sea.</summary>
+    static Tile Bake(float s, float z, int x0, int y0, int w, int h)
+    {
+        float lift = Lifted(z);
+        int j0 = Mathf.FloorToInt(y0 / Tilt) - 1, j1 = Mathf.CeilToInt((y0 + h + 1.4f * lift) / Tilt) + 1;
+        int rows = j1 - j0;
+        int m = Mathf.CeilToInt(18 * z) + 2;
+        int gw = w + m * 2, gh = rows + m * 2, gx0 = x0 - m, gj0 = j0 - m;
+        int n = gw * gh;
+        float LonOf(int i) => Lon0 + (gx0 + i) / (s * CosLat);
+        float LatOf(int j) => LatTop - (gj0 + j) / s;
+        // Detail that only shows up close: ragged coasts, small hills, woods and fields.
+        float near = Mathf.Clamp((z - 1) / 2, 0, 1), closer = Mathf.Clamp((z - 2) / 2, 0, 1);
+
+        var land = new bool[n];
+        Fill(Lands, land, true, gw, gh, gx0, gj0, s);
+        Fill(Seas, land, false, gw, gh, gx0, gj0, s);
+        var water = new bool[n];
+        for (int i = 0; i < n; i++) water[i] = !land[i];
+        var toWater = Distance(water, gw, gh);
+        var toLand = Distance(land, gw, gh);
+        if (near > 0)
         {
-            float lat = LatAt(j);
-            for (int x = 0; x < _gw; x++)
+            // Coves and headlands: the coast pushed in and out by noise, within a few base pixels.
+            for (int j = 0; j < gh; j++)
             {
-                int i = j * _gw + x;
-                if (!land[i]) continue;
-                float lon = LonAt(x);
-                float u = lon * CosLat;
-                float h = 0.04f + 0.1f * Mathf.Clamp(toWater[i] / 18f, 0, 1);
-                foreach (var (rh, rw, line) in Ridges)
+                float lat = LatOf(j);
+                for (int i = 0; i < gw; i++)
                 {
+                    int k = j * gw + i;
+                    float sd = (toWater[k] - toLand[k]) / z;
+                    if (Math.Abs(sd) > 3) continue;
+                    float u = LonOf(i) * CosLat;
+                    float wob = (Noise(u * 7 + 11, lat * 7) - 0.5f) * 2.2f * near + (Noise(u * 19 + 5, lat * 19) - 0.5f) * 1.2f * closer;
+                    land[k] = sd + wob > 0;
+                }
+            }
+            for (int i = 0; i < n; i++) water[i] = !land[i];
+            toWater = Distance(water, gw, gh);
+            toLand = Distance(land, gw, gh);
+        }
+
+        // Height, worked out under the bake (and a ring for the shading): rising from the coast,
+        // ranges as ridges, noise for texture.
+        var hgt = new float[n];
+        for (int j = m - 1; j <= m + rows; j++)
+        {
+            float lat = LatOf(j);
+            for (int i = m - 1; i <= m + w; i++)
+            {
+                int k = j * gw + i;
+                if (!land[k]) continue;
+                float u = LonOf(i) * CosLat;
+                float tw = toWater[k] / z;
+                float hh = 0.04f + 0.1f * Mathf.Clamp(tw / 18f, 0, 1), ranges = 0;
+                for (int q = 0; q < Ridges.Length; q++)
+                {
+                    if (!RidgeBox[q].HasPoint(new Vector2(u, lat))) continue;
+                    var (rh, rw, line) = Ridges[q];
                     float best = 1e6f;
-                    for (int k = 0; k + 3 < line.Length; k += 2)
-                        best = Math.Min(best, SegDist(u, lat, line[k] * CosLat, line[k + 1], line[k + 2] * CosLat, line[k + 3]));
+                    for (int e = 0; e + 3 < line.Length; e += 2)
+                        best = Math.Min(best, SegDist(u, lat, line[e] * CosLat, line[e + 1], line[e + 2] * CosLat, line[e + 3]));
                     if (best > rw * 2.6f) continue;
                     float g = Mathf.Exp(-(best * best) / (rw * rw));
                     // Ranges are ragged: noise breaks the crest into peaks.
-                    h += rh * g * (0.62f + 0.55f * Noise(u * 2.6f + 31, lat * 2.6f));
+                    hh += rh * g * (0.62f + 0.55f * Noise(u * 2.6f + 31, lat * 2.6f));
+                    ranges += rh * g;
                 }
-                h += (Noise(u * 1.3f, lat * 1.3f) - 0.5f) * 0.08f + (Noise(u * 5f + 7, lat * 5f) - 0.5f) * 0.04f;
-                _h[i] = Mathf.Max(0.02f, h) * Mathf.Clamp(toWater[i] / 2.2f, 0.35f, 1);
+                // Close up, a range breaks into peaks and valleys instead of one long snowfield.
+                if (ranges > 0.02f) hh += ranges * ((Noise(u * 8 + 17, lat * 8) - 0.5f) * 0.9f * near + (Noise(u * 21 + 3, lat * 21) - 0.5f) * 0.3f * closer);
+                hh += (Noise(u * 1.3f, lat * 1.3f) - 0.5f) * 0.08f + (Noise(u * 5f + 7, lat * 5f) - 0.5f) * 0.04f;
+                hh += (Noise(u * 14 + 3, lat * 14) - 0.5f) * 0.035f * near + (Noise(u * 36 + 9, lat * 36) - 0.5f) * 0.018f * closer;
+                hgt[k] = Mathf.Max(0.02f, hh) * Mathf.Clamp(tw / 2.2f, 0.35f, 1);
             }
         }
 
         // Colour each cell.
         var col = new Color[n];
-        for (int j = 0; j < _gh; j++)
+        for (int j = m; j < m + rows; j++)
         {
-            float lat = LatAt(j);
-            for (int x = 0; x < _gw; x++)
+            float lat = LatOf(j);
+            for (int i = m; i < m + w; i++)
             {
-                int i = j * _gw + x;
-                float u = LonAt(x) * CosLat;
-                if (!land[i])
+                int k = j * gw + i;
+                float u = LonOf(i) * CosLat;
+                int cx = gx0 + i, cj = gj0 + j;
+                if (!land[k])
                 {
-                    float d = toLand[i];
+                    float d = toLand[k] / z;
                     Color wc = d < 2 ? Coastal : d < 6 ? Shallow : d < 16 ? Mid : Deep;
                     // A dithered seam between depths, so the bands read as pixel art.
-                    if (d >= 1.5f && d < 2.5f && (x + j) % 2 == 0) wc = Shallow;
-                    if (d >= 5.5f && d < 6.5f && (x + j) % 2 == 0) wc = Mid;
-                    if (d >= 15 && d < 17 && (x + j) % 2 == 0) wc = Deep;
-                    if (d <= 1.01f) wc = Foam.Lerp(Coastal, 0.35f);
-                    col[i] = wc;
+                    bool odd = ((cx + cj) & 1) == 0;
+                    if (d >= 1.5f && d < 2.5f && odd) wc = Shallow;
+                    if (d >= 5.5f && d < 6.5f && odd) wc = Mid;
+                    if (d >= 15 && d < 17 && odd) wc = Deep;
+                    if (toLand[k] <= 1.01f) wc = Foam.Lerp(Coastal, 0.35f);
+                    col[k] = wc;
                     continue;
                 }
-                float h = _h[i];
+                float hh = hgt[k];
                 float north = Mathf.Clamp((lat - 40f) / 18f, 0, 1);
                 float n1 = Noise(u * 3.1f + 100, lat * 3.1f);
                 Color low = lat < 37.5f ? Desert.Lerp(DrySouth, Mathf.Clamp((lat - 34.5f) / 3f, 0, 1))
                     : north < 0.45f ? DrySouth.Lerp(Green, north / 0.45f) : north < 0.8f ? Green.Lerp(North, (north - 0.45f) / 0.35f) : North.Lerp(Boreal, (north - 0.8f) / 0.2f);
-                // Woods and fields: patches a shade darker or lighter.
+                // Woods and fields: patches a shade darker or lighter, finer ones close up.
                 if (n1 > 0.62f) low = low.Darkened(0.12f);
                 else if (n1 < 0.3f) low = low.Lightened(0.06f);
+                if (near > 0)
+                {
+                    float n2 = Noise(u * 13 + 50, lat * 13);
+                    if (n2 > 1 - 0.3f * near) low = low.Darkened(0.1f);
+                    else if (n2 < 0.18f * near) low = low.Lightened(0.07f);
+                }
                 float snowline = 0.8f - north * 0.2f;
-                Color c = h < 0.2f ? low : h < 0.36f ? low.Lerp(north > 0.5f ? HillsN : Hills, (h - 0.2f) / 0.16f) : h < 0.55f ? Hills.Lerp(Rock, (h - 0.36f) / 0.19f) : h < snowline ? Rock.Lerp(High, (h - 0.55f) / Math.Max(0.05f, snowline - 0.55f)) : Snow;
-                if (toWater[i] <= 1.01f && h < 0.25f && lat < 56) c = Sand;
-                // Light from the north-west, stepped into bands.
-                float hl = x > 0 && j > 0 && land[i - _gw - 1] ? _h[i - _gw - 1] : h;
-                float hr = x < _gw - 1 && j < _gh - 1 && land[i + _gw + 1] ? _h[i + _gw + 1] : h;
-                float shade = Mathf.Clamp(1 + (hl - hr) * 9f, 0.62f, 1.3f);
+                Color c = hh < 0.2f ? low : hh < 0.36f ? low.Lerp(north > 0.5f ? HillsN : Hills, (hh - 0.2f) / 0.16f) : hh < 0.55f ? Hills.Lerp(Rock, (hh - 0.36f) / 0.19f) : hh < snowline ? Rock.Lerp(High, (hh - 0.55f) / Math.Max(0.05f, snowline - 0.55f)) : Snow;
+                if (toWater[k] / z <= 1.01f && toWater[k] <= Math.Max(1.01f, z * 0.6f) && hh < 0.25f && lat < 56) c = Sand;
+                // Light from the north-west, stepped into bands (the slope per cell shrinks as cells do).
+                float hl = land[k - gw - 1] ? hgt[k - gw - 1] : hh;
+                float hr = land[k + gw + 1] ? hgt[k + gw + 1] : hh;
+                float shade = Mathf.Clamp(1 + (hl - hr) * 9f * z, 0.62f, 1.3f);
                 shade = Mathf.Round(shade * 8) / 8;
-                col[i] = new Color(c.R * shade, c.G * shade, c.B * shade);
+                col[k] = new Color(c.R * shade, c.G * shade, c.B * shade);
             }
         }
 
         // Voxel columns, nearest row first: each row draws only where it rises above what's in front.
-        int aw = _size.X, ah = _size.Y;
-        _seaPx = new bool[aw * ah];
-        var data = new byte[aw * ah * 3];
-        for (int i = 0; i < aw * ah; i++)
+        var t = new Tile { S = s, Z = z, X0 = x0, Y0 = y0, W = w, H = h, J0 = j0, Rows = rows };
+        t.SeaPx = new bool[w * h];
+        var data = new byte[w * h * 3];
+        for (int i = 0; i < w * h; i++)
         {
             data[i * 3] = (byte)(Deep.R * 255);
             data[i * 3 + 1] = (byte)(Deep.G * 255);
             data[i * 3 + 2] = (byte)(Deep.B * 255);
-            _seaPx[i] = true;
+            t.SeaPx[i] = true;
         }
-        for (int x = 0; x < aw; x++)
+        for (int x = 0; x < w; x++)
         {
-            int ymin = ah;
-            for (int j = _gh - 1; j >= 0; j--)
+            int ymin = h;
+            for (int jj = rows - 1; jj >= 0; jj--)
             {
-                int i = j * _gw + x;
-                float h = land[i] ? _h[i] : 0;
-                int y = Mathf.FloorToInt(_oy + j * Tilt - h * Lift);
+                int k = (jj + m) * gw + x + m;
+                float hh = land[k] ? hgt[k] : 0;
+                float ground = (j0 + jj) * Tilt;
+                int y = Mathf.FloorToInt(ground - hh * lift) - y0;
                 if (y >= ymin) continue;
                 int top = Math.Max(0, y);
-                // Far away the air thickens: a touch of haze toward the top.
-                float haze = Mathf.Clamp(1 - (_oy + j * Tilt) / ah, 0, 1) * 0.22f;
-                var c = col[i].Lerp(Haze, haze);
-                var side = c.Darkened(0.32f);
-                for (int yy = top; yy < ymin && yy < ah; yy++)
+                // Far away the air thickens: a touch of haze toward the north.
+                float haze = Mathf.Clamp((LatOf(jj + m) - 36f) / 24f, 0, 1) * 0.22f;
+                var c = col[k].Lerp(Haze, haze);
+                // A one-pixel step is a soft edge; a cliff goes dark.
+                Color side1 = c.Darkened(0.14f), side = c.Darkened(0.32f);
+                bool sea = !land[k] && toLand[k] / z > 2;
+                for (int yy = top; yy < ymin && yy < h; yy++)
                 {
-                    var k = yy == top ? c : side;
-                    int p = (yy * aw + x) * 3;
-                    data[p] = (byte)Mathf.Clamp(k.R * 255, 0, 255);
-                    data[p + 1] = (byte)Mathf.Clamp(k.G * 255, 0, 255);
-                    data[p + 2] = (byte)Mathf.Clamp(k.B * 255, 0, 255);
-                    _seaPx[yy * aw + x] = !land[i] && toLand[i] > 2;
+                    var kc = yy == top ? c : yy == top + 1 ? side1 : side;
+                    int p = (yy * w + x) * 3;
+                    data[p] = (byte)Mathf.Clamp(kc.R * 255, 0, 255);
+                    data[p + 1] = (byte)Mathf.Clamp(kc.G * 255, 0, 255);
+                    data[p + 2] = (byte)Mathf.Clamp(kc.B * 255, 0, 255);
+                    t.SeaPx[yy * w + x] = sea;
                 }
                 ymin = top;
                 if (ymin <= 0) break;
             }
         }
-        _img = Image.CreateFromData(aw, ah, false, Image.Format.Rgb8, data);
+        t.Rgb = data;
+        // Keep the ground under the bake for pins.
+        t.Hgt = new float[w * rows];
+        t.Land = new bool[w * rows];
+        for (int jj = 0; jj < rows; jj++)
+            for (int x = 0; x < w; x++)
+            {
+                int k = (jj + m) * gw + x + m;
+                t.Hgt[jj * w + x] = hgt[k];
+                t.Land[jj * w + x] = land[k];
+            }
+        return t;
     }
 }

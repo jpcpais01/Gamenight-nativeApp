@@ -592,6 +592,11 @@ public sealed partial class LeagueScreen : PxCanvas
             }
             ui.Go(ui.Map);
         }
+        if (arg.StartsWith("--map-view="))
+        {
+            var v = arg[11..].Split(',').Select(x => float.Parse(x, System.Globalization.CultureInfo.InvariantCulture)).ToArray();
+            ui.Map.LookAt(v[0], v[1], v[2]);
+        }
         if (arg == "--map=pick")
         {
             lg.C = null;

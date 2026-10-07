@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Godot;
 using GameNight.Club;
@@ -16,10 +17,27 @@ public sealed partial class MapScreen : PxCanvas
 {
     readonly Menus.Menus _ui;
     LeagueState L => _ui.Season;
+    CupState Cups => _ui.CupRun;
     LeagueDef _sel;
+    CupDef _cup;
     string _pick;
 
     static readonly (float x, float y, float s)[] Clouds = { (0.1f, 0.22f, 1f), (0.42f, 0.12f, 0.8f), (0.7f, 0.5f, 1.1f), (0.25f, 0.62f, 0.7f), (0.55f, 0.82f, 0.9f) };
+
+    /// <summary>The camera, and where the +/- keys are easing it to.</summary>
+    EuropeMap.View _view;
+    bool _fresh = true;
+    float _zoomTo = -1;
+    Vector2 _zoomAt;
+    /// <summary>Fingers down on the map, how far the first has travelled, the pinch's last shape, the fling.</summary>
+    readonly Dictionary<int, Vector2> _touch = new();
+    float _travel, _pinchDist;
+    Vector2 _pinchMid, _fling, _dragVel;
+    bool _panning;
+    double _quietAt;
+
+    /// <summary>The local competitions (lower divisions, cups, tournaments) show from this zoom.</summary>
+    const float LocalZoom = 1.9f;
 
     public MapScreen(Menus.Menus ui)
     {
@@ -29,29 +47,188 @@ public sealed partial class MapScreen : PxCanvas
     public void Opened()
     {
         _sel = L.HasCareer ? L.Def : null;
+        _cup = null;
         _pick = null;
+        _fresh = true;
+        _touch.Clear();
     }
 
+    Vector3? _debugView;
+
+    /// <summary>Debug: open the map looking here.</summary>
+    public void LookAt(float lon, float lat, float zoom) => _debugView = new Vector3(lon, lat, zoom);
+
     bool Picking => !L.HasCareer;
+    float MapRight => Size.X - EuropeMap.PanelW;
+    bool Local => _view.Zoom >= LocalZoom;
 
     protected override void Paint()
     {
         float W = Size.X, H = Size.Y;
-        var tex = EuropeMap.Texture(Size);
-        DrawTextureRect(tex, new Rect2(0, 0, tex.GetWidth() * EuropeMap.Scale, tex.GetHeight() * EuropeMap.Scale), false);
+        if (_fresh)
+        {
+            _view = EuropeMap.HomeFor(Size);
+            // Your club plays in a lower division: start close enough to see it.
+            if (_sel?.Lower == true) _view = EuropeMap.Focus(_view, _sel.Lon, _sel.Lat, 2.4f);
+            if (_debugView is { } dv) _view = EuropeMap.Focus(_view, dv.X, dv.Y, dv.Z);
+            _fresh = false;
+        }
+        bool settled = _touch.Count == 0 && _zoomTo < 0 && _fling == Vector2.Zero && T > _quietAt;
+        EuropeMap.Draw(this, Size, _view, settled);
         Glints(W, H);
         CloudLayer(W, H, true);
         CloudLayer(W, H, false);
         Roads();
-        foreach (var d in Ladder.Leagues.OrderByDescending(d => d.Lat)) Pin(d);
+        // Pins back to front, the local ones only once you're in close.
+        var pins = Ladder.Leagues.Where(d => !d.Lower || Local).Select(d => (d.Lat, (object)d))
+            .Concat(Local ? Ladder.Cups.Select(c => (c.Lat, (object)c)) : Enumerable.Empty<(float, object)>())
+            .OrderByDescending(x => x.Item1);
+        foreach (var (_, o) in pins)
+        {
+            if (o is LeagueDef d) Pin(d);
+            else CupPin((CupDef)o);
+        }
 
         // Header: a dark band so the title reads over the sea.
-        for (int i = 0; i < 6; i++) DrawRect(new Rect2(0, i * 11, W - EuropeMap.PanelW, 11), new Color(0.03f, 0.05f, 0.12f, 0.5f - i * 0.08f));
+        for (int i = 0; i < 6; i++) DrawRect(new Rect2(0, i * 11, MapRight, 11), new Color(0.03f, 0.05f, 0.12f, 0.5f - i * 0.08f));
         BackButton(new Vector2(14, 12), () => _ui.Go(_ui.Home));
         Px.Text(this, Px.Small, new Vector2(66, 24), Picking ? "WHERE DOES YOUR CLUB COME FROM?" : "THE LEAGUES OF EUROPE", 8, Px.Cyan);
         Title(new Vector2(66, 52), Picking ? "PICK YOUR HOME" : "EUROPE");
         Legend(H);
-        Panel(new Rect2(W - EuropeMap.PanelW, 0, EuropeMap.PanelW, H));
+        ZoomKeys(H);
+        Panel(new Rect2(MapRight, 0, EuropeMap.PanelW, H));
+    }
+
+    public override void _Process(double delta)
+    {
+        base._Process(delta);
+        if (!IsVisibleInTree()) return;
+        float dt = (float)delta;
+        if (_zoomTo > 0)
+        {
+            float k = Mathf.Pow(_zoomTo / _view.Zoom, Mathf.Min(1, dt * 12));
+            _view = EuropeMap.ZoomAbout(_view, _zoomAt, k);
+            if (Mathf.Abs(_view.Zoom / _zoomTo - 1) < 0.004f) _zoomTo = -1;
+        }
+        if (_fling != Vector2.Zero && _touch.Count == 0)
+        {
+            _view = EuropeMap.Pan(_view, _fling * dt);
+            _fling *= Mathf.Pow(0.02f, dt);
+            if (_fling.Length() < 20) _fling = Vector2.Zero;
+        }
+    }
+
+    // ---------------------------------------------------------------- zoom and pan
+
+    public override void _GuiInput(InputEvent e)
+    {
+        switch (e)
+        {
+            case InputEventScreenTouch t:
+                if (t.Pressed)
+                {
+                    if (t.Position.X >= MapRight && _touch.Count == 0) break;
+                    _touch[t.Index] = t.Position;
+                    _fling = Vector2.Zero;
+                    _zoomTo = -1;
+                    if (_touch.Count == 1)
+                    {
+                        _travel = 0;
+                        _panning = false;
+                        _dragVel = Vector2.Zero;
+                    }
+                    else Pinch(out _pinchMid, out _pinchDist);
+                }
+                else if (_touch.Remove(t.Index))
+                {
+                    if (_touch.Count == 0 && _panning) _fling = _dragVel;
+                    if (_touch.Count >= 2) Pinch(out _pinchMid, out _pinchDist);
+                    // One finger left after a pinch carries on panning from where it is.
+                    _dragVel = Vector2.Zero;
+                }
+                break;
+            case InputEventScreenDrag d when _touch.ContainsKey(d.Index):
+                _touch[d.Index] = d.Position;
+                if (_touch.Count == 1)
+                {
+                    _travel += d.Relative.Length();
+                    if (!_panning && _travel > 9)
+                    {
+                        _panning = true;
+                        CancelPress();
+                    }
+                    if (_panning)
+                    {
+                        _view = EuropeMap.Pan(_view, d.Relative);
+                        _dragVel = _dragVel.Lerp(d.Velocity, 0.5f);
+                    }
+                }
+                else
+                {
+                    Pinch(out var mid, out var dist);
+                    if (_pinchDist > 1) _view = EuropeMap.ZoomAbout(_view, mid, dist / _pinchDist);
+                    _view = EuropeMap.Pan(_view, mid - _pinchMid);
+                    _pinchMid = mid;
+                    _pinchDist = dist;
+                    _panning = true;
+                    CancelPress();
+                }
+                break;
+            case InputEventMouseButton { Pressed: true } wb when wb.ButtonIndex is MouseButton.WheelUp or MouseButton.WheelDown && wb.Position.X < MapRight:
+                float f = Mathf.Pow(1.18f, wb.Factor > 0 ? wb.Factor : 1);
+                _view = EuropeMap.ZoomAbout(_view, wb.Position, wb.ButtonIndex == MouseButton.WheelUp ? f : 1 / f);
+                _zoomTo = -1;
+                _quietAt = T + 0.2;
+                AcceptEvent();
+                return;
+            case InputEventMagnifyGesture mg:
+                _view = EuropeMap.ZoomAbout(_view, mg.Position, mg.Factor);
+                _quietAt = T + 0.2;
+                break;
+            case InputEventPanGesture pg:
+                _view = EuropeMap.Pan(_view, -pg.Delta * 10);
+                _quietAt = T + 0.2;
+                break;
+        }
+        base._GuiInput(e);
+    }
+
+    /// <summary>The middle of the first two fingers and the gap between them.</summary>
+    void Pinch(out Vector2 mid, out float dist)
+    {
+        var p = _touch.Values.Take(2).ToArray();
+        mid = (p[0] + p[1]) / 2;
+        dist = p[0].DistanceTo(p[1]);
+    }
+
+    /// <summary>+ and - at the bottom right of the map, easing the zoom about the middle.</summary>
+    void ZoomKeys(float H)
+    {
+        float x = MapRight - 48;
+        void Key(string key, float y, string label, float factor, bool on)
+        {
+            var r = new Rect2(x, y, 36, 34);
+            bool held = Held(key) && on;
+            var rr = held ? r.Translated(new Vector2(2, 2)) : r;
+            Px.Frame(this, rr, new Color(0.04f, 0.05f, 0.12f, 0.85f), on ? Px.Line2 : Px.Line, held ? null : Px.ShadowSoft, 2, 3);
+            Px.TextC(this, Px.Big, rr.GetCenter().X, rr.GetCenter().Y + 9, label, 28, on ? Px.Ink : Px.InkDim);
+            Tap(key, r, () =>
+            {
+                if (!on) return;
+                _zoomAt = new Vector2(MapRight / 2, H / 2);
+                _zoomTo = Mathf.Clamp((_zoomTo > 0 ? _zoomTo : _view.Zoom) * factor, 1, EuropeMap.MaxZoom);
+            });
+        }
+        Key("zin", H - 112, "+", 1.7f, _view.Zoom < EuropeMap.MaxZoom - 0.01f);
+        Key("zout", H - 74, "-", 1 / 1.7f, _view.Zoom > 1.01f);
+        if (!Local && !Picking)
+        {
+            string hint = "ZOOM IN: LOWER DIVISIONS, CUPS, TOURNAMENTS";
+            float w = Px.Width(Px.Small, hint, 8) + 16;
+            var r = new Rect2(x - 8 - w, H - 100, w, 18);
+            Px.Frame(this, r, new Color(0.04f, 0.05f, 0.12f, 0.8f), new Color(Px.Hex(0x7fe0a0), 0.6f + 0.3f * Mathf.Sin((float)T * 3)), null, 1, 2);
+            Px.Text(this, Px.Small, r.Position + new Vector2(8, 13), hint, 8, Px.Hex(0x7fe0a0));
+        }
     }
 
     // ---------------------------------------------------------------- the living map
@@ -100,7 +277,7 @@ public sealed partial class MapScreen : PxCanvas
     void Roads()
     {
         foreach (var hi in Ladder.Leagues.Where(d => d.Tier > 1))
-            foreach (var lo in Ladder.Leagues.Where(d => d.Tier == hi.Tier - 1 && d.Countries.Any(hi.Countries.Contains)))
+            foreach (var lo in Ladder.Leagues.Where(d => d.Tier == hi.Tier - 1 && !d.Lower && d.Countries.Any(hi.Countries.Contains)))
             {
                 bool open = L.Unlocked(hi);
                 var col = Px.Hex(Ladder.TierColors[hi.Tier - 1], open ? 0.85f : 0.4f);
@@ -117,12 +294,24 @@ public sealed partial class MapScreen : PxCanvas
             }
     }
 
+    /// <summary>Off the map area (with room for the head and label)?</summary>
+    bool Off(Vector2 g) => g.X < -40 || g.X > MapRight + 40 || g.Y < -10 || g.Y > Size.Y + 60;
+
+    /// <summary>Close enough in that every pin carries its name.</summary>
+    bool Named => _view.Zoom >= 2.6f;
+
     void Pin(LeagueDef d)
     {
         var g = EuropeMap.Project(d.Lon, d.Lat).Round();
+        if (Off(g)) return;
+        if (d.Lower)
+        {
+            LocalPin(g, "pin" + d.Id, Px.Hex(d.Color), _sel == d, L.Playing(d), d.Name, () => Select(d), c => Pitch(c));
+            return;
+        }
         bool sel = _sel == d, mine = L.Playing(d), open = Picking ? d.Tier == 1 : L.Unlocked(d);
         bool held = Held("pin" + d.Id);
-        var tc = Px.Hex(Ladder.TierColors[d.Tier - 1]);
+        var tc = Px.Hex(d.Color);
         float bob = sel ? Mathf.Floor((float)(T * 3 % 4)) switch { 1 => -2, 2 => -4, 3 => -2, _ => 0 } : 0;
         // Shadow on the ground, the post, then the head.
         DrawColoredPolygon(Px.Ellipse(g, 7, 3, 10), new Color(0, 0, 0, 0.4f));
@@ -142,23 +331,79 @@ public sealed partial class MapScreen : PxCanvas
         else Px.TextC(this, Px.Big, g.X, headY + 6, d.Tier.ToString(), 18, tc.Darkened(0.65f));
         // Your club's badge flies over the league you're in.
         if (mine) LeagueArt.Badge(this, new Rect2(g.X - 9, headY - r - 26, 18, 22), _ui.Club.S.Crest);
+        if (sel || mine || Named) Label(g, d.Name, tc, sel);
+        Tap("pin" + d.Id, new Rect2(g.X - 16, headY - 16, 32, g.Y - headY + 22), () => Select(d));
+    }
+
+    /// <summary>The name on a plate under a pin.</summary>
+    void Label(Vector2 g, string text, Color tc, bool sel)
+    {
+        string name = text.ToUpperInvariant();
+        float w = Px.Width(Px.Small, name, 8) + 10;
+        float lx = Mathf.Clamp(g.X - w / 2, 4, MapRight - 4 - w);
+        var lr = new Rect2(lx, g.Y + 5, w, 13);
+        Px.Frame(this, lr, new Color(0.04f, 0.05f, 0.12f, 0.85f), sel ? tc : Px.Line2, null, 1, 2);
+        Px.TextC(this, Px.Small, lr.GetCenter().X, lr.End.Y - 3, name, 8, sel ? tc : Px.Ink);
+    }
+
+    /// <summary>A small pin for the local competitions: a short post, a square head with its icon.</summary>
+    void LocalPin(Vector2 g, string key, Color tc, bool sel, bool mine, string name, Action tap, Action<Vector2> icon, bool open = true)
+    {
+        bool held = Held(key);
+        float bob = sel ? Mathf.Floor((float)(T * 3 % 4)) switch { 1 => -1, 2 => -3, 3 => -1, _ => 0 } : 0;
+        DrawColoredPolygon(Px.Ellipse(g, 5, 2, 8), new Color(0, 0, 0, 0.4f));
+        float headY = g.Y - 12 + bob + (held ? 2 : 0);
+        DrawRect(new Rect2(g.X - 1, headY, 2, g.Y - headY), Px.Hex(0x1a1406));
+        const float r = 7;
         if (sel || mine)
         {
-            string name = d.Name.ToUpperInvariant();
-            float w = Px.Width(Px.Small, name, 8) + 10;
-            float lx = Mathf.Clamp(g.X - w / 2, 4, Size.X - EuropeMap.PanelW - 4 - w);
-            var lr = new Rect2(lx, g.Y + 5, w, 13);
-            Px.Frame(this, lr, new Color(0.04f, 0.05f, 0.12f, 0.85f), sel ? tc : Px.Line2, null, 1, 2);
-            Px.TextC(this, Px.Small, lr.GetCenter().X, lr.End.Y - 3, name, 8, sel ? tc : Px.Ink);
+            float pr = r + 3 + (float)(T * 8 % 6);
+            DrawArc(new Vector2(g.X, headY), pr, 0, Mathf.Tau, 16, new Color(tc, 1 - (pr - r - 3) / 6), 2);
         }
-        Tap("pin" + d.Id, new Rect2(g.X - 16, headY - 16, 32, g.Y - headY + 22), () => Select(d));
+        var head = new Rect2(g.X - r, headY - r, r * 2, r * 2);
+        Px.Frame(this, head, open ? tc.Darkened(0.55f) : Px.Hex(0x2a2834), open ? tc : Px.Hex(0x5a5866), null, 2, 2);
+        if (open) icon(new Vector2(g.X, headY));
+        else Lock(new Vector2(g.X, headY + 1), Px.Hex(0xb8b6c8));
+        if (mine) LeagueArt.Badge(this, new Rect2(g.X - 7, headY - r - 20, 14, 17), _ui.Club.S.Crest);
+        if (sel || mine || Named) Label(g, name, tc, sel);
+        Tap(key, new Rect2(g.X - 14, headY - 14, 28, g.Y - headY + 20), tap);
+    }
+
+    /// <summary>A tiny pitch: the lower divisions.</summary>
+    void Pitch(Vector2 c)
+    {
+        DrawRect(new Rect2(c.X - 4, c.Y - 3, 8, 6), Px.Hex(0x3c8a3c));
+        DrawRect(new Rect2(c.X - 0.5f, c.Y - 3, 1, 6), new Color(1, 1, 1, 0.8f));
+        DrawRect(new Rect2(c.X - 4, c.Y - 3, 8, 1), new Color(1, 1, 1, 0.8f));
+        DrawRect(new Rect2(c.X - 4, c.Y + 2, 8, 1), new Color(1, 1, 1, 0.8f));
+    }
+
+    void CupPin(CupDef d)
+    {
+        var g = EuropeMap.Project(d.Lon, d.Lat).Round();
+        if (Off(g)) return;
+        bool open = !Picking && Cups.Unlocked(d);
+        var tc = Px.Hex(d.Color);
+        LocalPin(g, "cup" + d.Id, tc, _cup == d, Cups.Running(d) && !Cups.Over, d.Name, () => SelectCup(d),
+            c => Cup(c - new Vector2(3, 4), 1, Cups.Wins(d) > 0 ? Px.Gold : Px.Hex(0xf4f0e0)), open);
+    }
+
+    void SelectCup(CupDef d)
+    {
+        if (Picking)
+        {
+            _ui.Toast("Pick your home country first");
+            return;
+        }
+        _cup = d;
+        _sel = null;
     }
 
     void Select(LeagueDef d)
     {
         if (Picking)
         {
-            if (d.Tier == 1)
+            if (d.Tier == 1 && !d.Lower)
             {
                 _pick = d.Countries[0];
                 _sel = d;
@@ -167,6 +412,7 @@ public sealed partial class MapScreen : PxCanvas
             return;
         }
         _sel = d;
+        _cup = null;
     }
 
     /// <summary>A padlock: a wide body under an open arch.</summary>
@@ -268,6 +514,11 @@ public sealed partial class MapScreen : PxCanvas
         var c = r.Grow(-14);
         c = new Rect2(c.Position + new Vector2(3, 0), c.Size - new Vector2(3, 0));
         if (Picking) PickPanel(c);
+        else if (_cup != null)
+        {
+            TrophyChip(new Vector2(c.End.X - TrophyW, c.Position.Y - 2));
+            CupPanel(c, _cup);
+        }
         else if (_sel != null)
         {
             TrophyChip(new Vector2(c.End.X - TrophyW, c.Position.Y - 2));
@@ -329,9 +580,9 @@ public sealed partial class MapScreen : PxCanvas
     void LeaguePanel(Rect2 c, LeagueDef d)
     {
         float x = c.Position.X, y = c.Position.Y;
-        var tc = Px.Hex(Ladder.TierColors[d.Tier - 1]);
+        var tc = Px.Hex(d.Color);
         // Tier tag and name.
-        string tag = $"{d.TierName} · TIER {d.Tier}";
+        string tag = d.Lower ? "GRASSROOTS · BELOW THE LOCALS" : $"{d.TierName} · TIER {d.Tier}";
         float tw = Px.Width(Px.Small, tag, 8) + 14;
         Px.Frame(this, new Rect2(x, y + 2, tw, 16), tc, tc.Darkened(0.5f), null, 2, 2);
         Px.Text(this, Px.Small, new Vector2(x + 7, y + 14), tag, 8, Px.Dark);
@@ -393,6 +644,83 @@ public sealed partial class MapScreen : PxCanvas
             Lock(new Vector2(b.Position.X + 22, b.GetCenter().Y + 1));
             Px.TextC(this, Px.Big, b.GetCenter().X + 8, b.GetCenter().Y + 8, more == 1 ? "WIN 1 MORE TITLE" : $"WIN {more} MORE TITLES", 22, Px.InkDim);
         }
+    }
+
+    static string RunName(int shortOf) => shortOf switch { 0 => "WON IT", 1 => "FINAL", 2 => "SEMI-FINALS", 3 => "QUARTER-FINALS", _ => "ROUND OF 16" };
+
+    void CupPanel(Rect2 c, CupDef d)
+    {
+        float x = c.Position.X, y = c.Position.Y;
+        var tc = Px.Hex(d.Color);
+        string tag = d.Special ? "SPECIAL TOURNAMENT" : "NATIONAL CUP";
+        float tw = Px.Width(Px.Small, tag, 8) + 14;
+        Px.Frame(this, new Rect2(x, y + 2, tw, 16), tc, tc.Darkened(0.5f), null, 2, 2);
+        Px.Text(this, Px.Small, new Vector2(x + 7, y + 14), tag, 8, Px.Dark);
+        if (!d.Special) Px.Flag(this, new Rect2(x + tw + 8, y + 4, 15, 11), Ladder.CountryOf(d.Country).Nation);
+        else Px.Text(this, Px.Small, new Vector2(x + tw + 8, y + 14), "ALL OF EUROPE", 8, Px.InkDim);
+        y += 22;
+        foreach (var line in Px.Wrap(Px.Big, d.Name.ToUpperInvariant(), 30, c.Size.X).Take(2))
+        {
+            y += 27;
+            Px.Text(this, Px.Big, new Vector2(x, y), line, 30, tc, new Color(0, 0, 0, 0.6f), 2);
+        }
+        y += 6;
+        foreach (var line in Px.Wrap(Px.Small, d.Blurb.ToUpperInvariant(), 8, c.Size.X).Take(3))
+        {
+            y += 12;
+            Px.Text(this, Px.Small, new Vector2(x, y), line, 8, Px.InkDim);
+        }
+        y += 14;
+        int you = _ui.Club.TeamRating();
+        int lvl = (int)Math.Round(Cups.LevelOf(d));
+        Stat(x, ref y, c.Size.X, "FORMAT", $"{d.Size} CLUBS · KNOCKOUT", Px.Ink);
+        Stat(x, ref y, c.Size.X, d.Special ? "CLUBS" : "CLUBS (LIKE YOUR LEAGUE)", $"~{lvl} OVR", you >= lvl + 3 ? Px.Win : you <= lvl - 4 ? Px.Loss : Px.Ink);
+        Stat(x, ref y, c.Size.X, "WINNERS GET", Px.Thousands(Cups.PrizeOf(d)), Px.Hex(0xffe066));
+        int wins = Cups.Wins(d), best = Cups.Best(d);
+        Stat(x, ref y, c.Size.X, "YOUR RECORD", wins > 0 ? (wins == 1 ? "WON 1" : $"WON {wins}") : best > 0 ? $"BEST: {RunName(best)}" : "NOT PLAYED", wins > 0 ? Px.Gold : Px.InkDim);
+
+        var b = new Rect2(x, c.End.Y - 48, c.Size.X, 46);
+        if (Cups.Running(d))
+        {
+            string where = Cups.Over ? (Cups.Won ? "YOU WON IT" : "YOUR RUN IS OVER") : $"YOU'RE IN · NEXT: {Cups.RoundName(Cups.S.Round)}";
+            Px.Text(this, Px.Small, new Vector2(x, b.Position.Y - 10), where, 8, Px.Win);
+            GoldButton("go", b, "GO TO THE CUP  >", 26, () => _ui.Go(_ui.CupHub));
+        }
+        else if (!Cups.Unlocked(d))
+        {
+            int more = d.Need - L.Trophies;
+            Px.Text(this, Px.Small, new Vector2(x, b.Position.Y - 10), $"INVITATION ONLY · NEEDS {d.Need} LEAGUE TITLES", 8, Px.Loss);
+            Px.Frame(this, b, new Color(0.18f, 0.17f, 0.24f), Px.Line2, Px.ShadowSoft);
+            Lock(new Vector2(b.Position.X + 22, b.GetCenter().Y + 1));
+            Px.TextC(this, Px.Big, b.GetCenter().X + 8, b.GetCenter().Y + 8, more == 1 ? "WIN 1 MORE TITLE" : $"WIN {more} MORE TITLES", 22, Px.InkDim);
+        }
+        else if (Cups.Spent(d))
+        {
+            Px.Text(this, Px.Small, new Vector2(x, b.Position.Y - 10), "ONE RUN A SEASON", 8, Px.InkDim);
+            Px.Frame(this, b, new Color(0.18f, 0.17f, 0.24f), Px.Line2, Px.ShadowSoft);
+            Px.TextC(this, Px.Big, b.GetCenter().X, b.GetCenter().Y + 7, "BACK AFTER YOUR SEASON", 20, Px.InkDim);
+        }
+        else
+        {
+            Px.Text(this, Px.Small, new Vector2(x, b.Position.Y - 10), d.Special ? "YOUR CLUB IS INVITED" : "OPEN TO EVERY CLUB · ONE RUN A SEASON", 8, Px.Win);
+            GoldButton("enter", b, "ENTER THE CUP  >", 24, () => AskEnter(d));
+        }
+    }
+
+    void AskEnter(CupDef d)
+    {
+        if (Cups.Active && !Cups.Over)
+            _ui.Open(new ConfirmModal(_ui, $"Leave the {Cups.Def.Name}?",
+                $"You're still in it ({Cups.RoundName(Cups.S.Round, false).ToLowerInvariant()} next). Leaving counts as going out now, with no prize money.", "Leave it", () => Enter(d)));
+        else Enter(d);
+    }
+
+    void Enter(CupDef d)
+    {
+        // A finished run's prize, if it was never collected.
+        if (Cups.Active && Cups.Over) _ui.Club.Earn(Cups.PayPrize());
+        Cups.Enter(d);
+        _ui.Go(_ui.CupHub);
     }
 
     void Stat(float x, ref float y, float w, string label, string value, Color c)

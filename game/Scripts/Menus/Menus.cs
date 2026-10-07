@@ -22,6 +22,9 @@ public sealed partial class Menus : Control
     public readonly global::GameNight.League.LeagueState Season;
     public readonly global::GameNight.League.LeagueScreen League;
     public readonly global::GameNight.League.MapScreen Map;
+    /// <summary>The cup run (one at a time) and its screen.</summary>
+    public readonly global::GameNight.League.CupState CupRun;
+    public readonly global::GameNight.League.CupScreen CupHub;
     readonly Control _modals;
     readonly ToastLayer _toast;
     Control _current;
@@ -44,6 +47,8 @@ public sealed partial class Menus : Control
         Season = new global::GameNight.League.LeagueState(OS.GetUserDataDir(), club);
         League = Add(new global::GameNight.League.LeagueScreen(this));
         Map = Add(new global::GameNight.League.MapScreen(this));
+        CupRun = new global::GameNight.League.CupState(OS.GetUserDataDir(), club, Season);
+        CupHub = Add(new global::GameNight.League.CupScreen(this));
         _modals = new Control { MouseFilter = MouseFilterEnum.Ignore };
         _modals.SetAnchorsPreset(LayoutPreset.FullRect);
         AddChild(_modals);
@@ -118,7 +123,7 @@ public sealed partial class Menus : Control
         }
         if (_current != Home)
         {
-            Go(_current == League ? Map : Home);
+            Go(_current == League || _current == CupHub ? Map : Home);
             return true;
         }
         return false;

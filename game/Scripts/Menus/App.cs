@@ -58,6 +58,7 @@ public sealed partial class App : Node
             if (arg == "--screen=club") _menus.Go(_menus.ClubStudio);
             if (arg == "--screen=stadium") _menus.Go(_menus.Stadium);
             global::GameNight.League.LeagueScreen.Debug(_menus, arg);
+            global::GameNight.League.CupScreen.Debug(_menus, arg);
             if (arg.StartsWith("--tab=")) _menus.ClubStudio.Tab = int.Parse(arg[6..]);
             if (arg.StartsWith("--crest="))
             {

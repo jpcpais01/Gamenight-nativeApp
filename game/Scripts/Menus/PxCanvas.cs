@@ -94,6 +94,12 @@ public abstract partial class PxCanvas : Control
     /// <summary>Is this area being held down right now?</summary>
     protected bool Held(string key) => _down && !_dragging && _inside && _press == key;
 
+    /// <summary>The finger turned out to be dragging something else (a map): the press won't fire.</summary>
+    protected void CancelPress()
+    {
+        if (_down) _dragging = true;
+    }
+
     /// <summary>Is there a tap area here?</summary>
     protected bool OnTapArea(Vector2 p) => HitAt(p) != null;
 

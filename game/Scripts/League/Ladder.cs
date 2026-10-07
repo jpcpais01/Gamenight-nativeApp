@@ -35,9 +35,35 @@ public sealed class LeagueDef
     /// <summary>League titles needed to be let in.</summary>
     public int Need;
 
-    public double Level => Ladder.Levels[Tier - 1];
-    public double PrizeScale => Ladder.PrizeScale[Tier - 1];
-    public string TierName => Ladder.TierNames[Tier - 1];
+    /// <summary>A lower division: below the local league, only on the map when you zoom in.</summary>
+    public bool Lower;
+
+    public double Level => Lower ? 50 : Ladder.Levels[Tier - 1];
+    public double PrizeScale => Lower ? 0.6 : Ladder.PrizeScale[Tier - 1];
+    public string TierName => Lower ? "GRASSROOTS" : Ladder.TierNames[Tier - 1];
+    public int Color => Lower ? Ladder.Grassroots : Ladder.TierColors[Tier - 1];
+}
+
+/// <summary>A knockout cup on the map: a national cup (its clubs from one country, as strong as
+/// your league) or a special tournament (invited clubs from everywhere, at its own level).</summary>
+public sealed class CupDef
+{
+    public string Id = "", Name = "", Blurb = "";
+    public float Lon, Lat;
+    /// <summary>Where its clubs come from; empty for a special tournament.</summary>
+    public string Country = "";
+    /// <summary>League titles needed for an invitation.</summary>
+    public int Need;
+    /// <summary>Clubs in the draw: 16 or 8.</summary>
+    public int Size = 16;
+    /// <summary>A special tournament's level; a national cup follows your league.</summary>
+    public double Level;
+    /// <summary>A special tournament's prize for the winners; a national cup's follows your league.</summary>
+    public int Prize;
+
+    public bool Special => Country == "";
+    public int Rounds => Size == 8 ? 3 : 4;
+    public int Color => Special ? 0xff8fd0 : 0x7fe0a0;
 }
 
 /// <summary>Your career across the map: the country you started in and the titles you've won.</summary>
@@ -50,6 +76,12 @@ public sealed class CareerSave
     /// <summary>Best finish per league.</summary>
     public Dictionary<string, int> Best = new();
     public int Seasons;
+    /// <summary>Cups won, per cup.</summary>
+    public Dictionary<string, int> Cups = new();
+    /// <summary>Furthest run per cup, in rounds short of the trophy (0 = won, 1 = lost the final).</summary>
+    public Dictionary<string, int> CupBest = new();
+    /// <summary>The season (Seasons) each cup was last entered: one run per cup each season.</summary>
+    public Dictionary<string, int> Entered = new();
 }
 
 /// <summary>
@@ -64,6 +96,8 @@ public static class Ladder
     public static readonly string[] TierNames = { "LOCAL", "REGIONAL", "PREMIER", "ELITE" };
     /// <summary>Bronze, silver, gold, diamond.</summary>
     public static readonly int[] TierColors = { 0xd9915a, 0xc8d4e6, 0xffd447, 0x7ff6ff };
+    /// <summary>The lower divisions: earthy.</summary>
+    public const int Grassroots = 0x9fb86a;
 
     static Nation Own(string code, int a, int b, int c, bool vertical, string first, string last) => new()
     {
@@ -188,13 +222,48 @@ public static class Ladder
         new() { Id = "dan", Tier = 3, Need = 3, Name = "Danube Premier", Lon = 16.37f, Lat = 48.21f, Countries = new[] { "GER", "ITA", "POL", "SWE", "CRO" }, Blurb = "Rich clubs from the heart of the continent, built to win." },
 
         new() { Id = "gold", Tier = 4, Need = 6, Name = "The Golden League", Lon = 8.54f, Lat = 47.37f, Countries = All, Blurb = "The summit. Sixteen superclubs, every team full of ballers." },
+
+        // The lower divisions: zoom in to find them.
+        new() { Id = "por2", Tier = 1, Lower = true, Name = "Liga das Aldeias", Lon = -8.61f, Lat = 41.15f, Countries = new[] { "POR" }, Blurb = "Village sides up north: dirt pitches, family crowds and a grill behind the goal." },
+        new() { Id = "esp2", Tier = 1, Lower = true, Name = "Liga de los Pueblos", Lon = -5.98f, Lat = 37.39f, Countries = new[] { "ESP" }, Blurb = "Andalusian villages in the heat. Kick-off waits for the shade." },
+        new() { Id = "fra2", Tier = 1, Lower = true, Name = "Ligue des Villages", Lon = 4.84f, Lat = 45.76f, Countries = new[] { "FRA" }, Blurb = "Valley clubs on sloping pitches, a bakery van at every match." },
+        new() { Id = "eng2", Tier = 1, Lower = true, Name = "Parks League", Lon = -2.24f, Lat = 53.48f, Countries = new[] { "ENG" }, Blurb = "Council pitches, jumpers in the rain and goalposts carried from the van." },
+        new() { Id = "ger2", Tier = 1, Lower = true, Name = "Kreisklasse", Lon = 11.58f, Lat = 48.14f, Countries = new[] { "GER" }, Blurb = "Bavarian villages with a beer tent bigger than the stand." },
+        new() { Id = "ita2", Tier = 1, Lower = true, Name = "Lega dei Paesi", Lon = 14.27f, Lat = 40.85f, Countries = new[] { "ITA" }, Blurb = "Southern hill towns: the priest blesses the pitch, the whole town comes." },
+        new() { Id = "ned2", Tier = 1, Lower = true, Name = "Dorpenklasse", Lon = 4.48f, Lat = 51.92f, Countries = new[] { "NED" }, Blurb = "Village clubs by the dykes, a canteen with hot chocolate." },
+        new() { Id = "pol2", Tier = 1, Lower = true, Name = "Liga Wiejska", Lon = 19.94f, Lat = 50.06f, Countries = new[] { "POL" }, Blurb = "Farm-town clubs from the south, mountains on the horizon." },
+        new() { Id = "swe2", Tier = 1, Lower = true, Name = "Bygdeligan", Lon = 18.07f, Lat = 59.33f, Countries = new[] { "SWE" }, Blurb = "Lakeside pitches by red wooden houses, games till ten at night." },
+        new() { Id = "cro2", Tier = 1, Lower = true, Name = "Seoska Liga", Lon = 16.44f, Lat = 43.51f, Countries = new[] { "CRO" }, Blurb = "Island and coast villages: a ferry to every away game." },
     };
+
+    /// <summary>The cups: one for every home country, open to all, and a few special tournaments
+    /// that invite clubs from everywhere once you've won enough.</summary>
+    public static readonly CupDef[] Cups =
+    {
+        new() { Id = "porcup", Name = "Taça das Vilas", Country = "POR", Lon = -8.43f, Lat = 40.2f, Blurb = "Portugal's people's cup: village clubs dreaming of a giant-killing." },
+        new() { Id = "espcup", Name = "Copa de los Barrios", Country = "ESP", Lon = -0.38f, Lat = 39.47f, Blurb = "Sixteen Spanish clubs, one night each round, the final by the sea." },
+        new() { Id = "fracup", Name = "Coupe des Quartiers", Country = "FRA", Lon = -0.58f, Lat = 44.84f, Blurb = "France's open cup: anyone can beat anyone over ninety minutes." },
+        new() { Id = "engcup", Name = "The Sunday Shield", Country = "ENG", Lon = -0.13f, Lat = 51.5f, Blurb = "The oldest knockout in the country. Muddy ties, magic nights." },
+        new() { Id = "gercup", Name = "Dorfpokal", Country = "GER", Lon = 9.99f, Lat = 53.55f, Blurb = "Germany's cup: works teams and village clubs, all the way to the final." },
+        new() { Id = "itacup", Name = "Coppa dei Campanili", Country = "ITA", Lon = 11.25f, Lat = 43.77f, Blurb = "The bell-tower cup: town against town, a trophy older than most clubs." },
+        new() { Id = "nedcup", Name = "Polderbeker", Country = "NED", Lon = 6.57f, Lat = 53.22f, Blurb = "A Dutch cup in the wind: short passes, long celebrations." },
+        new() { Id = "polcup", Name = "Puchar Podwórek", Country = "POL", Lon = 18.65f, Lat = 54.35f, Blurb = "Poland's courtyard cup, decided on the Baltic coast." },
+        new() { Id = "swecup", Name = "Folkcupen", Country = "SWE", Lon = 13.0f, Lat = 55.6f, Blurb = "Sweden's people's cup, played through the light summer nights." },
+        new() { Id = "crocup", Name = "Kup Kvartova", Country = "CRO", Lon = 14.44f, Lat = 45.33f, Blurb = "Croatia's cup: the harbour towns against the capital's quarters." },
+
+        new() { Id = "algarve", Name = "Algarve Winter Cup", Lon = -7.93f, Lat = 37.02f, Size = 8, Level = 57, Prize = 14000, Blurb = "Winter sun on the south coast: eight invited clubs, a week of football by the beach." },
+        new() { Id = "riviera", Name = "Riviera Summer Trophy", Lon = 7.26f, Lat = 43.7f, Size = 8, Need = 1, Level = 65, Prize = 30000, Blurb = "Pre-season on the Riviera: yachts in the harbour, champions on the pitch." },
+        new() { Id = "midnight", Name = "Midnight Sun Cup", Lon = 10.75f, Lat = 59.91f, Size = 8, Need = 2, Level = 70, Prize = 45000, Blurb = "Kick-off at midnight in the far north, and the sun never sets." },
+        new() { Id = "champions", Name = "Champions Invitational", Lon = 19.04f, Lat = 47.5f, Need = 4, Level = 79, Prize = 120000, Blurb = "Sixteen title winners from across Europe, by invitation only. The night of the year." },
+    };
+
+    public static CupDef CupById(string id) => Cups.FirstOrDefault(c => c.Id == id);
 
     public static LeagueDef ById(string id) => Leagues.FirstOrDefault(l => l.Id == id);
 
     public static Country CountryOf(string code) => Countries.FirstOrDefault(c => c.Code == code) ?? Countries[3];
 
-    public static LeagueDef EntryOf(string code) => Leagues.FirstOrDefault(l => l.Tier == 1 && l.Countries[0] == code) ?? Leagues[3];
+    public static LeagueDef EntryOf(string code) => Leagues.FirstOrDefault(l => l.Tier == 1 && !l.Lower && l.Countries[0] == code) ?? Leagues[3];
 
     public static CareerSave Load(string path)
     {
