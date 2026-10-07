@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("1.22", "The UPDATE box now shows what's new before you download: the patch notes of every version since yours, newest first, scrolling above the UPDATE NOW button."),
         ("1.21", "The walk-out feels human: every player walks at his own pace, keeps his own gap, drifts a little and steps out of time with the others. They glance up at the stands, at team-mates and down the tunnel, and shift their weight in the line-up."),
         ("1.20", "Training works again: drills opened to a black screen because the touchline crashed every frame at the training ground (it has no photographers). Fixed."),
         ("1.19", "Card stats fit properly now: the six numbers sit in two neat centred columns above where the card narrows, on every card and event design, instead of running into the edges and the bottom label."),

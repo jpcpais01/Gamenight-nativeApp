@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Godot;
 
 namespace GameNight.Update;
@@ -29,13 +30,17 @@ public sealed partial class Updater : Node
     public string Offer { get; private set; }
     public long Size { get; private set; }
     public string Error { get; private set; } = "";
+    /// <summary>What the new version brings: its patch notes newer than this version, newest
+    /// first (null while they load).</summary>
+    public (string v, string note)[] Notes { get; private set; }
 
     /// <summary>How much of the download is in, 0..1.</summary>
     public float Progress => _get != null && _get.GetBodySize() > 0 ? Mathf.Clamp((float)_get.GetDownloadedBytes() / _get.GetBodySize(), 0, 1) : 0;
 
     readonly bool _android = OS.GetName() == "Android", _windows = OS.GetName() == "Windows";
     string _url;
-    HttpRequest _ask, _get;
+    HttpRequest _ask, _get, _notes;
+    string _notesFor;
     double _next;
     GodotObject _java;
 
@@ -98,6 +103,7 @@ public sealed partial class Updater : Node
                 Size = a.GetProperty("size").GetInt64();
                 Offer = tag;
                 Now = Stage.Available;
+                FetchNotes(tag);
                 return;
             }
         }
@@ -105,6 +111,29 @@ public sealed partial class Updater : Node
         {
             GD.Print("Update check: ", e.Message);
         }
+    }
+
+    /// <summary>The patch notes as the new version has them: its PatchNotes.cs at the release's
+    /// tag, read for every entry newer than ours.</summary>
+    void FetchNotes(string tag)
+    {
+        if (_notesFor == tag || _notes != null) return;
+        _notesFor = tag;
+        Notes = null;
+        _notes = new HttpRequest { Timeout = 20 };
+        AddChild(_notes);
+        _notes.RequestCompleted += (result, code, headers, body) =>
+        {
+            _notes.QueueFree();
+            _notes = null;
+            var list = new System.Collections.Generic.List<(string, string)>();
+            if (result == (long)HttpRequest.Result.Success && code == 200)
+                foreach (Match m in Regex.Matches(System.Text.Encoding.UTF8.GetString(body), @"\(""(\d+\.\d+)"",\s*""((?:[^""\\]|\\.)*)""\)"))
+                    if (Newer(m.Groups[1].Value, Version)) list.Add((m.Groups[1].Value, Regex.Unescape(m.Groups[2].Value)));
+            Notes = list.ToArray();
+            if (list.Count == 0 && code != 200) _notesFor = null;
+        };
+        _notes.Request($"https://raw.githubusercontent.com/jpcpais01/Gamenight-nativeApp/v{tag}/game/Scripts/Menus/PatchNotes.cs", new[] { "User-Agent: GameNight" });
     }
 
     static bool Newer(string a, string b)
