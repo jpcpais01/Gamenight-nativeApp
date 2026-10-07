@@ -58,6 +58,8 @@ public sealed partial class PlayersView
     readonly BodyShape[] _body = new BodyShape[N];
     readonly float[] _hipBase = new float[N], _bodyScale = new float[N];
     readonly int[] _hair = new int[N];
+    /// <summary>Each head's size and proportions (Body.HeadOf).</summary>
+    readonly Vector3[] _headScale = new Vector3[N];
 
     // Per player, frame to frame.
     readonly float[] _sF = new float[N], _spF = new float[N], _sS = new float[N], _spS = new float[N], _headYaw = new float[N];
@@ -228,6 +230,10 @@ public sealed partial class PlayersView
             _hipBase[id] = hip;
             _bodyScale[id] = BASE_HEIGHT / (hip + 0.04f + 0.6f * (float)b.TorsoL + ((float)b.NeckLen - 1) * 0.08f + HEAD_TOP);
             _hair[id] = Math.Clamp(p.Look.HairStyle, 0, 3);
+            var hd = Body.HeadOf(p.Name, id * 31 + p.Index);
+            // (A touch bigger than the PWA's head, in proportion to the shoulders.)
+            float hs = 1.05f * (float)hd.Size;
+            _headScale[id] = new Vector3(hs * (float)hd.Width, hs * (float)hd.Height, hs * (float)hd.Depth);
 
             bool gk = p.Role == Role.GK;
             int shirt = gk ? kit.GkShirt : kit.Shirt;
@@ -266,6 +272,8 @@ public sealed partial class PlayersView
             Set(Part.Head, skin);
             // The head's face: brows and facial hair in his hair colour.
             ka[(int)Part.Head][id] = Lin4(hair, Body.FacialHair(p.Name, id * 31 + p.Index));
+            // ... and the build of the face: jaw, chin, cheekbones, nose, brow (-1..1, shader).
+            kb[(int)Part.Head][id] = new Vector4((float)hd.Jaw, (float)hd.Chin, (float)hd.Cheek, (float)(hd.Nose + 3 * Math.Round(hd.Brow * 4)));
             Set(Part.Thigh, skin);
             Set(Part.HairShort, hair);
             Set(Part.HairCurly, hair);
@@ -1735,14 +1743,14 @@ public sealed partial class PlayersView
         float top = 0.075f * neckLen;
         var Hd = Chain(Nk, 0, top, 0, hP * 0.6f, hY * 0.7f, headRollA * 0.6f);
         Hd = ChainT(Hd, 0, 0.02f * torsoL + (neckLen - 1) * 0.08f - top, 0);
-        // (The head a touch bigger than the PWA's, in proportion to the shoulders.)
-        const float hk = 1.05f;
-        Put(Part.Head, id, Hd, hk, hk, hk);
+        // His own head: size and proportions here (the hair follows), the face's build in the shader.
+        var hk = _headScale[id];
+        Put(Part.Head, id, Hd, hk.X, hk.Y, hk.Z);
         int style = _hair[id];
         for (int hp = (int)Part.HairShort; hp <= (int)Part.HairQuiff; hp++) Hide((Part)hp, id);
         // A buzz cut: the crop's shape hugging the skull.
-        if (style == 1) Put(Part.HairShort, id, Hd, 0.985f * hk, 0.95f * hk, 0.985f * hk);
-        else Put(HairOfStyle[style], id, Hd, hk, hk, hk);
+        if (style == 1) Put(Part.HairShort, id, Hd, 0.985f * hk.X, 0.95f * hk.Y, 0.985f * hk.Z);
+        else Put(HairOfStyle[style], id, Hd, hk.X, hk.Y, hk.Z);
 
         // Arms (left = +x local; swing + = forward). The shoulder moves with the arm.
         float armLen = (float)bs.ArmLen, armW = (float)bs.Arm, shoulder = (float)bs.Shoulder;

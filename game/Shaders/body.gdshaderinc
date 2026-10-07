@@ -8,7 +8,8 @@
 uniform int part = 0;
 // Per player (linear colours): torso a = trim + number, b = number colour + pattern;
 // sleeve a = trim + captain's band, b = skin; forearm a = cuff; shorts, shin, boot a = trim;
-// head a = hair colour + facial hair (0 none, 1 stubble, 2 beard, 3 moustache and goatee).
+// head a = hair colour + facial hair (0 none, 1 stubble, 2 beard, 3 moustache and goatee),
+// b = the face's build: jaw, chin, cheekbones, nose + 3 * round(brow * 4) (each -1..1).
 uniform vec4 ka[22];
 uniform vec4 kb[22];
 
@@ -39,7 +40,23 @@ void vertex() {
 	base = COLOR.rgb;
 	pid = int(INSTANCE_CUSTOM.w + 0.5);
 	vec3 p = VERTEX;
-	if (part == 1 || part == 6) {
+	lp = VERTEX;
+	if (part == 2) {
+		// His own face on the shared head: the jaw wider or narrower, the chin longer or
+		// shorter, cheekbones, nose and brow. (The face is still painted where it was, lp.)
+		vec4 b = kb[pid];
+		float k = round(b.w / 3.0);
+		float nose = b.w - 3.0 * k, brow = k / 4.0;
+		vec3 q = p - vec3(0.0, 0.13, 0.008);
+		float fv = q.y / 0.104, fu = q.x / 0.094, fz = q.z / 0.104;
+		float front = smoothstep(0.3, 0.8, fz);
+		float low = smoothstep(0.0, -0.9, fv);
+		q.x *= 1.0 + 0.11 * b.x * low + 0.06 * b.z * exp(-(fv + 0.05) * (fv + 0.05) / 0.0484) * (1.0 - low);
+		q.y -= 0.013 * b.y * smoothstep(-0.45, -1.15, fv);
+		q.z += front * (0.007 * nose * exp(-(fu * fu) / 0.03 - (fv + 0.12) * (fv + 0.12) / 0.0625)
+			+ 0.004 * brow * exp(-(fv - 0.25) * (fv - 0.25) / 0.0064) * (1.0 - smoothstep(0.6, 0.9, abs(fu))));
+		VERTEX = q + vec3(0.0, 0.13, 0.008);
+	} else if (part == 1 || part == 6) {
 		// Soft-body bend: vertices turn progressively about the part's origin, so the torso
 		// curves through the waist and the thigh into the knee instead of hinging.
 		float t = part == 1 ? clamp(p.y / 0.5, 0.0, 1.0) : clamp(-p.y / 0.43, 0.0, 1.0);
@@ -55,7 +72,6 @@ void vertex() {
 		NORMAL = toeRot(NORMAL, a);
 	}
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
-	lp = VERTEX;
 }
 
 float band(float x, float a, float b) { return step(a, x) * step(x, b); }

@@ -71,6 +71,49 @@ public static class Body
         return r < 0.5 ? 0 : r < 0.74 ? 1 : r < 0.9 ? 2 : 3;
     }
 
+    /// <summary>A person's head, fixed by his name like his facial hair: overall size and
+    /// proportions (multipliers near 1), and the face's build (each -1..1): jaw width, chin
+    /// length, cheekbones, nose, brow.</summary>
+    public readonly record struct Head(double Size, double Width, double Height, double Depth,
+        double Jaw, double Chin, double Cheek, double Nose, double Brow);
+
+    // Base shapes: width, height, depth, jaw, chin, cheek.
+    static readonly double[][] HeadTypes =
+    {
+        new[] { 1.0, 1.0, 1.0, 0.0, 0.0, 0.0 },     // oval
+        new[] { 1.05, 0.96, 1.0, 0.2, -0.5, 0.4 },  // round
+        new[] { 1.03, 0.99, 1.0, 0.9, 0.0, 0.0 },   // square
+        new[] { 0.95, 1.06, 1.01, -0.2, 0.7, -0.2 },// long
+        new[] { 1.0, 1.0, 1.0, -0.8, 0.4, 0.7 },    // heart (wide cheekbones, narrow chin)
+        new[] { 0.98, 1.0, 1.02, 1.0, -0.2, -0.5 }, // pear (wide jaw)
+    };
+
+    public static Head HeadOf(string name, int fallback = 0)
+    {
+        uint h = 2166136261;
+        if (string.IsNullOrEmpty(name)) h ^= (uint)fallback * 2246822519u;
+        else foreach (char ch in name) h = (h ^ ch) * 16777619;
+        double R()
+        {
+            h ^= h << 13;
+            h ^= h >> 17;
+            h ^= h << 5;
+            return (h % 10007) / 10007.0;
+        }
+        double J(double amt) => (R() - 0.5) * 2 * amt;
+        var t = HeadTypes[(int)(R() * HeadTypes.Length) % HeadTypes.Length];
+        return new Head(
+            Size: 1 + J(0.055),
+            Width: t[0] + J(0.03),
+            Height: t[1] + J(0.03),
+            Depth: t[2] + J(0.03),
+            Jaw: System.Math.Clamp(t[3] + J(0.35), -1, 1),
+            Chin: System.Math.Clamp(t[4] + J(0.4), -1, 1),
+            Cheek: System.Math.Clamp(t[5] + J(0.35), -1, 1),
+            Nose: J(1),
+            Brow: J(1));
+    }
+
     public static BodyShape Shape(double heightM, double weightKg, double strength, double seed)
     {
         var type = TypeOf(heightM, weightKg, strength);
