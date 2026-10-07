@@ -379,25 +379,23 @@ public sealed partial class Match
                 }
             }
         }
-        // Double tap SPRINT on the ball: a skill move (the stick picks it). Off the ball SPRINT is
-        // only ever pressing, the same as before.
-        if (sprintDown && attacking && Owner == c && Phase == Phase.Play && SetPiece == null)
-        {
-            if (Time - seat.LastSprintTap < 0.32)
-            {
-                bool idle = m < 0.3;
-                TryTrick(c, idle ? 0 : input.MoveX / m, idle ? 0 : -input.MoveY / m, idle);
-                seat.LastSprintTap = -10;
-            }
-            else seat.LastSprintTap = Time;
-        }
         // One button: going hard. Whenever the ball isn't ours, that's pressing for it.
         seat.PressHeld = input.Sprint && Owner?.Team != c.Team;
         input.Events.Clear();
-        // Sliding down on Sprint commits to a tackle; sliding left commits to a slide tackle.
+        // Sliding on Sprint. Defence: down commits to a tackle, left to a slide tackle. On the ball:
+        // the skill move in that slot (whatever the stick says; it only steers the way out).
         if (input.TackleSwipe != TackleSwipe.None)
         {
-            if (!attacking)
+            if (input.TackleSwipe >= TackleSwipe.SkillUp)
+            {
+                var move = seat.Slots[input.TackleSwipe - TackleSwipe.SkillUp];
+                if (attacking && Owner == c && move != SkillMove.None && Skills.Knows(Math.Max(1, c.Attrs.Skill), move))
+                {
+                    bool idle = m < 0.3;
+                    TryTrick(c, idle ? 0 : input.MoveX / m, idle ? 0 : -input.MoveY / m, idle, move);
+                }
+            }
+            else if (!attacking)
             {
                 if (seat.LungeOn && input.TackleSwipe == TackleSwipe.Slide) seat.LungeSlide = true;
                 else

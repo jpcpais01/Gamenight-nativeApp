@@ -165,8 +165,9 @@ public sealed class Seat
     public double SwitchT;
     internal bool SprintWas;
     internal double LastTackleTap = -10;
-    /// <summary>Last SPRINT press on the ball (a second one quickly after is a skill move).</summary>
-    internal double LastSprintTap = -10;
+    /// <summary>His skill moves, by the way he slides SPRINT on the ball: up, left, right, down.
+    /// None leaves that slide doing nothing; so does a move the man on the ball can't do.</summary>
+    public readonly SkillMove[] Slots = (SkillMove[])Skills.DefaultSlots.Clone();
     /// <summary>Sprint-swipe tackle: committed, waiting for the moment to strike.</summary>
     internal bool LungeOn, LungeSlide;
     internal double LungeUntil;

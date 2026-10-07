@@ -278,6 +278,8 @@ public partial class Main : Node
         PickExplosions();
         if (Request?.Demo == true || Request?.Watch == true || _coach) _match.AutoPlay = true;
         _match.Versus = _versus && !_coach;
+        // The club's skill slots (slides of SPRINT on the ball).
+        if (Ground.Club?.S.SkillSlots is { Length: 4 } slots) slots.CopyTo(_match.Seats[0].Slots, 0);
         if (_coach)
         {
             _match.Managed[0] = _match.Managed[1] = true;

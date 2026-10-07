@@ -21,7 +21,7 @@ public sealed class Gamepad
 
     readonly ulong[] _downAt = new ulong[3];
     readonly int _dev;
-    bool _tackleWas, _slideWas, _startWas;
+    bool _flickWas, _tackleWas, _slideWas, _startWas;
 
     /// <summary>The pad with this device number (one per player in a 1v1).</summary>
     public Gamepad(int dev) => _dev = dev;
@@ -69,6 +69,14 @@ public sealed class Gamepad
             Set(0, a || bx, bx);
             Set(1, yb, lb);
             Set(2, bb, false);
+            // Skill slots: flick the right stick up, left, right or down.
+            float rx = Ax(JoyAxis.RightX), ry = Ax(JoyAxis.RightY);
+            bool flick = rx * rx + ry * ry > 0.5f;
+            if (flick && !_flickWas)
+                Input.TackleSwipe = MathF.Abs(ry) >= MathF.Abs(rx)
+                    ? (ry < 0 ? TackleSwipe.SkillUp : TackleSwipe.SkillDown)
+                    : (rx < 0 ? TackleSwipe.SkillLeft : TackleSwipe.SkillRight);
+            _flickWas = flick;
         }
         _tackleWas = bb;
         _slideWas = bx;

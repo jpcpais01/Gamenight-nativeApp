@@ -49,11 +49,12 @@ public sealed partial class App : Node
         AddChild(top);
         top.AddChild(splash);
         StartDemo();
-        // Debug: `-- --shot=out.png [--screen=squad|store|club|notes|drills]` saves a frame and quits.
+        // Debug: `-- --shot=out.png [--screen=squad|skills|store|club|notes|drills]` saves a frame and quits.
         foreach (var arg in OS.GetCmdlineUserArgs())
         {
             if (arg.StartsWith("--shot=")) _shot = arg["--shot=".Length..];
             if (arg == "--screen=squad") _menus.Go(_menus.Squad);
+            if (arg == "--screen=skills") { _menus.Go(_menus.Squad); _menus.Squad.OpenSkills(); }
             if (arg == "--screen=store") _menus.Go(_menus.Store);
             if (arg == "--screen=club") _menus.Go(_menus.ClubStudio);
             if (arg == "--screen=stadium") _menus.Go(_menus.Stadium);

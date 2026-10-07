@@ -43,6 +43,7 @@ public sealed partial class SquadScreen : PxCanvas
     public void Opened()
     {
         Unpick();
+        CloseSkills();
         _roster.ResetScroll();
     }
 
@@ -67,6 +68,11 @@ public sealed partial class SquadScreen : PxCanvas
 
     protected override void Paint()
     {
+        if (_skills)
+        {
+            PaintSkills();
+            return;
+        }
         float W = Size.X, H = Size.Y;
         NightBackdrop(new[] { Px.Hex(0x0a0820), Px.Hex(0x100d30), Px.Hex(0x161242), Px.Hex(0x1b1652) });
         float cw = Mathf.Min(W - 24, 1180), x0 = (W - cw) / 2;
@@ -103,7 +109,7 @@ public sealed partial class SquadScreen : PxCanvas
         var badge = TeamBadge(new Rect2(rx + 7, 12, 82, 36));
         Lines(new Rect2(badge.End.X + 5, 12, room.End.X - 7 - badge.End.X - 5, 36), Club.Starters());
         RosterHead(new Vector2(rx + 7, 56), side - 14);
-        float listTop = 106, foot = 44 + (Selected >= 0 && Club.Starters()[Selected] != null || Club.HasCustom ? 34 : 0);
+        float listTop = 106, foot = 78 + (Selected >= 0 && Club.Starters()[Selected] != null || Club.HasCustom ? 34 : 0);
         DrawRect(new Rect2(rx + 3, listTop - 2, side - 6, 1), Px.Line);
         _roster.Position = new Vector2(rx + 3, listTop);
         _roster.Size = new Vector2(side - 6, room.End.Y - listTop - foot);
@@ -266,6 +272,8 @@ public sealed partial class SquadScreen : PxCanvas
             GhostButton("resetpos", new Rect2(r.Position.X, y, r.Size.X, 28), "RESET SPOTS", 16, () => Club.ResetPositions());
             y += 34;
         }
+        GhostButton("skills", new Rect2(r.Position.X, y, r.Size.X, 28), "SKILL MOVES", 16, OpenSkills, Px.Gold, Px.Gold);
+        y += 34;
         GoldButton("auto", new Rect2(r.Position.X, y, r.Size.X, 30), "AUTO-PICK BEST XI", 18, () =>
         {
             Unpick();

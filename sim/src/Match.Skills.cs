@@ -3,7 +3,7 @@ using System;
 namespace GameNight.Sim;
 
 /// <summary>
-/// Skill moves (double tap SPRINT on the ball; the computer's dribblers use them too). A move is
+/// Skill moves (slide SPRINT on the ball, one move per slot; the computer's dribblers use them too). A move is
 /// an action (ActionKind.Trick) playing one of the Skills scripts: through it his run is the
 /// script's, the ball rides his foot along the script's path (nobody can just walk in and take
 /// it, though a tackle still can), at the feint the men in front may buy the dummy, and at the
@@ -12,8 +12,9 @@ namespace GameNight.Sim;
 public sealed partial class Match
 {
     /// <summary>Starts a move if he can do one now: on the ball at his feet, in open play. `sx, sz`
-    /// is where he wants to go (the stick, world), `idle` when the stick's left alone.</summary>
-    public bool TryTrick(Player p, double sx, double sz, bool idle)
+    /// is where he wants to go (the stick, world), `idle` when the stick's left alone. `move` is
+    /// the one asked for (a human's slot); None lets the stick and his stars pick.</summary>
+    public bool TryTrick(Player p, double sx, double sz, bool idle, SkillMove move = SkillMove.None)
     {
         if (Phase != Phase.Play || Owner != p || HeldBy != null || SetPiece != null || p.IsBusy || p.Role == Role.GK) return false;
         if (Time < p.TrickReady || !Ball.OnGround || Ball.Pos.Y > 0.3 || BallDist(p) > 1.15) return false;
@@ -30,7 +31,7 @@ public sealed partial class Match
             double ol = o != null ? (o.Pos.X - p.Pos.X) * fz - (o.Pos.Z - p.Pos.Z) * fx : 0;
             e = o == null || Math.Abs(ol) < 0.05 ? (Rng.Next() < 0.5 ? 1 : -1) : ol > 0 ? -1 : 1;
         }
-        var move = Skills.Pick(Math.Max(1, p.Attrs.Skill), idle, fwd, v0, Rng.Next());
+        if (move == SkillMove.None) move = Skills.Pick(Math.Max(1, p.Attrs.Skill), idle, fwd, v0, Rng.Next());
         var tm = Skills.TimingOf(move);
 
         p.StartAction(ActionKind.Trick, tm.Dur, fx, fz);

@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("1.12", "Skill moves now go on SPRINT: hold it on the ball and slide up, left, right or down for the move in that slot, whatever the stick does. Pick your four in SQUAD > SKILL MOVES, or leave slots empty. A player only does a move his skill stars allow."),
         ("1.11", "Goalkeepers rebuilt again. They read every shot as it's struck, step across for what their feet reach, dive only when they must and let wide ones go. Hard shots at them are held, parried, tipped or blocked, never through the gloves, and the hands go out to meet the ball."),
         ("1.10", "Free kicks, penalties, corners and goal kicks stay in third person through the run-up: the camera holds still behind the taker as he runs in, and only lifts back to the match view once the ball is struck."),
         ("1.9", "The mini cards on the formation board and bench now show each player's skill stars under his name: gold for the stars he has, faint for the rest."),

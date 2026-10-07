@@ -201,6 +201,20 @@ public sealed partial class TouchControls : Control
                 QueueRedraw();
             }
         }
+        else if (role == Role.Sprint && Current == Mode.Attack && _sprintSwipe == 0)
+        {
+            // On the ball: one slide per press picks a skill slot, up, left, right or down.
+            var d = p - _sprintStart;
+            if (d.Length() > 28)
+            {
+                var dir = MathF.Abs(d.Y) >= MathF.Abs(d.X)
+                    ? (d.Y < 0 ? TackleSwipe.SkillUp : TackleSwipe.SkillDown)
+                    : (d.X < 0 ? TackleSwipe.SkillLeft : TackleSwipe.SkillRight);
+                _sprintSwipe = dir - TackleSwipe.SkillUp + 1;
+                Input.TackleSwipe = dir;
+                QueueRedraw();
+            }
+        }
         else if (role is Role.A or Role.B)
         {
             int i = (int)role - 1;
@@ -292,6 +306,17 @@ public sealed partial class TouchControls : Control
                 if (down && Current == Mode.Defend) Input.TackleSwipe = k.ShiftPressed ? TackleSwipe.Slide : TackleSwipe.Tackle;
                 return;
             case Key.Shift: _keySprint = down; return;
+            // Skill slots from the keyboard: T F H G as up, left, right, down.
+            case Key.T or Key.F or Key.H or Key.G:
+                if (down && Current == Mode.Attack)
+                    Input.TackleSwipe = k.Keycode switch
+                    {
+                        Key.T => TackleSwipe.SkillUp,
+                        Key.F => TackleSwipe.SkillLeft,
+                        Key.H => TackleSwipe.SkillRight,
+                        _ => TackleSwipe.SkillDown,
+                    };
+                return;
         }
         if (down) _keys.Add(k.Keycode);
         else _keys.Remove(k.Keycode);
@@ -332,6 +357,7 @@ public sealed partial class TouchControls : Control
 
             DrawLabel(c + new Vector2(0, defend && i == 3 ? -6 : 0), labels[i], size, Ink);
             if (defend && i == 3) DrawLabel(c + new Vector2(0, 12), "▼ TACKLE · ◀ SLIDE", 9, Ink);
+            if (i == 3 && Current == Mode.Attack) DrawSkillTicks(c, r);
         }
 
         if (cel)
@@ -348,6 +374,20 @@ public sealed partial class TouchControls : Control
             var c = BtnCentre(2);
             DrawArc(c, BtnRadius[2] + 5, 0, MathF.Tau, 48, new Color(1, 1, 1, 0.12f), 5, true);
             DrawArc(c, BtnRadius[2] + 5, -MathF.PI / 2, -MathF.PI / 2 + MathF.Tau * p, 48, Accent, 5, true);
+        }
+    }
+
+    /// <summary>Attack: four small arrows round SPRINT for the skill slots; the one slid to lights up.</summary>
+    void DrawSkillTicks(Vector2 c, float r)
+    {
+        for (int k = 0; k < 4; k++)
+        {
+            // Slot order: up, left, right, down.
+            var u = k switch { 0 => Vector2.Up, 1 => Vector2.Left, 2 => Vector2.Right, _ => Vector2.Down };
+            var n = new Vector2(-u.Y, u.X);
+            var tip = c + u * (r - 3);
+            var col = _sprintSwipe == k + 1 ? Accent : new Color(Ink, 0.4f);
+            DrawColoredPolygon(new[] { tip, tip - u * 5 + n * 4, tip - u * 5 - n * 4 }, col);
         }
     }
 

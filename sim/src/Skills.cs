@@ -2,7 +2,7 @@ using System;
 
 namespace GameNight.Sim;
 
-/// <summary>The special moves a player on the ball can pull off (double tap SPRINT).</summary>
+/// <summary>The special moves a player on the ball can pull off (slide SPRINT on the ball; each way is a slot the club fills).</summary>
 public enum SkillMove : byte { None, BodyFeint, StepOver, DragBack, CruyffTurn, FakeShot, Roulette, Croqueta, HeelToHeel, Elastico, Rainbow }
 
 /// <summary>
@@ -46,21 +46,24 @@ public static class Skills
         _ => "",
     };
 
-    /// <summary>How to do it, for the player sheet.</summary>
+    /// <summary>What it does, for the skill slots page.</summary>
     public static string How(SkillMove m) => m switch
     {
-        SkillMove.BodyFeint => "Stick to a side",
-        SkillMove.StepOver => "Stick forward or to a side",
-        SkillMove.DragBack => "Stick back, slow",
-        SkillMove.CruyffTurn => "Stick back, running",
-        SkillMove.FakeShot => "No stick",
-        SkillMove.Roulette => "Stick back",
-        SkillMove.Croqueta => "Stick to a side",
-        SkillMove.HeelToHeel => "Stick forward",
-        SkillMove.Elastico => "Stick to a side",
-        SkillMove.Rainbow => "Stick forward, running",
+        SkillMove.BodyFeint => "Dips a shoulder one way, goes the other",
+        SkillMove.StepOver => "Steps round the ball, then pushes it past",
+        SkillMove.DragBack => "Stops the ball under the sole, pulls it back",
+        SkillMove.CruyffTurn => "Fakes a pass, drags it behind his leg",
+        SkillMove.FakeShot => "Shapes to shoot, chops it away",
+        SkillMove.Roulette => "Spins over the ball with both soles",
+        SkillMove.Croqueta => "Shifts it foot to foot past his man",
+        SkillMove.HeelToHeel => "Back-heels it through his own legs",
+        SkillMove.Elastico => "Outside of the foot one way, snaps it back",
+        SkillMove.Rainbow => "Flicks it up over his head and the man",
         _ => "",
     };
+
+    /// <summary>The slots a club starts with: up, left, right, down.</summary>
+    public static readonly SkillMove[] DefaultSlots = { SkillMove.StepOver, SkillMove.BodyFeint, SkillMove.Roulette, SkillMove.DragBack };
 
     /// <summary>The highest tier of move a player with this many skill stars knows: 1-2 stars the
     /// one-star moves, 3-4 the two-star ones as well, 5 all ten.</summary>
