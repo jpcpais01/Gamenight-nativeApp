@@ -299,6 +299,11 @@ public sealed partial class PlayersView
         return v - MathF.Floor(v);
     }
     static float Rnd(float id, float k) => Hash01(id, k) * 2 - 1;
+    /// <summary>Walking (1) or running (0): people change gait at about 2.2 m/s.</summary>
+    static float WalkGait(float speed) => 1 - Smooth(1.8f, 2.7f, speed);
+    /// <summary>Share of a stride each foot is on the ground: about 0.6 walking (both feet down
+    /// between steps), 0.4 at a jog, a quarter at a sprint.</summary>
+    static float Duty(float speed) => Lerp(Lerp(0.42f, 0.25f, Smooth(2.5f, 8.5f, speed)), 0.62f, WalkGait(speed));
     /// <summary>A slow, smooth wander in [-1, 1] for player id (channel k, about f rad/s).</summary>
     static float Drift(float t, int id, int k, float f) =>
         MathF.Sin(t * f + Hash01(id, k) * 6.283f) * 0.65f + MathF.Sin(t * f * 2.3f + Hash01(id, k + 1) * 6.283f) * 0.35f;
@@ -486,9 +491,12 @@ public sealed partial class PlayersView
         float moveAmt = Smooth(0.15f, 1.2f, speed);
         // Feet shuffle when turning on the spot (the sim advances the stride for it).
         float stepAmt = MathF.Max(moveAmt, MathF.Min(1, MathF.Abs(df) * 18));
-        float aHip = (0.12f + 0.62f * s) * stepAmt;
+        // Walking is its own gait: longer, straighter-legged steps, the swing knee folding only
+        // to clear the grass; running drives the thigh and tucks the heel up behind.
+        float walk = WalkGait(speed);
+        float aHip = Lerp(0.12f + 0.62f * s, 0.36f, walk) * stepAmt;
         float hipL = aHip * sinP, hipR = -aHip * sinP;
-        float kneeAmp = (0.25f + 1.35f * s) * stepAmt;
+        float kneeAmp = Lerp(0.25f + 1.35f * s, 0.85f, walk) * stepAmt;
         float kneeL = 0.1f + kneeAmp * MathF.Pow(MathF.Max(0, cosP), 1.4f) + 0.12f * s;
         float kneeR = 0.1f + kneeAmp * MathF.Pow(MathF.Max(0, -cosP), 1.4f) + 0.12f * s;
         float legOutL = 0.04f, legOutR = 0.04f, legYawL = 0, legYawR = 0;
@@ -501,13 +509,18 @@ public sealed partial class PlayersView
         float armRotL = ra[6], armRotR = ra[7], wristL = ra[8], wristR = ra[9];
         float hip0 = _hipBase[id];
         // (Less drop with planted feet: the knees then bend to take it instead.)
-        float hipY = hip0 - (0.016f + 0.07f * s) * MathF.Abs(cosP) * moveAmt * (1 - 0.3f * _ikOn[id]);
+        // A runner is lowest as the stance foot takes his weight; a walker vaults over a straight
+        // leg, highest mid-stance.
+        float hipY = hip0 - (0.016f + 0.07f * s) * MathF.Abs(cosP) * moveAmt * (1 - 0.3f * _ikOn[id]) * (1 - walk)
+            - 0.025f * (1 - MathF.Abs(cosP)) * moveAmt * walk;
         // Hips rotate and drop with each stride; the shoulders counter-rotate.
         float pelvisYaw = -0.1f * s * sinP * moveAmt;
         float pelvisRoll = 0.06f * (0.4f + s) * sinP * moveAmt;
         float twist = (0.05f + 0.2f * s) * sinP * moveAmt;
         float flexExtra = 0, sideExtra = 0;
-        float leanF = b.LeanFwd[id] * 0.6f;
+        // The sim's lean is the physical one (tan = acceleration / g): the whole body tilts with
+        // it, from the feet; in an action the pose carries most of the body.
+        float leanF = b.LeanFwd[id] * (action == ActionKind.None ? 0.85f : 0.35f);
         float leanS = -b.LeanSide[id];
         float roll = 0, lift = 0, headPitch = 0;
         bool headLook = true;
@@ -569,6 +582,48 @@ public sealed partial class PlayersView
             kneeL += 0.2f * pivot;
             kneeR += 0.2f * pivot;
             flexExtra += 0.06f * lean + 0.08f * pivot;
+        }
+
+        // Braking: the heels dig in ahead of him, the knees give and the arms come out for balance.
+        if (action == ActionKind.None)
+        {
+            float brake = Smooth(2.5f, 8, -accelFwd) * moveAmt;
+            if (brake > 0)
+            {
+                kneeL += 0.25f * brake;
+                kneeR += 0.25f * brake;
+                hipY -= 0.05f * brake;
+                armL += 0.2f * brake;
+                armR += 0.2f * brake;
+                armOutL += 0.18f * brake;
+                armOutR += 0.18f * brake;
+            }
+        }
+
+        // Shoulder to shoulder with an opponent: he leans into him and an arm comes out to hold
+        // him off.
+        if (action == ActionKind.None && !isHeld)
+        {
+            int myTeam = b.Team[id];
+            float cf1 = MathF.Cos(facing), sf1 = MathF.Sin(facing);
+            float best = 0, bestLat = 0;
+            for (int j = 0; j < N; j++)
+            {
+                if (j == id || !b.Active[j] || b.Team[j] == myTeam) continue;
+                float dx = b.X[j] - x, dz = b.Z[j] - z;
+                float d2 = dx * dx + dz * dz;
+                if (d2 > 0.95f * 0.95f || d2 < 1e-4f) continue;
+                float d = MathF.Sqrt(d2);
+                float lat = (dx * sf1 - dz * cf1) / d;
+                float k = (1 - Smooth(0.55f, 0.95f, d)) * Smooth(0.3f, 0.8f, MathF.Abs(lat));
+                if (k > best) { best = k; bestLat = lat; }
+            }
+            if (best > 0)
+            {
+                leanS -= 0.1f * best * MathF.Sign(bestLat);
+                if (bestLat > 0) { armOutL += 0.45f * best; armL += 0.2f * best; elbowL += 0.3f * best; }
+                else { armOutR += 0.45f * best; armR += 0.2f * best; elbowR += 0.3f * best; }
+            }
         }
 
         // Idle breathing.
@@ -638,7 +693,7 @@ public sealed partial class PlayersView
         if (owner != id || action != ActionKind.None) _steerSt[id] = 0;
         else if (steering && _steerSt[id] == 0)
         {
-            float dA0 = Lerp(0.62f, 0.32f, s) * PI;
+            float dA0 = Duty(speed) * PI;
             int best = 0;
             float bestT = 99;
             for (int sd = 0; sd < 2; sd++)
@@ -1628,7 +1683,7 @@ public sealed partial class PlayersView
         bool wristFree = legsFree;
 
         // ---------------- body physics: a springy spine driven by the movement
-        float flexTarget = Clamp(b.LeanFwd[id] * 0.9f - accelFwd * 0.014f + s * 0.12f + flexExtra, -0.6f, 0.7f);
+        float flexTarget = Clamp(b.LeanFwd[id] * 0.35f - accelFwd * 0.01f + s * 0.12f + flexExtra, -0.6f, 0.7f);
         float sideTarget = Clamp(-leanS * 0.15f + sideExtra, -0.45f, 0.45f);
         const float w = 13, zeta = 0.34f;
         _spF[id] += (w * w * (flexTarget - _sF[id]) - 2 * zeta * w * _spF[id]) * dt;
@@ -1713,10 +1768,10 @@ public sealed partial class PlayersView
         // the stance the ball of the foot stays where it landed and the leg is solved to reach it.
         float ik = _ikOn[id];
         float cf = MathF.Cos(facing), sf = MathF.Sin(facing);
-        float duty = Lerp(0.62f, 0.32f, s);
+        float duty = Duty(speed);
         float dutyA = duty * PI;
         float standing = 1 - Smooth(0.03f, 0.3f, stepAmt);
-        float stepLen = 0.7f + 0.12f * speed;
+        float stepLen = (float)Player.StepLength(speed, h);
         float legLen = (float)bs.Leg;
         float l1 = THIGH * legLen, l2 = SHIN * legLen;
         bool upright = hipY > 0.55f && action != ActionKind.Slide && action != ActionKind.Dive && action != ActionKind.Fall;

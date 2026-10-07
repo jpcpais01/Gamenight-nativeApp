@@ -436,7 +436,7 @@ public sealed class Cutscene
             _face[id] += turn;
             // Turning on the spot still takes steps; one step is half a stride cycle.
             if (sp < 2.5f) _stride[id] += MathF.Abs(turn) * 1.6f * (1 - sp / 2.5f);
-            _stride[id] += sp / (0.7f + 0.12f * sp) * MathF.PI * dt;
+            _stride[id] += sp / (float)Player.StepLength(sp, 1) * MathF.PI * dt;
         }
         Write();
     }

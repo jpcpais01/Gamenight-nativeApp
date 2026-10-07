@@ -76,6 +76,8 @@ public sealed class Player
 {
     /// <summary>How hard the grass brakes a slide (m/s²): from a sprint, about 4 m on the floor.</summary>
     public const double SlideDecel = 8.5;
+    /// <summary>How quickly a runner closes the gap to the line (1/s) and the pace (1/s) he wants.</summary>
+    const double SteerK = 14, PaceK = 10;
 
     // Smoothing factors for the last dt (always DT in a match).
     static double expDt = -1, exp8, exp10;
@@ -232,6 +234,18 @@ public sealed class Player
 
     public bool IsBusy => Action != ActionKind.None;
 
+    /// <summary>
+    /// Length of one step (m) at a speed, for a body `scale` × 1.8 m tall: measured human gait,
+    /// from ~0.75 m at a walk (about two steps a second) through ~1.2 m at a jog to ~1.95 m at a
+    /// sprint (4.4 a second). Taller players stride longer and turn their legs over slower.
+    /// </summary>
+    public static double StepLength(double speed, double scale)
+    {
+        double v = Math.Min(speed, 10);
+        if (!(scale > 0.5)) scale = 1;
+        return (0.45 + 0.23 * v - 0.0065 * v * v) * scale;
+    }
+
     /// <summary>A leg stretched out for the ball, 0..1: shoots out (~0.14 s), holds, draws back.</summary>
     public static double StretchExt(double t, double dur) => M.Smoothstep(0.03, 0.14, t) * (1 - M.Smoothstep(dur * 0.66, dur, t));
 
@@ -366,10 +380,11 @@ public sealed class Player
                 }
             }
             double accel = AccelRate * accelScale * (Burst ? 1.7 : 1);
-            double dvx = tx - vx;
-            double dvz = tz - vz;
             if (sp < 0.6)
             {
+                // Near a standstill the first step can go any way.
+                double dvx = tx - vx;
+                double dvz = tz - vz;
                 double m = Math.Sqrt(dvx * dvx + dvz * dvz);
                 double lim = (accel + 2) * dt;
                 if (m > lim)
@@ -377,39 +392,58 @@ public sealed class Player
                     dvx *= lim / m;
                     dvz *= lim / m;
                 }
+                Vel.X += dvx;
+                Vel.Z += dvz;
             }
             else
             {
+                // On the move, a body changes two things through its feet: how fast it goes
+                // (drive or brake along the run) and where (the run line bends, at most as hard
+                // as the planted foot grips). Both come out of the same grip, so a player can't
+                // brake flat out and cut flat out at once.
                 double fx = vx / sp;
                 double fz = vz / sp;
-                double along = dvx * fx + dvz * fz;
-                double lx = dvx - along * fx;
-                double lz = dvz - along * fz;
-                // Explosive first steps, fading near top speed (sprint-start curve).
-                double aMax = along > 0 ? (accel * Math.Max(0.1, 1 - JsMath.Pow(sp / (top + 0.4), 1.6)) + 0.6) * dt : PlayerK.Brake * dt;
-                along = M.Clamp(along, -aMax, aMax);
-                double lat = Math.Sqrt(lx * lx + lz * lz);
-                // Turning harder at speed: lateral grip limit (centripetal accel). Direction changes
-                // happen through the planted foot, so grip pulses with the stride.
+                double wsp = Math.Sqrt(tx * tx + tz * tz);
+                double err = 0, spWant = 0;
+                if (wsp > 0.05)
+                {
+                    double ux = tx / wsp, uz = tz / wsp;
+                    double dot = fx * ux + fz * uz;
+                    err = JsMath.Atan2(fx * uz - fz * ux, dot);
+                    // A sharp change of line is made by slowing into it.
+                    spWant = wsp * Math.Max(0, dot);
+                }
+                // Direction changes go through the planted foot, so grip pulses with the stride;
+                // agile, compact players cut sharper than tall, heavy ones, and nobody cuts at a
+                // sprint the way he does at a jog.
                 double plant = JsMath.Cos(StridePhase);
-                // Agile, compact players cut sharper than tall, heavy ones.
                 if (Attrs.Height != agileFor)
                 {
                     agileFor = Attrs.Height;
                     agileMemo = M.Clamp(JsMath.Pow(1.8 / agileFor, 0.6), 0.92, 1.08);
                 }
-                double body = agileMemo;
-                double latMax = PlayerK.Lateral * (0.8 + 0.3 * Attrs.Agility) * body * (0.78 + 0.44 * plant * plant) * dt;
-                if (lat > latMax)
-                {
-                    lx *= latMax / lat;
-                    lz *= latMax / lat;
-                }
-                dvx = along * fx + lx;
-                dvz = along * fz + lz;
+                double latMax = PlayerK.Lateral * (0.8 + 0.3 * Attrs.Agility) * agileMemo * (0.78 + 0.44 * plant * plant)
+                    * (1 - 0.035 * Math.Max(0, sp - 4));
+                double dSp = spWant - sp;
+                // Explosive first steps, fading near top speed (sprint-start curve).
+                double aMax = dSp > 0 ? accel * Math.Max(0.1, 1 - JsMath.Pow(sp / (top + 0.4), 1.6)) + 0.6 : PlayerK.Brake;
+                // Share of each the step asks for (1 = flat out), then the grip ellipse: the turn
+                // has first call on it, unless he's turning back on himself, when the brake does.
+                // People steer and change pace smoothly: a small correction is eased in (about a
+                // tenth of a second), only a big one is taken flat out.
+                // (A keeper's set: he takes every correction at once.)
+                double kS = Role == Role.GK ? 1 / dt : SteerK, kP = Role == Role.GK ? 1 / dt : PaceK;
+                double nl = Math.Min(1, Math.Abs(err) * sp * Math.Min(1 / dt, kS) / latMax);
+                double na = Math.Min(1, Math.Abs(dSp) * Math.Min(1 / dt, kP) / aMax);
+                const double Share = 0.75;
+                if (Math.Abs(err) < Math.PI / 2) na = Math.Min(na, Math.Sqrt(1 - Share * nl * nl));
+                else nl = Math.Min(nl, Math.Sqrt(1 - Share * na * na));
+                double rot = JsMath.Sign(err) * nl * latMax * dt / sp;
+                double nsp0 = Math.Max(0, sp + JsMath.Sign(dSp) * na * aMax * dt);
+                double c = JsMath.Cos(rot), sn = JsMath.Sin(rot);
+                Vel.X = (fx * c - fz * sn) * nsp0;
+                Vel.Z = (fx * sn + fz * c) * nsp0;
             }
-            Vel.X += dvx;
-            Vel.Z += dvz;
         }
 
         // Lean (for animation): forward with acceleration, sideways into turns.
@@ -428,8 +462,11 @@ public sealed class Player
         double ke = exp8;
         AccelFwd += (M.Clamp(accelFwd, -12, 12) - AccelFwd) * exp10;
         BalanceCD = Math.Max(0, BalanceCD - dt);
-        LeanFwd += (M.Clamp(accelFwd * 0.03 + nsp * 0.018, -0.25, 0.35) - LeanFwd) * ke;
-        LeanSide += (M.Clamp(-latAcc * 0.035, -0.35, 0.35) - LeanSide) * ke;
+        // A runner leans where the push of his feet points, so his weight stays over them:
+        // tan(lean) = acceleration / g. Into the drive of a sprint start, back against a brake,
+        // in toward the middle of a curve; a little forward at speed as well.
+        LeanFwd += (M.Clamp(JsMath.Atan(M.Clamp(accelFwd, -12, 12) / Physics.Gravity) * 0.7 + nsp * 0.012, -0.35, 0.5) - LeanFwd) * ke;
+        LeanSide += (M.Clamp(-JsMath.Atan(latAcc / Physics.Gravity) * 0.75, -0.5, 0.5) - LeanSide) * ke;
 
         Pos.X += Vel.X * dt;
         Pos.Z += Vel.Z * dt;
@@ -471,8 +508,7 @@ public sealed class Player
         }
 
         // Gait: one step = half a stride cycle.
-        double stepLen = 0.7 + 0.12 * nsp;
-        StridePhase += (nsp / stepLen) * Math.PI * dt;
+        StridePhase += (nsp / StepLength(nsp, Look.Height)) * Math.PI * dt;
 
         // Stamina: sprinting drains, everything else recovers.
         double st = Attrs.Stamina;

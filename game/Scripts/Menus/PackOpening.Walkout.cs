@@ -161,7 +161,7 @@ public sealed partial class PackOpening
         float z = WalkZ(t), z0 = WalkZ(t - dt);
         float speed = dt > 0 ? Mathf.Max(0, (z - z0) / dt) : 0;
         float before = _stride;
-        _stride += speed / (0.7f + 0.12f * speed) * Mathf.Pi * dt;
+        _stride += speed / (float)Player.StepLength(speed, 1) * Mathf.Pi * dt;
         if (t > 0.2f && t < WalkEnd && Mathf.Floor(before / Mathf.Pi) != Mathf.Floor(_stride / Mathf.Pi)) GameAudio.Instance?.Footstep();
 
         if (!_revealed && t >= RevealAt) Reveal();

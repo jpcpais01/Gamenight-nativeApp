@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.108", "Players move like real footballers: no more left-right wobble, they lean into turns and sprint starts, lean back and dig in to brake, can't brake and cut flat out at once, stride like real runners (walking is its own gait) and lean into each other shoulder to shoulder."),
         ("0.107", "The Europe map zooms: pinch or scroll, drag to pan, or use + and -. It redraws sharp at every zoom with more detail close up. Zoom in for lower divisions, a cup in every country and special tournaments: knockouts with penalties and prize money, one run a season."),
         ("0.106", "SIMULATE REST in the pause menu, in every kind of match: FAST jumps to full time with a real result, FULL lets the computer play your side while you watch (touch the controls to take over). Online, your friend agrees first."),
         ("0.105", "COACH 1V1 online: when hosting, pick COACH 1V1. The computer plays both teams and you each manage yours live with the COACH key: mentality (park the bus to all out), formation and substitutions. The match never pauses for the other manager."),

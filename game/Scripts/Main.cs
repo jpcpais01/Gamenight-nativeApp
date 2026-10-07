@@ -87,7 +87,7 @@ public partial class Main : Node
     CoachView _boardSent;
     double _boardAt = -1;
     /// <summary>Debug: `-- --screenshot=out.png` saves the screen after a few seconds and quits.</summary>
-    string _shotPath;
+    string _shotPath; int _frameN;
     double _time, _shotAt = 6;
 
     public override void _Ready()
@@ -640,7 +640,13 @@ public partial class Main : Node
         if (Request != null && _cur.Phase == Phase.Fulltime && _cur.PhaseT > (Request.Demo ? 3 : 4.5)) Report(true);
 
         _time += delta;
-        if (_shotPath != null && _time > _shotAt)
+        if (_shotPath != null && _shotPath.EndsWith("/") && _time > _shotAt)
+        {
+            // A folder (ends in /): three seconds of frames, for looking at motion.
+            GetViewport().GetTexture().GetImage().SavePng(_shotPath + $"f{_frameN++:000}.png");
+            if (_time > _shotAt + 3) { GetTree().Quit(); _shotPath = null; }
+        }
+        else if (_shotPath != null && _time > _shotAt)
         {
             GetViewport().GetTexture().GetImage().SavePng(_shotPath);
             GetTree().Quit();
