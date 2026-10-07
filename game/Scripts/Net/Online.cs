@@ -15,11 +15,13 @@ namespace GameNight.Net;
 /// 4-digit code the host reads out. Messages are one byte of type, then the body:
 /// C the friend's club (JSON), S kick-off (JSON: the whole set-up), I the friend's controls (a
 /// Wire packet, as a phone controller sends), F a frame (FrameCodec), Q the ping's echo, K skip
-/// the replay or walk-out, L left.
+/// the replay or walk-out, L left. Coach mode adds O a manager's order (friend to host, JSON)
+/// and B the friend's side as their manager sees it (host to friend, JSON).
 /// </summary>
 public sealed class Online : IDisposable
 {
-    public const byte Club = (byte)'C', Start = (byte)'S', Input = (byte)'I', Frame = (byte)'F', Pong = (byte)'Q', Skip = (byte)'K', Leave = (byte)'L';
+    public const byte Club = (byte)'C', Start = (byte)'S', Input = (byte)'I', Frame = (byte)'F', Pong = (byte)'Q', Skip = (byte)'K', Leave = (byte)'L',
+        Order = (byte)'O', Bench = (byte)'B', Sim = (byte)'M';
 
     /// <summary>The online game under way (the lobby or a match), or null.</summary>
     public static Online Current { get; private set; }
@@ -46,6 +48,8 @@ public sealed class Online : IDisposable
     public ClubInfo Friend;
     /// <summary>Friend: the match as the host set it up.</summary>
     public Kickoff Match;
+    /// <summary>Host: the match will be coach mode (picked in the lobby).</summary>
+    public bool CoachMode;
 
     readonly ClubState _club;
     Relay _relay;
@@ -60,13 +64,15 @@ public sealed class Online : IDisposable
         public Card[] Cards, BenchCards;
         public Crest Crest;
         public int GoalFx;
+        /// <summary>The club's formation id (for the coach's board).</summary>
+        public string Formation = "433";
 
         public static ClubInfo Of(ClubState c)
         {
             var t = c.TeamSetup();
             return new ClubInfo
             {
-                Team = t, Crest = c.S.Crest, GoalFx = c.S.GoalFx,
+                Team = t, Crest = c.S.Crest, GoalFx = c.S.GoalFx, Formation = c.S.Lineup.Formation,
                 Cards = t.Players.Select(p => p.Source as Card).ToArray(),
                 BenchCards = t.Bench?.Select(p => p.Source as Card).ToArray(),
             };
@@ -89,6 +95,8 @@ public sealed class Online : IDisposable
         public ClubInfo Home, Away;
         /// <summary>The host's own stadium, when the ground is "custom".</summary>
         public GameNight.Grounds.Build.StadiumPlan Plan;
+        /// <summary>Coach mode: the computer plays both sides, the two friends manage them.</summary>
+        public bool Coach;
     }
 
     Online(ClubState club, bool host, string code)
@@ -197,7 +205,7 @@ public sealed class Online : IDisposable
             (ak.Shirt, ak.Shirt2, ak.Shorts, ak.Socks) = (0xf1ebdc, 0x23345e, 0x23345e, 0xf1ebdc);
             if (ColorDist(hk.Shirt, ak.Shirt) < 120) (ak.Shirt, ak.Shirt2, ak.Shorts, ak.Socks) = (0x2a2440, 0xffd447, 0x2a2440, 0x2a2440);
         }
-        k = new Kickoff { Seed = seed, Ground = ground, Home = home, Away = away, Plan = ground == "custom" ? _club.S.Stadium : null };
+        k = new Kickoff { Seed = seed, Ground = ground, Home = home, Away = away, Plan = ground == "custom" ? _club.S.Stadium : null, Coach = CoachMode };
         Send(Start, JsonSerializer.SerializeToUtf8Bytes(k, Json));
         Now = Stage.Playing;
         return new MatchSetup { Teams = new[] { home.Restore(), away.Restore() } };
@@ -238,6 +246,15 @@ public sealed class Online : IDisposable
         _relay?.Dispose();
         _relay = null;
         if (Current == this) Current = null;
+    }
+
+    /// <summary>A JSON message (coach orders and boards).</summary>
+    public void SendJson<T>(byte type, T body) => Send(type, JsonSerializer.SerializeToUtf8Bytes(body, Json));
+
+    public static T ReadJson<T>(byte[] m)
+    {
+        try { return JsonSerializer.Deserialize<T>(m.AsSpan(1), Json); }
+        catch (JsonException) { return default; }
     }
 
     public static string Utf8(byte[] m, int from) => Encoding.UTF8.GetString(m, from, m.Length - from);

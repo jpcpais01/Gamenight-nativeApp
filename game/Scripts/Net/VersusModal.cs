@@ -14,6 +14,8 @@ namespace GameNight.Net;
 public sealed partial class VersusModal : Modal
 {
     bool _online = true;
+    /// <summary>Host in coach mode (the computer plays, you both manage).</summary>
+    bool _coach;
     Online _session;
     string _code = "";
     readonly Dictionary<string, bool> _stickWas = new();
@@ -142,6 +144,16 @@ public sealed partial class VersusModal : Modal
         y += 4;
     }
 
+    /// <summary>The host's pick: play the match, or manage while the computer plays it.</summary>
+    void Modes(Vector2 p, float w, bool coach, Action<bool> set)
+    {
+        float cw = Chip("mode-play", p, "PLAY 1V1", !coach, () => set(false), 16, 24);
+        Chip("mode-coach", new Vector2(p.X + cw + 8, p.Y), "COACH 1V1", coach, () => set(true), 16, 24);
+        Px.Text(this, Px.Small, new Vector2(p.X, p.Y + 38), Px.Fit(Px.Small, coach
+            ? "THE COMPUTER PLAYS; YOU BOTH MANAGE: SUBS, FORMATION, MENTALITY."
+            : "YOU EACH CONTROL YOUR OWN TEAM.", 8, w), 8, Px.InkDim);
+    }
+
     void OnlinePage(Rect2 r)
     {
         float x = r.Position.X, y = r.Position.Y;
@@ -161,7 +173,12 @@ public sealed partial class VersusModal : Modal
             Px.Text(this, Px.Big, new Vector2(hostR.Position.X + 16, hy), "HOST", 28, Px.Gold);
             hy += 18;
             Line(ref hy, hostR.Position.X + 16, hostR.Size.X - 32, "YOUR GAME RUNS THE MATCH AND GETS A 4-DIGIT CODE. READ IT TO YOUR FRIEND: THEY TYPE IT IN ON THEIR PHONE OR PC.", Px.Ink);
-            GoldButton("host", new Rect2(hostR.Position.X + 16, hostR.End.Y - 60, hostR.Size.X - 32, 44), "HOST A MATCH", 24, () => _session = Online.Host(Ui.Club));
+            Modes(new Vector2(hostR.Position.X + 16, hostR.End.Y - 104), hostR.Size.X - 32, _coach, on => _coach = on);
+            GoldButton("host", new Rect2(hostR.Position.X + 16, hostR.End.Y - 60, hostR.Size.X - 32, 44), "HOST A MATCH", 24, () =>
+            {
+                _session = Online.Host(Ui.Club);
+                _session.CoachMode = _coach;
+            });
 
             var joinR = new Rect2(hostR.End.X + 16, y, r.End.X - hostR.End.X - 16, r.Size.Y);
             Px.Frame(this, joinR, Px.Glass, Px.Line2, null, 2, 0);
@@ -217,6 +234,7 @@ public sealed partial class VersusModal : Modal
                 _ => "YOUR FRIEND IS IN!",
             };
             Line(ref ty, x, r.Size.X * 0.5f, state, s.Now == Online.Stage.Ready ? Px.Win : Px.Ink, 9);
+            Modes(new Vector2(x, r.End.Y - 100), r.Size.X * 0.5f, s.CoachMode, on => s.CoachMode = _coach = on);
             if (s.Now == Online.Stage.Ready && s.Friend?.Team?.Info is { } info)
             {
                 var cr = new Rect2(r.End.X - 150, r.Position.Y + 6, 110, 136);

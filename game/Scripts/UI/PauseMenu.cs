@@ -35,6 +35,14 @@ public sealed partial class PauseMenu : Control
     readonly Button _restart;
     readonly Button _foul;
     readonly PanelContainer _main, _subsCard;
+    readonly Button _sim;
+    Button _simFull;
+    readonly HBoxContainer _simWays;
+    bool _autopilot;
+    /// <summary>Simulate the rest of the match: true straight to full time, false the computer plays it out on screen.</summary>
+    public Action<bool> Simulate;
+    /// <summary>The computer has been playing for you: hand it back.</summary>
+    public Action TakeBack;
     readonly VolumeBar[] _volumes;
     readonly SubsBoard _subs;
     readonly Button _subsButton;
@@ -112,6 +120,37 @@ public sealed partial class PauseMenu : Control
         _subsButton.Visible = false;
         _subsButton.Pressed += () => ShowSubs(true);
         left.AddChild(_subsButton);
+        // Simulate the rest: a tap opens the two ways (straight to full time, or watch the
+        // computer play it); while it plays for you, the same button hands the match back.
+        _sim = Ghost("SIMULATE REST");
+        _sim.Visible = false;
+        _sim.Pressed += () =>
+        {
+            if (_autopilot)
+            {
+                Close();
+                TakeBack?.Invoke();
+            }
+            else _simWays.Visible = !_simWays.Visible;
+        };
+        left.AddChild(_sim);
+        _simWays = new HBoxContainer { Visible = false };
+        _simWays.AddThemeConstantOverride("separation", 6);
+        foreach (var (label, fast) in new[] { ("FAST", true), ("FULL", false) })
+        {
+            var b = Solid(label);
+            b.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+            b.AddThemeFontSizeOverride("font_size", 12);
+            b.Pressed += () =>
+            {
+                _simWays.Visible = false;
+                Close();
+                Simulate?.Invoke(fast);
+            };
+            if (!fast) _simFull = b;
+            _simWays.AddChild(b);
+        }
+        left.AddChild(_simWays);
         _restart = Ghost("RESTART MATCH");
         _restart.Pressed += () => { Close(); Restart?.Invoke(); };
         left.AddChild(_restart);
@@ -197,6 +236,64 @@ public sealed partial class PauseMenu : Control
         _subsCard.Visible = on;
     }
 
+    PanelContainer _ask;
+    Label _askText;
+    Action _askYes, _askNo;
+
+    /// <summary>A question from the other player (online), over the match whether the menu is
+    /// open or not: their ask, YES or NO. A newer ask replaces it; null clears it.</summary>
+    public void Ask(string question, Action yes = null, Action no = null)
+    {
+        if (_ask == null)
+        {
+            _ask = new PanelContainer { Visible = false, MouseFilter = MouseFilterEnum.Stop };
+            var bg = Flat(Style.PanelSolid, 8, new Color(Style.Accent, 0.6f), 1.5f, 14, 10);
+            _ask.AddThemeStyleboxOverride("panel", bg);
+            var row = new HBoxContainer();
+            row.AddThemeConstantOverride("separation", 10);
+            _askText = new Label { VerticalAlignment = VerticalAlignment.Center };
+            _askText.AddThemeFontOverride("font", Style.Font(true, 1));
+            _askText.AddThemeFontSizeOverride("font_size", 14);
+            _askText.AddThemeColorOverride("font_color", Style.Ink);
+            row.AddChild(_askText);
+            var yesB = Solid("YES");
+            yesB.Pressed += () => { var a = _askYes; Ask(null); a?.Invoke(); };
+            var noB = Ghost("NO");
+            noB.CustomMinimumSize = new Vector2(60, 0);
+            noB.Pressed += () => { var a = _askNo; Ask(null); a?.Invoke(); };
+            row.AddChild(yesB);
+            row.AddChild(noB);
+            _ask.AddChild(row);
+            AddChild(_ask);
+        }
+        _askYes = yes;
+        _askNo = no;
+        _ask.Visible = question != null;
+        if (question == null) return;
+        _askText.Text = question;
+        _ask.ResetSize();
+        _ask.Position = new Vector2((Size.X - _ask.GetCombinedMinimumSize().X) / 2, 58);
+    }
+
+    /// <summary>Which ways to simulate the rest are on offer (none hides the button): FULL only
+    /// where someone is playing (a watched or managed match is the computer's already).</summary>
+    public void SimulateWays(bool any, bool full)
+    {
+        _sim.Visible = any;
+        _simFull.Visible = full;
+    }
+
+    /// <summary>The computer is playing for you (FULL): the button takes it back.</summary>
+    public bool Autopilot
+    {
+        set
+        {
+            _autopilot = value;
+            _sim.Text = value ? "TAKE BACK CONTROL" : "SIMULATE REST";
+            _simWays.Visible = false;
+        }
+    }
+
     /// <summary>Online: the match doesn't stop for the menu and can't be restarted.</summary>
     public bool Online
     {
@@ -234,6 +331,7 @@ public sealed partial class PauseMenu : Control
         _menu.Visible = true;
         _pause.Visible = false;
         _leave.Visible = Leave != null;
+        _simWays.Visible = false;
         ShowSubs(false);
         Labels();
         Opened?.Invoke();

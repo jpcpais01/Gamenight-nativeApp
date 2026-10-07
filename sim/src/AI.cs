@@ -1724,7 +1724,7 @@ public sealed partial class AI
     /// <summary>How much this side likes to press high (0..1): its players' work rate.</summary>
     double PressHigh(int team)
     {
-        if (pressHighAt[team] > 0) return pressHigh[team];
+        if (pressHighAt[team] > 0) return Moody(team, pressHigh[team]);
         double w = 0;
         int n = 0;
         foreach (var q in m.Teams[team].Players)
@@ -1734,8 +1734,12 @@ public sealed partial class AI
             n++;
         }
         pressHighAt[team] = 1;
-        return pressHigh[team] = M.Clamp((w / Math.Max(1, n) - 0.45) * 2.2, 0.1, 1);
+        pressHigh[team] = M.Clamp((w / Math.Max(1, n) - 0.45) * 2.2, 0.1, 1);
+        return Moody(team, pressHigh[team]);
     }
+
+    /// <summary>The press, as the manager's mentality wants it (coach mode).</summary>
+    double Moody(int team, double press) => m.Mentality[team] == 0 ? press : M.Clamp(press + m.Mentality[team] * 0.2, 0.05, 1);
     readonly double[] pressHigh = new double[2];
     readonly double[] pressHighAt = new double[2];
 

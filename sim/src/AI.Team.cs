@@ -91,6 +91,9 @@ public sealed partial class AI
         Mood(p.Team, out double chase, out double protect);
         double s = chase * (attacking ? 7 : 5) - protect * (attacking ? 6 : 5);
         if (!attacking && stepUntil[p.Team] > m.Time && p.Role != Role.FWD) s += 5;
+        // The manager's mentality (coach mode): the whole block higher or deeper.
+        int mood = m.Mentality[p.Team];
+        if (mood != 0) s += mood * (attacking ? 4 : 3.5);
         return s;
     }
 

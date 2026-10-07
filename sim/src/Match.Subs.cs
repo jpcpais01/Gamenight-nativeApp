@@ -121,7 +121,7 @@ public sealed partial class Match
         bool dead = Phase != Phase.Play && Phase != Phase.Goal && Phase != Phase.Fulltime;
         if (dead && !wasDead)
             for (int t = 0; t < 2; t++)
-                if (t != HumanTeam || AutoPlay) ManagerLooks(t);
+                if ((t != HumanTeam || AutoPlay) && !Managed[t]) ManagerLooks(t);
         wasDead = dead;
         if (!dead || SubQueue.Count == 0) return;
         lock (SubGate)

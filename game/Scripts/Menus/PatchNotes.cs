@@ -5,6 +5,8 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.106", "SIMULATE REST in the pause menu, in every kind of match: FAST jumps to full time with a real result, FULL lets the computer play your side while you watch (touch the controls to take over). Online, your friend agrees first."),
+        ("0.105", "COACH 1V1 online: when hosting, pick COACH 1V1. The computer plays both teams and you each manage yours live with the COACH key: mentality (park the bus to all out), formation and substitutions. The match never pauses for the other manager."),
         ("0.104", "1v1 online and on one screen: the smarter computer team-mates from 0.103 now play properly around both players (the away player's team-mates no longer count on him for support while he is the one you steer)."),
         ("0.103", "Smarter computer teams: they press hard only high up and hold their shape deeper, mark the right men near their own goal, offer short passing angles, keep the ball closer when pressed, pass firmer and shoot when it is on. Watching AI vs AI looks like real build-up play now."),
         ("0.102", "Builder with the menu hidden: pick a camera top left. DRONE is the usual view, PITCH puts you on the grass by the centre circle looking up at the stands, AERIAL hangs high over a corner showing the ground and everything round it. Drag, slide and pinch work in all three."),
