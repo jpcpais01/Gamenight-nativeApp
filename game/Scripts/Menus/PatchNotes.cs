@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("1.6", "Livelier grounds: subs pull on bibs and warm up along the touchline with their fitness coach (jogs, high knees, heel flicks, side shuffles, sprints, stretches) and chat on the bench. Goals ripple round the stadium from the scoring end, some ends do the Poznan, quiet spells bring a Mexican wave, scarves go up at kick-off, and fans head home early when it's three down late on."),
         ("1.5", "Corners in third person, like free kicks and goal kicks: the camera drops in behind the taker at the flag, looking into the box. The stick moves the ring as you see it: up is further from you, right is right."),
         ("1.4", "New stand set HAUNT for Halloween: purple brick and black iron, a glowing orange band, jack-o'-lanterns grinning along the balcony, iron spikes on the roof, bats over it, giant cobwebs with spiders across the corners and a crooked lit spire behind each end."),
         ("1.3", "New stand set FINAL: a colossal three-tier bowl for final nights. A roof ring reaches far over the seats, a midnight-blue skin and roof front twinkle with stars under the floodlights, and each end hangs a giant ring of stars. Build it in STANDS; it carries the giant tifo too."),
