@@ -69,15 +69,10 @@ public sealed partial class Host : Node
         Instance = this;
         ProcessMode = ProcessModeEnum.Always;
         if (!_pc) return;
-        // The window's own icon (taskbar, Alt+Tab): the app icon, set directly so it never
-        // depends on how the export packed the .ico.
-        var icon = GD.Load<Texture2D>("res://icons/icon_192.png")?.GetImage();
-        if (icon != null)
-        {
-            if (icon.IsCompressed()) icon.Decompress();
-            DisplayServer.SetIcon(icon);
-        }
         if (!OS.HasFeature("editor")) DisplayServer.WindowSetMode(DisplayServer.WindowMode.ExclusiveFullscreen);
+        // The taskbar/Alt+Tab icon, once the engine has finished starting (it sets its own icon
+        // after the first scene loads, which would undo an earlier one).
+        Callable.From(WinIcon.Apply).CallDeferred();
         Serve(true);
     }
 
@@ -596,6 +591,7 @@ public sealed partial class Host : Node
         {
             bool full = DisplayServer.WindowGetMode() is DisplayServer.WindowMode.Fullscreen or DisplayServer.WindowMode.ExclusiveFullscreen;
             DisplayServer.WindowSetMode(full ? DisplayServer.WindowMode.Maximized : DisplayServer.WindowMode.ExclusiveFullscreen);
+            WinIcon.Apply();
             GetViewport().SetInputAsHandled();
         }
     }

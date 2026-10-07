@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.110", "PC: the GameNight icon now shows on the taskbar button and in Alt+Tab while the game is open, loaded by Windows straight from the game file."),
         ("0.109", "Better faces and bodies: a sculpted head with nose, brows, cheekbones, chin and ears, real eyes and lips, beards and stubble (also on the cards), the quiff from the cards on the pitch, an athletic V-shaped torso, rounder shoulders and arms, and a head in proportion."),
         ("0.108", "Players move like real footballers: no more left-right wobble, they lean into turns and sprint starts, lean back and dig in to brake, can't brake and cut flat out at once, stride like real runners (walking is its own gait) and lean into each other shoulder to shoulder."),
         ("0.107", "The Europe map zooms: pinch or scroll, drag to pan, or use + and -. It redraws sharp at every zoom with more detail close up. Zoom in for lower divisions, a cup in every country and special tournaments: knockouts with penalties and prize money, one run a season."),
