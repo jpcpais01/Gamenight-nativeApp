@@ -62,7 +62,7 @@ public sealed partial class PlayersView
     readonly Vector3[] _headScale = new Vector3[N];
 
     // Per player, frame to frame.
-    readonly float[] _sF = new float[N], _spF = new float[N], _sS = new float[N], _spS = new float[N], _headYaw = new float[N];
+    readonly float[] _sF = new float[N], _spF = new float[N], _sS = new float[N], _spS = new float[N], _headYaw = new float[N], _gazePitch = new float[N];
     readonly float[] _sec = new float[N * SecCount], _secV = new float[N * SecCount], _secPose = new float[N * SecCount];
     readonly bool[] _secReady = new bool[N];
     readonly float[] _bodyY = new float[N], _bodyVy = new float[N], _bodyAy = new float[N], _lastFacing = new float[N];
@@ -149,6 +149,9 @@ public sealed partial class PlayersView
 
     /// <summary>The controlled player's ring and marker (off during replays and cutscenes).</summary>
     public bool Markers = true;
+
+    /// <summary>Where each head looks (x, y, z per body; x NaN: at the ball), when a cutscene directs it.</summary>
+    public float[] Gaze;
 
     /// <summary>Every body jumped (a replay rewound or ended): settle feet and secondary motion afresh.</summary>
     public void Snap()
@@ -1759,7 +1762,19 @@ public sealed partial class PlayersView
 
         if (headLook)
         {
-            float rel = MathF.Atan2(ballZ - z, ballX - x) - facing;
+            float lx = ballX, lz = ballZ;
+            if (Gaze != null && !float.IsNaN(Gaze[id * 3]))
+            {
+                lx = Gaze[id * 3];
+                lz = Gaze[id * 3 + 2];
+                // Up at the stands, down at his boots.
+                float gd = MathF.Sqrt((lx - x) * (lx - x) + (lz - z) * (lz - z));
+                float want = -Clamp(MathF.Atan2(Gaze[id * 3 + 1] - 1.65f, gd), -0.45f, 0.35f) * 0.8f;
+                _gazePitch[id] += (want - _gazePitch[id]) * (1 - MathF.Exp(-dt * 5));
+                headPitch += _gazePitch[id];
+            }
+            else _gazePitch[id] = 0;
+            float rel = MathF.Atan2(lz - z, lx - x) - facing;
             float r = MathF.Atan2(MathF.Sin(rel), MathF.Cos(rel));
             float limit = 1.1f - 0.6f * s;
             float wantY = MathF.Abs(r) < 2.4f ? Clamp(-r, -limit, limit) : 0;

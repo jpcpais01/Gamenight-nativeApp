@@ -629,6 +629,7 @@ public partial class Main : Node
             if (!_live.Active) EndDirected();
         }
         _prof.Lap(Profiler.Sys.Camera);
+        _players.Gaze = Cutscene.Active ? Cutscene.Gaze : null;
         if (Cutscene.Active)
             _players.Update(Cutscene.Frame, Cutscene.Frame, 0, _time, 1);
         else if (_replay.Active)

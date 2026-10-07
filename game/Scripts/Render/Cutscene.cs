@@ -102,6 +102,19 @@ public sealed class Cutscene
     readonly float[] _face = new float[MatchSnapshot.N], _stride = new float[MatchSnapshot.N];
     readonly bool[] _square = new bool[MatchSnapshot.N];
 
+    // Each man his own walk: pace, the gap he keeps to the man ahead, where in the file he
+    // walks and how he drifts in it, a step that isn't anyone else's, and where he's looking.
+    const int N = MatchSnapshot.N;
+    readonly float[] _pace = new float[N], _gap = new float[N], _lane = new float[N];
+    readonly float[] _swayA = new float[N], _swayW = new float[N], _phase = new float[N];
+    readonly float[] _fileX = new float[N], _faceJit = new float[N], _fidgetT = new float[N];
+    readonly int[] _ahead = new int[N];
+    float _clock;
+    Random _rng = new(1);
+    /// <summary>Where each head looks (x, y, z; x NaN: at the ball), for PlayersView.</summary>
+    public readonly float[] Gaze = new float[N * 3];
+    readonly float[] _gazeT = new float[N];
+
     /// <summary>What's drawn: the match's snapshot with everyone where the walk-out has them.</summary>
     public readonly MatchSnapshot Frame = new();
     public bool Active => _i >= 0;
@@ -135,6 +148,29 @@ public sealed class Cutscene
             _team[t] = team.Info.Name;
             foreach (var p in team.Players) _who[p.Id] = (p.Number > 0 ? p.Number + "  " : "") + UI.MatchInfo.Who(p) + (p == cap ? "  (C)" : "");
         }
+        // Who walks behind whom, and each man's manner (seeded by the fixture, so a replayed
+        // walk-out is the same one).
+        int seed = 17;
+        foreach (char c in _team[0] + "|" + _team[1]) seed = seed * 31 + c;
+        _rng = new Random(seed);
+        Array.Fill(_ahead, -1);
+        Array.Fill(Gaze, float.NaN);
+        for (int t = 0; t < 2; t++)
+            for (int k = 0; k < _order[t].Length; k++)
+            {
+                int id = _order[t][k];
+                if (k > 0) _ahead[id] = _order[t][k - 1];
+                _pace[id] = WalkSpeed * Rand(0.88f, 1.12f);
+                _gap[id] = Rand(1.05f, 1.6f);
+                _lane[id] = Rand(-0.22f, 0.22f);
+                _swayA[id] = Rand(0.04f, 0.16f);
+                _swayW[id] = Rand(0.9f, 1.8f);
+                _phase[id] = Rand(0, MathF.Tau);
+                _stride[id] = Rand(0, MathF.Tau);
+                _faceJit[id] = 0;
+                _fidgetT[id] = Rand(1, 5);
+                _gazeT[id] = Rand(0, 1.5f);
+            }
         // The line-up row, and where kick-off has each of them.
         _line.Clear();
         _kick.Clear();
@@ -145,7 +181,8 @@ public sealed class Cutscene
             {
                 int id = _order[t][k];
                 float x = s * (1.55f + k * 1.05f);
-                _line[id] = new Spot { X = x, Z = LineZ, LX = x, LZ = 30 };
+                // Not a parade-ground row: a touch in front or behind, not all square to the camera.
+                _line[id] = new Spot { X = x, Z = LineZ + Rand(-0.08f, 0.08f), LX = x + Rand(-4, 4), LZ = 30 };
                 float f = cur.Facing[id];
                 _kick[id] = new Spot { X = cur.X[id], Z = cur.Z[id], LX = cur.X[id] + MathF.Cos(f) * 10, LZ = cur.Z[id] + MathF.Sin(f) * 10 };
             }
@@ -223,6 +260,7 @@ public sealed class Cutscene
                 break;
             case Kind.Ready:
                 ToKickOff();
+                Array.Fill(Gaze, float.NaN);
                 OnCaption?.Invoke("", "");
                 OnBeat?.Invoke(Beat.Ready);
                 break;
@@ -343,8 +381,9 @@ public sealed class Cutscene
             for (int k = 0; k < _order[t].Length; k++)
             {
                 int id = _order[t][k];
-                _x[id] = t == 0 ? -0.85f : 0.85f;
-                _z[id] = MouthZ + 3.4f - k * 1.25f;
+                _fileX[id] = (t == 0 ? -0.85f : 0.85f) + _lane[id] * 0.5f;
+                _x[id] = _fileX[id];
+                _z[id] = MouthZ + 3.4f - k * 1.25f + Rand(-0.12f, 0.12f);
                 _vx[id] = _vz[id] = 0;
                 _face[id] = MathF.PI / 2;
                 _square[id] = true;
@@ -395,31 +434,51 @@ public sealed class Cutscene
             _z[id] = k.Z - dz * back;
             _vx[id] = dx / MathF.Max(d, 1e-3f) * JogSpeed * MathF.Min(1, d);
             _vz[id] = dz / MathF.Max(d, 1e-3f) * JogSpeed * MathF.Min(1, d);
+            _pace[id] = JogSpeed * Rand(0.9f, 1.1f);
             _face[id] = MathF.Atan2(dz, dx);
             _square[id] = false;
             _to[id] = k;
         }
     }
 
-    /// <summary>Out of the tunnel in two files, then each to his mark.</summary>
+    float Rand(float a, float b) => a + (b - a) * (float)_rng.NextDouble();
+
+    /// <summary>Out of the tunnel in two files, then each to his mark: each at his own pace,
+    /// keeping his own gap to the man ahead, drifting a little in the file, glancing about.</summary>
     void Walk(float dt)
     {
         if (dt <= 0) return;
         dt = MathF.Min(dt, 1 / 30f);
+        _clock += dt;
+        bool walking = _speed == WalkSpeed;
         foreach (var (id, s) in _to)
         {
             // Straight out of the tunnel until clear of the dugouts, then across to his mark.
-            bool outOf = !_tunnel && _z[id] < MouthZ + 12 && _speed == WalkSpeed;
-            float tx = outOf ? _x[id] : s.X, tz = outOf ? _z[id] + 4 : s.Z;
+            bool outOf = !_tunnel && _z[id] < MouthZ + 12 && walking;
+            float sway = walking ? _lane[id] + _swayA[id] * MathF.Sin(_clock * _swayW[id] + _phase[id]) : 0;
+            float tx = outOf ? _fileX[id] + sway : s.X, tz = outOf ? _z[id] + 4 : s.Z;
             float dx = tx - _x[id], dz = tz - _z[id];
             float d = MathF.Sqrt(dx * dx + dz * dz);
             float wvx = 0, wvz = 0;
             if (d < 0.3f) _square[id] = true;
             else
             {
-                float want = MathF.Min(_speed, d * 1.2f + 0.3f);
-                wvx = dx / d * want;
-                wvz = dz / d * want;
+                float pace = walking && !_tunnel ? _pace[id] * (1 + 0.05f * MathF.Sin(_clock * 0.9f * _swayW[id] + 2 * _phase[id])) : _pace[id];
+                float want = MathF.Min(pace, d * 1.2f + 0.3f);
+                // Never up the heels of the man in front (while he walks): ease off inside your gap,
+                // close it up outside.
+                int a = _ahead[id];
+                if (walking && a >= 0 && !_square[a])
+                {
+                    float ax = _x[a] - _x[id], az = _z[a] - _z[id];
+                    float ad = MathF.Sqrt(ax * ax + az * az);
+                    if (ad < 3 && ax * dx + az * dz > 0)
+                        want *= Math.Clamp((ad - 0.7f * _gap[id]) / (0.45f * _gap[id]), 0, 1.12f);
+                }
+                // Across to the mark, the drift fades as he gets there.
+                float side = outOf ? 0 : sway * Math.Clamp(d / 4, 0, 1) * 0.6f;
+                wvx = dx / d * want - dz / d * side;
+                wvz = dz / d * want + dx / d * side;
                 _square[id] = false;
             }
             float ka = 1 - MathF.Exp(-dt * 6);
@@ -428,17 +487,60 @@ public sealed class Cutscene
             _x[id] += _vx[id] * dt;
             _z[id] += _vz[id] * dt;
             float sp = MathF.Sqrt(_vx[id] * _vx[id] + _vz[id] * _vz[id]);
+            // Stood still, now and then he shifts his weight and squares up again.
+            if (_square[id] && walking && (_fidgetT[id] -= dt) <= 0)
+            {
+                _faceJit[id] = _rng.NextDouble() < 0.6 ? Rand(-0.35f, 0.35f) : 0;
+                _fidgetT[id] = Rand(2.5f, 6);
+            }
             // The body goes where he walks; on his mark, it turns to what he faces.
-            float wantF = _square[id] || sp < 0.6f ? MathF.Atan2(s.LZ - _z[id], s.LX - _x[id]) : MathF.Atan2(_vz[id], _vx[id]);
+            float wantF = _square[id] || sp < 0.6f ? MathF.Atan2(s.LZ - _z[id], s.LX - _x[id]) + _faceJit[id] : MathF.Atan2(_vz[id], _vx[id]);
             float df = wantF - _face[id];
             df -= MathF.Round(df / (MathF.PI * 2)) * MathF.PI * 2;
-            float turn = Math.Clamp(df, -12 * dt, 12 * dt);
+            float turn = Math.Clamp(df, -(_square[id] ? 3 : 12) * dt, (_square[id] ? 3 : 12) * dt);
             _face[id] += turn;
             // Turning on the spot still takes steps; one step is half a stride cycle.
             if (sp < 2.5f) _stride[id] += MathF.Abs(turn) * 1.6f * (1 - sp / 2.5f);
             _stride[id] += sp / (float)Player.StepLength(sp, 1) * MathF.PI * dt;
+            if (walking && (_gazeT[id] -= dt) <= 0) Glance(id, s, sp);
         }
         Write();
+    }
+
+    /// <summary>Somewhere new to look: up the tunnel, at the stands, at a team-mate, at his boots.</summary>
+    void Glance(int id, Spot s, float sp)
+    {
+        float r = (float)_rng.NextDouble();
+        float x = _x[id], z = _z[id];
+        float gx, gy, gz;
+        int a = _ahead[id];
+        if (_tunnel)
+        {
+            _gazeT[id] = Rand(1.2f, 3);
+            if (r < 0.55f) (gx, gy, gz) = (x, 1.7f, z + 20);
+            else if (r < 0.8f) (gx, gy, gz) = (-x * 2, 1.5f, z + Rand(-1.5f, 1.5f));
+            else (gx, gy, gz) = (x + Rand(-0.3f, 0.3f), 0, z + 1.6f);
+        }
+        else if (sp > 0.5f)
+        {
+            _gazeT[id] = Rand(0.8f, 2.4f);
+            float hw = (float)Pitch.HalfW, hl = (float)Pitch.HalfL;
+            if (r < 0.3f) (gx, gy, gz) = (s.X, 1.5f, s.Z);
+            else if (r < 0.55f) (gx, gy, gz) = (Rand(-hl, hl), Rand(7, 16), hw + 14);
+            else if (r < 0.8f) (gx, gy, gz) = (MathF.Sign(Rand(-1, 1)) * (hl + 12), Rand(6, 14), Rand(-hw, hw));
+            else if (a >= 0) (gx, gy, gz) = (_x[a], 1.6f, _z[a]);
+            else (gx, gy, gz) = (x, 0.5f, z + 4);
+        }
+        else
+        {
+            _gazeT[id] = Rand(1.5f, 4);
+            if (r < 0.55f) (gx, gy, gz) = (x + Rand(-3, 3), 1.6f, 30);
+            else if (r < 0.85f) (gx, gy, gz) = (Rand(-40, 40), Rand(9, 18), (float)Pitch.HalfW + 14);
+            else (gx, gy, gz) = (x + Rand(-6, 6), 1.5f, z);
+        }
+        Gaze[id * 3] = gx;
+        Gaze[id * 3 + 1] = gy;
+        Gaze[id * 3 + 2] = gz;
     }
 
     void Write()
