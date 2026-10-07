@@ -321,18 +321,23 @@ public static class Art
         ci.DrawRect(new Rect2(plate.Position.X, plate.End.Y, plate.Size.X, Mathf.Max(1, u * 0.1f)), plateLine);
         int ns = (int)(u * 1.5f);
         Px.TextC(ci, Px.Big, plate.GetCenter().X, plate.GetCenter().Y + ns * 0.36f, Px.Fit(Px.Big, c.LastName.ToUpperInvariant(), ns, plate.Size.X - u * 0.6f), ns, ink);
-        // Six stats, two columns of three, split by a rule.
+        // Six stats, two columns of three split by a rule, each column centred in its half and
+        // kept above where the card's sides start to taper in.
         var fs = Cards.FaceStats(c);
-        int vs = (int)(u * 1.2f), ls = (int)(u * 0.9f);
+        int vs = (int)(u * 1.1f), ls = (int)(u * 0.8f);
+        float valW = Px.Width(Px.Big, "99", vs), gapW = u * 0.3f, labW = 0;
+        for (int i = 0; i < 6; i++) labW = Mathf.Max(labW, Px.Width(Px.Big, fs[i].Item1, ls));
+        float blockW = valW + gapW + labW;
         for (int i = 0; i < 6; i++)
         {
-            float x = p.X + u * (i < 3 ? 1.35f : 5.55f);
-            float y = p.Y + u * (10.35f + (i % 3) * 0.98f);
+            float cx = ir.Position.X + ir.Size.X * (i < 3 ? 0.27f : 0.73f);
+            float x0 = cx - blockW / 2;
+            float y = p.Y + u * (10.05f + (i % 3) * 0.86f);
             string v = fs[i].Item2.ToString();
-            Px.Text(ci, Px.Big, new Vector2(x, y), v, vs, ink);
-            Px.Text(ci, Px.Big, new Vector2(x + u * 1.75f, y), fs[i].Item1, ls, new Color(ink, 0.75f));
+            Px.TextR(ci, Px.Big, x0 + valW, y, v, vs, ink);
+            Px.Text(ci, Px.Big, new Vector2(x0 + valW + gapW, y), fs[i].Item1, ls, new Color(ink, 0.75f));
         }
-        ci.DrawRect(new Rect2(U(4.95f, 9.6f), new Vector2(Mathf.Max(1, u * 0.1f), u * 2.75f)), new Color(ink, 0.3f));
+        ci.DrawRect(new Rect2(ir.Position.X + ir.Size.X * 0.5f - Mathf.Max(1, u * 0.1f) / 2, p.Y + u * 9.55f, Mathf.Max(1, u * 0.1f), u * 2.55f), new Color(ink, 0.3f));
         if (u >= 6) Px.TextC(ci, Px.Small, ir.GetCenter().X, p.Y + u * 12.95f, ev?.Label ?? Cards.Label(c.Rarity).ToUpperInvariant(), Math.Max(7, (int)(u * 0.6f)), ev != null ? acc : new Color(ink, 0.7f));
     }
 

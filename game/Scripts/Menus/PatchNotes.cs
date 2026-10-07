@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("1.19", "Card stats fit properly now: the six numbers sit in two neat centred columns above where the card narrows, on every card and event design, instead of running into the edges and the bottom label."),
         ("1.18", "Three new event packs in the store: Inferno (flame-crowned cards with lava cracks and fire), Neon City (synthwave sun, grid and skyline) and Dragon New Year (red and gold, a pagoda roof, scales and clouds). Same deal: +4 on every stat, best card always an event card."),
         ("1.17", "Cleaner player sheet: the skill stars and the signature skill's name and stars stand on their own, without the helper text beside them."),
         ("1.16", "Eight new places round your stadium: an English mill town, Paris, a Greek island caldera, Kyoto, a desert city, plus three specials: a haunted Halloween hollow under a giant moon, a moon base with the Earth in a black sky, and a snowy Christmas village."),
