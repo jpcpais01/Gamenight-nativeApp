@@ -78,6 +78,14 @@ public partial class Main : Node
     readonly int[] _picks = { -1, -1 };
     double _pingMs = -1, _pingAt;
     bool _friendGone, _hostDirectedWas;
+    /// <summary>Online coach mode: the computer plays both sides, each friend manages theirs
+    /// from the board (the host's engine carries out both managers' orders).</summary>
+    bool _coach;
+    CoachPanel _coachPanel;
+    /// <summary>Each side's board as the engine last saw it (written on the engine thread).</summary>
+    volatile CoachView _board0, _board1;
+    CoachView _boardSent;
+    double _boardAt = -1;
     /// <summary>Debug: `-- --screenshot=out.png` saves the screen after a few seconds and quits.</summary>
     string _shotPath;
     double _time, _shotAt = 6;
@@ -140,6 +148,21 @@ public partial class Main : Node
         _online = Request?.Online;
         _guest = Request?.Guest == true;
         _versus = Request?.Versus == true || _online != null;
+        _coach = Request?.Coach == true && _online != null;
+        if (_coach)
+        {
+            // Nothing to steer: the controls go, the manager's board comes.
+            _controls.Modulate = new Color(1, 1, 1, 0);
+            _controls.ProcessMode = ProcessModeEnum.Disabled;
+            _coachPanel = new CoachPanel();
+            _coachPanel.Ordered += o =>
+            {
+                if (_guest) _online.SendJson(Online.Order, o);
+                else Command(0, o);
+            };
+            AddChild(_coachPanel);
+            MoveChild(_coachPanel, _letterbox.GetIndex());
+        }
         if (_guest) _feed = new NetFeed();
         _netEvents.ClearEvents();
         _hud.Side = _guest ? 1 : 0;
@@ -232,8 +255,14 @@ public partial class Main : Node
         while (_skipGoals.TryDequeue(out _)) { }
         _match = Request != null ? new Match(Request.Seed, Request.Setup) : new Match(seed: DateTime.Now.Ticks % 2147483647);
         PickExplosions();
-        if (Request?.Demo == true || Request?.Watch == true) _match.AutoPlay = true;
-        _match.Versus = _versus;
+        if (Request?.Demo == true || Request?.Watch == true || _coach) _match.AutoPlay = true;
+        _match.Versus = _versus && !_coach;
+        if (_coach)
+        {
+            _match.Managed[0] = _match.Managed[1] = true;
+            for (int t = 0; t < 2; t++) _match.FormationId[t] = Request.Formations?[t] ?? "433";
+            _coachPanel.Shirt = Style.Hex(_match.Teams[_guest ? 1 : 0].Info.Kit.Shirt);
+        }
         // Names and kits are read before the match's own thread starts.
         _players.SetMatch(_match);
         _hud.SetMatch(_match);
@@ -336,7 +365,7 @@ public partial class Main : Node
         _goalFx.Clear();
         Cutscene.Cancel();
         _players.Snap();
-        _players.Markers = Request?.Watch != true;
+        _players.Markers = Request?.Watch != true && !_coach;
         _hud.Visible = Request?.Demo != true;
         _controls.Visible = !_pause.IsOpen;
         _letterbox.Close();
@@ -490,7 +519,7 @@ public partial class Main : Node
         _prof.Begin();
         _controls.Tick(dt);
         // The keyboard, a gamepad and a phone used as a controller play alongside the touch controls.
-        bool live = Request?.Demo != true && Request?.Watch != true && _controls.Visible && !_pause.IsOpen && !Directed && !_invaderShown;
+        bool live = Request?.Demo != true && Request?.Watch != true && !_coach && _controls.Visible && !_pause.IsOpen && !Directed && !_invaderShown;
         InputState input;
         if (Request?.Versus == true)
         {
@@ -517,6 +546,12 @@ public partial class Main : Node
             else if (Request?.Versus == true) _runner.Submit2(_away);
             _runner.Read(_prev, _cur, out alpha);
             if (_online != null) SendFrame();
+            if (_coach) CoachHost();
+        }
+        if (_coachPanel != null)
+        {
+            _coachPanel.Visible = !Directed;
+            _coachPanel.View = _guest ? _board1 : _board0;
         }
         if (_watchBar != null) Skip();
 
@@ -786,6 +821,7 @@ public partial class Main : Node
                     _online.Send(Online.Pong, BitConverter.GetBytes(clock));
                 }
             }
+            else if (m[0] == Online.Order && _coach && Online.ReadJson<CoachOrder>(m) is { } order) Command(1, order);
             else if (m[0] == Online.Skip) SkipDirected(false);
             else if (m[0] == Online.Leave) _friendGone = true;
         }
@@ -794,7 +830,11 @@ public partial class Main : Node
         {
             // The friend left: the computer takes their side for the rest of the match.
             _versus = false;
-            _runner.Invoke(m => m.Versus = false);
+            _runner.Invoke(m =>
+            {
+                m.Versus = false;
+                m.Managed[1] = false;
+            });
             _hud.Note = "YOUR FRIEND LEFT · THE COMPUTER TAKES OVER";
         }
     }
@@ -816,12 +856,14 @@ public partial class Main : Node
     /// the walk-out and replays kept in step, and the end if the host goes.</summary>
     void OnlineGuest(InputState input)
     {
-        var msg = _netIn.Pack(input, _time, (uint)Time.GetTicksMsec());
+        // (In coach mode there's nothing to steer; the ping still needs a packet now and then.)
+        var msg = _netIn.Pack(_coach ? _idle : input, _time, (uint)Time.GetTicksMsec());
         if (msg != null) _online.SendRaw(msg);
         while (_online.TryReceive(out var m))
         {
             if (m.Length == 0) continue;
             if (m[0] == Online.Frame) _feed.Add(m, _time);
+            else if (m[0] == Online.Bench && Online.ReadJson<CoachView>(m) is { } board) _board1 = board;
             else if (m[0] == Online.Pong && m.Length >= 5)
             {
                 double ms = (uint)Time.GetTicksMsec() - BitConverter.ToUInt32(m, 1);
@@ -842,6 +884,36 @@ public partial class Main : Node
         }
         // Substitutes the host made: dress them here too.
         if (_cur.Sub != 0) GuestSubs();
+    }
+
+    readonly InputState _idle = new();
+
+    /// <summary>Host: a manager's order into the engine (a formation is taken from our own list,
+    /// whatever slots came with it).</summary>
+    void Command(int team, CoachOrder o)
+    {
+        if (o.Kind == CoachOrder.Shape) o = CoachPanel.Shape(GameNight.Club.Formations.ById(o.Formation));
+        _runner.Invoke(m => m.Order(team, o));
+        _boardAt = -1;
+    }
+
+    /// <summary>Host, coach mode: both boards read off the engine a few times a second; the
+    /// friend's goes down the line when it changes.</summary>
+    void CoachHost()
+    {
+        if (_boardAt >= 0 && _time - _boardAt < 0.4) return;
+        _boardAt = _time;
+        _runner.Invoke(m =>
+        {
+            _board0 = m.Coach(0);
+            _board1 = m.Coach(1);
+        });
+        var b = _board1;
+        if (b != null && b != _boardSent && _versus)
+        {
+            _boardSent = b;
+            _online.SendJson(Online.Bench, b);
+        }
     }
 
     /// <summary>Friend's screen: a sub came on at the host's. The frame says who (by number); the

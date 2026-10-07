@@ -171,7 +171,7 @@ public sealed class Player
     public readonly int Index;
     public readonly Role Role;
     /// <summary>Formation slot in team frame (attacking +x): x,z in -1..1.</summary>
-    public readonly double BaseX, BaseZ;
+    public double BaseX, BaseZ;
     public Attributes Attrs;
     /// <summary>Changes only when a substitute takes the slot.</summary>
     public Look Look;

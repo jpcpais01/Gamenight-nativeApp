@@ -291,6 +291,8 @@ public sealed partial class App : Node
             req.Seed = seed;
             req.Ground = ground;
             req.GoalFx = new[] { k.Home.GoalFx, k.Away.GoalFx };
+            req.Coach = k.Coach;
+            req.Formations = new[] { k.Home.Formation, k.Away.Formation };
         }
         else
         {
@@ -301,6 +303,8 @@ public sealed partial class App : Node
             req.HostPlan = k.Plan;
             req.HomeCrest = k.Home.Crest;
             req.GoalFx = new[] { k.Home.GoalFx, k.Away.GoalFx };
+            req.Coach = k.Coach;
+            req.Formations = new[] { k.Home.Formation, k.Away.Formation };
         }
         req.Done = r => CallDeferred(nameof(FriendlyOver), r.Finished, r.Home, r.Away, o.IsHost ? 0 : 1);
         Play(req);

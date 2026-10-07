@@ -42,6 +42,10 @@ public sealed class MatchRequest
     public GameNight.Club.Crest HomeCrest;
     /// <summary>Each side's goal explosion, when both are known (online).</summary>
     public int[] GoalFx;
+    /// <summary>Online coach mode: the computer plays both sides; each friend manages theirs.</summary>
+    public bool Coach;
+    /// <summary>Each side's formation id, for the coach's board.</summary>
+    public string[] Formations;
     public bool Guest => Online != null && !Online.IsHost;
 }
 
