@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.118", "Passes reworked: PASS always goes to a team-mate's feet (never into space; that's THROUGH), only a step into his stride when he's running, and the hold now sets the pace too: a tap rolls it softly, a long hold zips it in."),
         ("0.117", "Coach creator rebuilt: face, hair, body, outfit and manner sections, beards and stubble, a buzz cut, more skin tones and hair colours, your own coat colour and a tie, scarf or stripes in any colour (or the club's), and SURPRISE ME. Your touchline coach matches."),
         ("0.116", "Event cards: four new event packs in the store, Fright Night (Halloween), Winter Frost, Carnival and Cosmic. Their cards have their own shape and art (bats and a harvest moon, icicles and snowflakes, feathers and confetti, stars and planets) and +4 on every stat."),
         ("0.115", "Every player has his own head now: a little bigger or smaller, rounder, longer or squarer, with his own jaw, chin, cheekbones, nose and brow. It is tied to his name, so he always looks the same."),

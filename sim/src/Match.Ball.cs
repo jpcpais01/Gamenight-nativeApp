@@ -271,6 +271,8 @@ public sealed partial class Match
                         ? AI.BestReceiver(p, false)
                     : plan.Aimed != null
                         ? AI.HumanReceiver(p, plan.DirX, plan.DirZ, plan.Aimed == true, plan.Power)
+                            // (PASS is to a man: nobody near the stick, the nearest one roughly that way)
+                            ?? AI.HumanReceiver(p, plan.DirX, plan.DirZ, plan.Aimed == true, plan.Power, true)
                         : AI.PickReceiver(p, plan.DirX, plan.DirZ, false, 0.35, null);
             bool lob = plan.Type == KickType.Lob;
             // Nobody to feet where the stick points: into the path of a team-mate who gets there
@@ -316,7 +318,7 @@ public sealed partial class Match
                 KickResult r;
                 if (yours)
                 {
-                    r = HumanPass(b.Pos, receiver, plan.Type == KickType.Lob);
+                    r = HumanPass(b.Pos, receiver, plan.Type == KickType.Lob, plan.Power);
                     lofted = r.Vel.Y > 0;
                 }
                 else
@@ -404,45 +406,49 @@ public sealed partial class Match
     }
 
     /// <summary>
-    /// Your pass to a team-mate, mobile-style. To his feet when he's standing or coming to you;
-    /// when he's running away from you, into his path (where he'll be as it gets there, 5 m at
-    /// most). Paced by the distance alone: crisp, never a rocket. Over 30 m (or slid up) it's lifted,
-    /// to drop just in front of him.
+    /// Your pass to a team-mate: to his feet, into his stride if he's on the move (half his run
+    /// when he's jogging, all of it only flat out, never more than 4 m: he comes to it), and paced
+    /// by your hold: a tap rolls it gently, a long hold zips it in.
     /// </summary>
-    KickResult HumanPass(V3 from, Player q, bool lob)
+    KickResult HumanPass(V3 from, Player q, bool lob, double hold)
     {
-        double rx = q.Pos.X - from.X;
-        double rz = q.Pos.Z - from.Z;
-        double rd = Math.Max(0.5, JsMath.Hypot(rx, rz));
-        bool lead = q.Speed > 3 && (q.Vel.X * rx + q.Vel.Z * rz) / rd > 1.5;
+        double h = M.Clamp(hold, 0, 1);
+        double rd = Math.Max(0.5, M.Dist2D(from.X, from.Z, q.Pos.X, q.Pos.Z));
         bool lift = lob || rd > 30;
+        bool lead = q.Speed > 2;
+        double share = 0.5 + 0.5 * M.Clamp((q.Speed - 3) / 4, 0, 1);
         double t = 0;
         KickResult r = null!;
         for (int i = 0; i < 3; i++)
         {
-            double lx = lead ? q.Vel.X * t : 0;
-            double lz = lead ? q.Vel.Z * t : 0;
+            double lx = lead ? q.Vel.X * t * share : 0;
+            double lz = lead ? q.Vel.Z * t * share : 0;
             double ln = JsMath.Hypot(lx, lz);
-            if (ln > 5)
+            if (ln > 4)
             {
-                lx *= 5 / ln;
-                lz *= 5 / ln;
+                lx *= 4 / ln;
+                lz *= 4 / ln;
             }
             double ax = M.Clamp(q.Pos.X + lx, -Pitch.HalfL + 1, Pitch.HalfL - 1);
             double az = M.Clamp(q.Pos.Z + lz, -Pitch.HalfW + 1, Pitch.HalfW - 1);
             double D = Math.Max(0.5, M.Dist2D(from.X, from.Z, ax, az));
             if (lift)
             {
-                // Coming down a few metres in front of him, so he takes it off the bounce, not on his head.
+                // Coming down a few metres in front of him, so he takes it off the bounce, not on
+                // his head; a longer hold drives it flatter and quicker.
                 double k = Math.Max(D - 4, D * 0.85) / D;
-                r = Kick.SolveLofted(from, from.X + (ax - from.X) * k, from.Z + (az - from.Z) * k, lob ? M.Clamp(16 + D * 0.45, 20, 38) : M.Clamp(14 + D * 0.35, 18, 32), 25, 0);
+                double angle = (lob ? M.Clamp(16 + D * 0.45, 20, 38) : M.Clamp(14 + D * 0.35, 18, 32)) * (1.1 - 0.25 * h);
+                r = Kick.SolveLofted(from, from.X + (ax - from.X) * k, from.Z + (az - from.Z) * k, angle, 25, 0);
                 t = r.Time + 0.3;
             }
             else
             {
+                // Rolled to arrive in about 0.25 + D/15 s at a middling hold; a tap takes about
+                // 10% longer, a full hold 25% less.
+                double wantT = (0.25 + D / 15) * (1.15 - 0.4 * h);
                 double v0 = 19;
                 t = D / 12;
-                if (Kick.RollingPass(D, 0.25 + D / 15, out var rp))
+                if (Kick.RollingPass(D, wantT, out var rp))
                 {
                     v0 = rp.V0;
                     t = rp.T;

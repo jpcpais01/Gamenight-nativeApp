@@ -2378,11 +2378,11 @@ public sealed partial class AI
     /// sooner he'd be there) and the keeper (2, unless it's a back pass) all count against him.
     /// The lowest wins.
     /// </summary>
-    public Player? HumanReceiver(Player p, double dirX, double dirZ, bool aimed, double hold)
+    public Player? HumanReceiver(Player p, double dirX, double dirZ, bool aimed, double hold, bool wide = false)
     {
         var b = m.Ball.Pos;
         double dir = m.Teams[p.Team].Dir;
-        double cone = JsMath.Cos((aimed ? 50 : 70) * Math.PI / 180);
+        double cone = JsMath.Cos((wide ? 85 : aimed ? 50 : 70) * Math.PI / 180);
         // A quick tap means the near man: the hold's reach grows slowly at first (6.5 m for a
         // tap, 17 m at half, 40 m full), and below a full hold a man beyond it costs more than
         // one short of it, while a little off the stick costs less.
