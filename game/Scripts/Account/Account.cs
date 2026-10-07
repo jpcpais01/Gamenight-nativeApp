@@ -33,7 +33,7 @@ public sealed partial class Account : Node
     public enum State { Off, Working, Synced, Offline }
 
     /// <summary>The save files that travel with the account.</summary>
-    static readonly (string key, string file)[] Files = { ("club", "club.json"), ("league", "league.json"), ("career", "career.json") };
+    static readonly (string key, string file)[] Files = { ("club", "club.json"), ("league", "league.json"), ("career", "career.json"), ("cup", "cup.json") };
 
     const string ConfigPath = "user://account.cfg";
     const double Debounce = 2.5, RetryAfter = 30;
