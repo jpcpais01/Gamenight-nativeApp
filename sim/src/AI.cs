@@ -2383,7 +2383,13 @@ public sealed partial class AI
         var b = m.Ball.Pos;
         double dir = m.Teams[p.Team].Dir;
         double cone = JsMath.Cos((aimed ? 50 : 70) * Math.PI / 180);
-        double want = 6 + 34 * M.Clamp(hold, 0, 1);
+        // A quick tap means the near man: the hold's reach grows slowly at first (6.5 m for a
+        // tap, 17 m at half, 40 m full), and below a full hold a man beyond it costs more than
+        // one short of it, while a little off the stick costs less.
+        double h = M.Clamp(hold, 0, 1);
+        double want = 5 + 35 * h * Math.Sqrt(h);
+        double perDeg = 12 + 6 * (1 - h);
+        double perOver = 3 + 9 * h;
         Player? best = null;
         double bestC = 1e9;
         foreach (var q in m.Teams[p.Team].Players)
@@ -2396,7 +2402,7 @@ public sealed partial class AI
             double align = (dx * dirX + dz * dirZ) / d;
             if (align < cone) continue;
             double off = Math.Abs(JsMath.Atan2(dx * dirZ - dz * dirX, dx * dirX + dz * dirZ)) * 180 / Math.PI;
-            double c = off / 12 + Math.Abs(d - want) / 12;
+            double c = off / perDeg + (d > want ? (d - want) / perOver : (want - d) / 12);
             // A defender who'd get there first: the further first, the worse.
             double margin = PassMargin(p, q);
             if (margin < 0.1) c += 1.5 + M.Clamp(0.1 - margin, 0, 2) * 3;
