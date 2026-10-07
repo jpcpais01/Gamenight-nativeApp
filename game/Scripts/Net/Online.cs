@@ -21,7 +21,7 @@ namespace GameNight.Net;
 public sealed class Online : IDisposable
 {
     public const byte Club = (byte)'C', Start = (byte)'S', Input = (byte)'I', Frame = (byte)'F', Pong = (byte)'Q', Skip = (byte)'K', Leave = (byte)'L',
-        Order = (byte)'O', Bench = (byte)'B';
+        Order = (byte)'O', Bench = (byte)'B', Sim = (byte)'M';
 
     /// <summary>The online game under way (the lobby or a match), or null.</summary>
     public static Online Current { get; private set; }

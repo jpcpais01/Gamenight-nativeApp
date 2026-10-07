@@ -200,6 +200,11 @@ public partial class Main : Node
         _pause.WeatherName = () => Atmosphere.Names[(int)_ground.Atmosphere.Weather];
         _pause.CycleWeather = () => Atmosphere.Names[(int)_ground.Atmosphere.Cycle()];
         _pause.SaveReport = SaveReport;
+        // Simulate the rest (not drills or the demo): FULL only where someone is playing.
+        bool computerOnly = Request?.Watch == true || _coach;
+        _pause.SimulateWays(Request?.Drill == null && Request?.Demo != true, !computerOnly);
+        _pause.Simulate = fast => SimAsk(fast ? SimFast : SimFull);
+        _pause.TakeBack = () => SimAsk(SimBack);
         if (Request?.Demo != true && Request?.Watch != true && Request?.Drill == null && !_versus)
         {
             _pause.Foul = () => _runner?.Invoke(m => m.DebugFoul());
@@ -252,6 +257,8 @@ public partial class Main : Node
         _logged = _subsDressed = 0;
         _skipping = false;
         if (_watchBar != null) _watchBar.Skipping = false;
+        _autopilot = false;
+        _pause.Autopilot = false;
         while (_skipGoals.TryDequeue(out _)) { }
         _match = Request != null ? new Match(Request.Seed, Request.Setup) : new Match(seed: DateTime.Now.Ticks % 2147483647);
         PickExplosions();
@@ -427,13 +434,15 @@ public partial class Main : Node
     /// frames (so the score ticks on screen), keeping a note of every goal for the table.</summary>
     void Skip()
     {
-        _watchBar.Visible = !Directed;
+        if (_watchBar != null) _watchBar.Visible = !Directed;
         if (!_skipping || _chunkBusy || _cur.Phase == Phase.Fulltime) return;
         if (Directed) EndDirected();
         _chunkBusy = true;
         _runner.Invoke(m =>
         {
             var none = new InputState();
+            // Nobody's steering any more: the computer plays both sides to the end.
+            m.AutoPlay = true;
             int total = m.Teams[0].Score + m.Teams[1].Score;
             // About a minute of match per chunk.
             for (int i = 0; i < 1200 && m.Phase != Phase.Fulltime; i++)
@@ -442,7 +451,7 @@ public partial class Main : Node
                 m.TakeEvents();
                 int now = m.Teams[0].Score + m.Teams[1].Score;
                 if (now > total && m.Scorer != null)
-                    _skipGoals.Enqueue(new GoalEvent { Team = m.Scorer.Team, Index = m.Scorer.Index, Minute = Math.Max(1, m.DisplayMinute) });
+                    _skipGoals.Enqueue(new GoalEvent { Team = m.Scorer.Team, Index = m.Scorer.Index, Minute = Math.Max(1, m.DisplayMinute), Name = m.Scorer.Name });
                 total = now;
             }
             _chunkBusy = false;
@@ -533,6 +542,7 @@ public partial class Main : Node
         // (A phone's own screen still plays its side of a same-screen 1v1, pads or not.)
         bool touchPlays = Request?.Versus == true && !OS.HasFeature("pc") && Link.Host.Instance?.SideOf("keys") >= 0;
         _controls.SelfModulate = Link.Host.Instance?.RemotePlay == true && !touchPlays ? Colors.Transparent : Colors.White;
+        if (_autopilot && TookOver(input)) SimAsk(SimBack);
         float alpha;
         if (_guest)
         {
@@ -553,7 +563,7 @@ public partial class Main : Node
             _coachPanel.Visible = !Directed;
             _coachPanel.View = _guest ? _board1 : _board0;
         }
-        if (_watchBar != null) Skip();
+        if (!_guest) Skip();
 
         if (_view.Fit())
         {
@@ -823,6 +833,7 @@ public partial class Main : Node
             }
             else if (m[0] == Online.Order && _coach && Online.ReadJson<CoachOrder>(m) is { } order) Command(1, order);
             else if (m[0] == Online.Skip) SkipDirected(false);
+            else if (m[0] == Online.Sim && m.Length >= 3) SimHeard(m[1], m[2]);
             else if (m[0] == Online.Leave) _friendGone = true;
         }
         _runner.Submit2(_away);
@@ -870,13 +881,14 @@ public partial class Main : Node
                 _pingMs = _pingMs < 0 ? ms : _pingMs + (ms - _pingMs) * 0.3;
             }
             else if (m[0] == Online.Skip) SkipDirected(false);
+            else if (m[0] == Online.Sim && m.Length >= 3) SimHeard(m[1], m[2]);
             else if (m[0] == Online.Leave) _friendGone = true;
         }
         // The host's walk-out or replay is over: so is ours.
         if (_hostDirectedWas && !_feed.HostDirected && Directed) SkipDirected(false);
         _hostDirectedWas = _feed.HostDirected;
         bool stalled = _feed.LastFrameAt >= 0 && _time - _feed.LastFrameAt > 1.5;
-        _hud.Note = _pingMs >= 0 ? $"ONLINE · {_pingMs:0} MS" + (stalled ? " · WAITING FOR THE HOST" : "") : "ONLINE";
+        _hud.Note = (_pingMs >= 0 ? $"ONLINE · {_pingMs:0} MS" + (stalled ? " · WAITING FOR THE HOST" : "") : "ONLINE") + (_autopilot ? " · " + AutopilotNote : "");
         if ((_online.Lost || _friendGone) && !_reported)
         {
             _hud.Note = "THE HOST LEFT";
@@ -933,5 +945,96 @@ public partial class Main : Node
             _players.Dress(_match, p);
         }
         _players.Flush();
+    }
+
+    // ---------------------------------------------------------------- simulate the rest
+
+    const byte SimFast = (byte)'F', SimFull = (byte)'U', SimBack = (byte)'C';
+    const byte SimRequest = (byte)'R', SimYes = (byte)'Y', SimNo = (byte)'N', SimDone = (byte)'D';
+    const string AutopilotNote = "THE COMPUTER IS PLAYING FOR YOU · TOUCH TO TAKE OVER";
+    /// <summary>FULL: the computer is playing the user's side (or both, in a 1v1).</summary>
+    bool _autopilot;
+
+    /// <summary>The pause menu's SIMULATE REST (or taking back control). Online the other player
+    /// agrees first (taking back control is anyone's call); offline it just happens.</summary>
+    void SimAsk(byte way)
+    {
+        if (_guest && way == SimBack)
+        {
+            // Ours back at once; the host's engine follows when the word arrives.
+            _autopilot = false;
+            _pause.Autopilot = false;
+        }
+        if (_online == null || way == SimBack || !_versus)
+        {
+            if (_guest) _online.Send(Online.Sim, new[] { way, SimYes });
+            else SimRun(way);
+            return;
+        }
+        _online.Send(Online.Sim, new[] { way, SimRequest });
+        _pause.Ask("WAITING FOR YOUR FRIEND TO AGREE…", null, null);
+    }
+
+    /// <summary>Online: the other side's ask, answer, or (on the friend's screen) the host's go.</summary>
+    void SimHeard(byte way, byte step)
+    {
+        if (step == SimRequest)
+        {
+            string what = way == SimFast ? "skip straight to full time" : "let the computer play the rest";
+            _pause.Ask($"YOUR FRIEND WANTS TO {what.ToUpperInvariant()}. AGREE?",
+                () =>
+                {
+                    if (_guest) _online.Send(Online.Sim, new[] { way, SimYes });
+                    else SimRun(way);
+                },
+                () => _online.Send(Online.Sim, new[] { way, SimNo }));
+        }
+        else if (step == SimNo) _pause.Ask(null);
+        else if (step == SimYes && !_guest)
+        {
+            _pause.Ask(null);
+            SimRun(way);
+        }
+        else if (step == SimDone && _guest)
+        {
+            _pause.Ask(null);
+            _autopilot = way == SimFull;
+            _pause.Autopilot = _autopilot;
+        }
+    }
+
+    /// <summary>Carry it out (this screen runs the engine).</summary>
+    void SimRun(byte way)
+    {
+        if (_cur.Phase == Phase.Fulltime) return;
+        if (way == SimFast)
+        {
+            _skipping = true;
+            if (_watchBar != null) _watchBar.Skipping = true;
+            Autopilot(false);
+            _hud.Note = "SIMULATING TO FULL TIME…";
+        }
+        else Autopilot(way == SimFull);
+        if (_online != null && _versus) _online.Send(Online.Sim, new[] { way, SimDone });
+    }
+
+    /// <summary>FULL on or off: the engine's computer drives the user's men too (both sides' in a 1v1).</summary>
+    void Autopilot(bool on)
+    {
+        if (_autopilot == on) return;
+        _autopilot = on;
+        _pause.Autopilot = on;
+        bool always = Request?.Demo == true || Request?.Watch == true || _coach;
+        _runner.Invoke(m => m.AutoPlay = on || always);
+        _players.Markers = !on && _watchBar == null;
+        if (!_guest && _online == null) _hud.Note = on ? AutopilotNote : "";
+    }
+
+    /// <summary>The stick pushed or a button pressed: the player wants his side back.</summary>
+    bool TookOver(InputState input)
+    {
+        if (_pause.IsOpen || Directed || _skipping) return false;
+        bool Moved(InputState i) => i.MoveX * i.MoveX + i.MoveY * i.MoveY > 0.25 || i.Events.Count > 0;
+        return Moved(input) || (Request?.Versus == true && Moved(_away));
     }
 }
