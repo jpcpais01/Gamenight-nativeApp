@@ -96,6 +96,7 @@ public sealed class FrameCodec
         B(ref s.SetPieceDirect); B(ref s.HasSetPieceTarget); F(ref s.SetPieceTargetX); F(ref s.SetPieceTargetZ);
         I(ref s.DeadBallTaker); F(ref s.DeadBallX); F(ref s.DeadBallZ);
         s.DeadBallKind = (SetPieceKind)I((int)s.DeadBallKind);
+        B(ref s.DeadBallRun);
         B(ref s.AimingCorner); B(ref s.AimingGoalKick); B(ref s.AimingShot);
         B(ref s.HasAimPoint); F(ref s.AimX); F(ref s.AimY); F(ref s.AimZ);
         B(ref s.HasArc); I(ref s.ArcCount);

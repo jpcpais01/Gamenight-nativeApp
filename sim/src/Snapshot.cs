@@ -93,6 +93,8 @@ public sealed class MatchSnapshot
     public int DeadBallTaker = -1;
     public float DeadBallX, DeadBallZ;
     public SetPieceKind DeadBallKind;
+    /// <summary>The taker is on his run-up: the view stays as it was lined up.</summary>
+    public bool DeadBallRun;
     /// <summary>The human is aiming a corner / goal kick / dead-ball shot (Match.AimingCorner, ...).</summary>
     public bool AimingCorner, AimingGoalKick, AimingShot;
     /// <summary>The dead-ball shot's aim point on the goal mouth (Match.AimPoint()).</summary>
@@ -160,7 +162,7 @@ public sealed class MatchSnapshot
         CelebrationOpen = o.CelebrationOpen; HumanScored = o.HumanScored; KeeperButtons = o.KeeperButtons;
         SetPiece = o.SetPiece; SetPieceTeam = o.SetPieceTeam; SetPieceTaker = o.SetPieceTaker; SetPieceX = o.SetPieceX; SetPieceZ = o.SetPieceZ;
         SetPieceDirect = o.SetPieceDirect; HasSetPieceTarget = o.HasSetPieceTarget; SetPieceTargetX = o.SetPieceTargetX; SetPieceTargetZ = o.SetPieceTargetZ;
-        DeadBallTaker = o.DeadBallTaker; DeadBallX = o.DeadBallX; DeadBallZ = o.DeadBallZ; DeadBallKind = o.DeadBallKind;
+        DeadBallTaker = o.DeadBallTaker; DeadBallX = o.DeadBallX; DeadBallZ = o.DeadBallZ; DeadBallKind = o.DeadBallKind; DeadBallRun = o.DeadBallRun;
         AimingCorner = o.AimingCorner; AimingGoalKick = o.AimingGoalKick; AimingShot = o.AimingShot;
         HasAimPoint = o.HasAimPoint; AimX = o.AimX; AimY = o.AimY; AimZ = o.AimZ;
         HasArc = o.HasArc; ArcCount = o.ArcCount; ArcRingX = o.ArcRingX; ArcRingZ = o.ArcRingZ;
@@ -325,6 +327,7 @@ public sealed partial class Match
         s.DeadBallX = (float)(view?.x ?? 0);
         s.DeadBallZ = (float)(view?.z ?? 0);
         s.DeadBallKind = view?.kind ?? SetPieceKind.Kickoff;
+        s.DeadBallRun = view?.running ?? false;
         s.AimingCorner = AimingCorner;
         s.AimingGoalKick = AimingGoalKick;
         s.AimingShot = AimingShot;

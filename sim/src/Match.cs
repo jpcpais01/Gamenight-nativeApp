@@ -807,19 +807,34 @@ public sealed partial class Match
         }
     }
 
+    SetPiece? viewFor;
+    (Player taker, double x, double z, SetPieceKind kind)? viewHeld;
+
     /// <summary>
-    /// A dead ball worth watching from behind the taker: your goal kicks, your free kicks and
-    /// penalties while you aim, and the other side's goal kicks, direct free kicks and penalties
-    /// once their taker has lined up. Null when there's nothing to show.
+    /// A dead ball worth watching from behind the taker: your goal kicks, corners, free kicks and
+    /// penalties while you aim, and the other side's once their taker has lined up. Held as it
+    /// was lined up through the run-up (Running), until the ball is struck. Null when there's
+    /// nothing to show.
     /// </summary>
-    public (Player taker, double x, double z, SetPieceKind kind)? DeadBallView
+    public (Player taker, double x, double z, SetPieceKind kind, bool running)? DeadBallView
     {
         get
         {
             var sp = SetPiece;
             if (sp == null || AutoPlay || Phase != Phase.SetPiece) return null;
             var t = sp.Taker;
-            if (t.Plan != null || t.Action != ActionKind.None || t.Speed > 0.8) return null;
+            if (t.Plan != null || t.Action != ActionKind.None || t.Speed > 0.8)
+                return viewFor == sp && viewHeld is { } h ? (h.taker, h.x, h.z, h.kind, true) : null;
+            viewFor = sp;
+            viewHeld = LinedUp(sp);
+            return viewHeld is { } v ? (v.taker, v.x, v.z, v.kind, false) : null;
+        }
+    }
+
+    (Player taker, double x, double z, SetPieceKind kind)? LinedUp(SetPiece sp)
+    {
+        {
+            var t = sp.Taker;
             bool human = HumanSide(sp.Team);
             if (human && t != Seats[sp.Team].Controlled) return null;
             double dir = Teams[sp.Team].Dir;

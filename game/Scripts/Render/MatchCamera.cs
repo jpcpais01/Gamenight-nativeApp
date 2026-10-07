@@ -265,13 +265,15 @@ public sealed class MatchCamera
     /// <summary>
     /// Lining up a free kick, penalty, corner or goal kick: the camera drops in behind the taker,
     /// over the shoulder on the ball's side, looking down the line of the shot at the goal (into
-    /// the box for a corner, up the pitch for a goal kick). The moment he sets off on his run-up it eases back up.
+    /// the box for a corner, up the pitch for a goal kick). It holds still
+    /// through his run-up, and the moment the ball is struck it eases back up.
     /// </summary>
     void UpdatePov(MatchSnapshot a, MatchSnapshot b, float alpha, float dt)
     {
         int t = b.DeadBallTaker;
         bool want = t >= 0 && b.SetPiece != null;
-        if (want)
+        // On his run-up the camera holds still where it was and lets him run into the ball.
+        if (want && !(b.DeadBallRun && _pov > 0))
         {
             float tx = Mathf.Lerp(a.X[t], b.X[t], alpha), tz = Mathf.Lerp(a.Z[t], b.Z[t], alpha);
             float gx = b.DeadBallX, gz = b.DeadBallZ;
