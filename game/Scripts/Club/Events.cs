@@ -39,6 +39,21 @@ public static class Events
             Id = "cosmic", Name = "Cosmic", Label = "COSMIC",
             Face = new[] { 0x1a1450, 0x120e3c, 0x0a0828, 0x0c0a30, 0x1e0c48 }, Trim = 0x7ff6ff, Accent = 0xff7ae6, Ink = 0xeaf6ff,
         },
+        new EventDef
+        {
+            Id = "inferno", Name = "Inferno", Label = "INFERNO",
+            Face = new[] { 0x1a0a08, 0x260c08, 0x3a1008, 0x6a1a08, 0xb8360c }, Trim = 0xff5a1a, Accent = 0xffd23a, Ink = 0xfff0d8,
+        },
+        new EventDef
+        {
+            Id = "neon", Name = "Neon City", Label = "NEON CITY",
+            Face = new[] { 0x14062e, 0x2a0a4e, 0x4c1070, 0x2a0a48, 0x12052a }, Trim = 0x2ef2ff, Accent = 0xff3ad8, Ink = 0xf6eaff,
+        },
+        new EventDef
+        {
+            Id = "dragon", Name = "Dragon New Year", Label = "DRAGON",
+            Face = new[] { 0xe8382c, 0xcc2220, 0xac1616, 0x8a0e12, 0x620a0c }, Trim = 0xffd447, Accent = 0xffeaa0, Ink = 0xfff4d0,
+        },
     };
 
     public static EventDef Of(Card c) => c?.Event == null ? null : Array.Find(All, e => e.Id == c.Event);

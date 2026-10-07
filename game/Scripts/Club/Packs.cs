@@ -59,6 +59,9 @@ public static class Packs
         new PackDef { Id = "ev-frost", Name = "Winter Frost", Tagline = "4 players · frozen cards", Price = 30000, Cards = 4, Odds = EventOdds, Guarantee = Rarity.Epic, Colors = new[] { 0x8fd6ff, 0x1c4a7a, 0xffffff }, Emblem = "FROST", Mark = "", Event = "frost" },
         new PackDef { Id = "ev-carnival", Name = "Carnival", Tagline = "4 players · carnival cards", Price = 30000, Cards = 4, Odds = EventOdds, Guarantee = Rarity.Epic, Colors = new[] { 0xf2308c, 0x4a0830, 0xffd447 }, Emblem = "CARNIVAL", Mark = "", Event = "carnival" },
         new PackDef { Id = "ev-cosmic", Name = "Cosmic", Tagline = "4 players · cards from space", Price = 30000, Cards = 4, Odds = EventOdds, Guarantee = Rarity.Epic, Colors = new[] { 0x5a3ad8, 0x0a0828, 0x7ff6ff }, Emblem = "COSMIC", Mark = "", Event = "cosmic" },
+        new PackDef { Id = "ev-inferno", Name = "Inferno", Tagline = "4 players · cards forged in fire", Price = 30000, Cards = 4, Odds = EventOdds, Guarantee = Rarity.Epic, Colors = new[] { 0xff5a1a, 0x1a0a08, 0xffd23a }, Emblem = "INFERNO", Mark = "", Event = "inferno" },
+        new PackDef { Id = "ev-neon", Name = "Neon City", Tagline = "4 players · synthwave cards", Price = 30000, Cards = 4, Odds = EventOdds, Guarantee = Rarity.Epic, Colors = new[] { 0xff3ad8, 0x14062e, 0x2ef2ff }, Emblem = "NEON", Mark = "", Event = "neon" },
+        new PackDef { Id = "ev-dragon", Name = "Dragon New Year", Tagline = "4 players · lunar new year cards", Price = 30000, Cards = 4, Odds = EventOdds, Guarantee = Rarity.Epic, Colors = new[] { 0xcc2220, 0x600808, 0xffd447 }, Emblem = "DRAGON", Mark = "", Event = "dragon" },
     };
 
     static Rarity Roll(Rng rng, double[] odds)
