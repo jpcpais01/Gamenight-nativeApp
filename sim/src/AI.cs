@@ -1342,7 +1342,7 @@ public sealed partial class AI
             foreach (var q in m.Teams[c.Team].Players)
             {
                 if (q == c || q.Role == Role.GK || run[q.Id].Until > m.Time) continue;
-                if (q == m.Controlled && !m.AutoPlay) continue;
+                if (m.Piloted(q) && !m.AutoPlay) continue;
                 // Past halfway the forwards stay on the last line: the midfield gives the angles.
                 if (q.Role == Role.FWD && c.Pos.X * m.Teams[c.Team].Dir > -5) continue;
                 double d = M.Dist2D(q.Pos.X, q.Pos.Z, c.Pos.X, c.Pos.Z);
