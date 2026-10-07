@@ -30,10 +30,11 @@ public sealed partial class ClubScreen : PxCanvas
 
     readonly Menus _ui;
     readonly LineEdit _name, _code, _letters, _year, _banner, _coach;
-    int _tab, _slot, _part, _cslot, _page; // tab; kit colour slot; crest part; crest colour slot
+    int _tab, _slot, _part, _cslot, _page, _mpart; // tab; kit colour slot; crest part; crest colour slot; manager part
     bool _resetArmed;
     /// <summary>The open tab: 0 kit, 1 crest, 2 fans, 3 manager, 4 goal explosion.</summary>
     public int Tab { get => _tab; set => _tab = value; }
+    public int ManagerPart { get => _mpart; set => _mpart = value; }
 
     /// <summary>Debug: open the crest maker at a part and page.</summary>
     public void CrestPage(int part, int page)
@@ -258,7 +259,7 @@ public sealed partial class ClubScreen : PxCanvas
                 DrawColoredPolygon(new[] { new Vector2(f.Position.X, f.Position.Y + f.Size.Y * 0.38f), new Vector2(f.End.X, f.Position.Y + f.Size.Y * 0.38f + wave), new Vector2(f.End.X, f.Position.Y + f.Size.Y * 0.62f + wave), new Vector2(f.Position.X, f.Position.Y + f.Size.Y * 0.62f) }, Px.Hex(s.Kit.Secondary));
                 break;
             }
-            case 3: Art.Coach(this, new Rect2(c.X - h * 24 / 84f, r.Position.Y, h * 48 / 84f, h), s.Coach, s.Kit.Main); break;
+            case 3: Art.Coach(this, new Rect2(c.X - h * 24 / 84f, r.Position.Y, h * 48 / 84f, h), s.Coach, s.Kit.Main, s.Kit.Secondary); break;
             case 4:
             {
                 // A goal with a blast going off in the net.
@@ -704,81 +705,140 @@ public sealed partial class ClubScreen : PxCanvas
 
     // ---------------------------------------------------------------- manager
 
+    static readonly string[] ManagerParts = { "FACE", "HAIR", "BODY", "OUTFIT", "MANNER" };
+
     void ManagerTab(Rect2 stage, float px, float pw)
     {
         var c = Club.S.Coach;
         var k = Club.S.Kit;
-        // Stage: you on the touchline, on a strip of grass.
+        // Stage: you on the touchline, on a strip of grass, with a nameplate.
         var grass = new Rect2(stage.Position.X + 3, stage.End.Y - 70, stage.Size.X - 6, 67);
         DrawRect(grass, Px.Hex(0x1f6b2e));
         for (int i = 0; i < 6; i++) DrawRect(new Rect2(grass.Position.X + i * grass.Size.X / 6, grass.Position.Y, grass.Size.X / 12, grass.Size.Y), Px.Hex(0x23773a));
         DrawRect(new Rect2(grass.Position.X, grass.Position.Y + 8, grass.Size.X, 3), new Color(1, 1, 1, 0.7f));
-        float fh = stage.Size.Y - 60;
-        Art.Coach(this, new Rect2(stage.GetCenter().X - fh * 24 / 84, stage.Position.Y + 14, fh * 48 / 84, fh), c, k.Main);
-        Place(_coach, true, new Rect2(px + 70, 62, pw - 70, 40));
-        Px.Text(this, Px.Big, new Vector2(px, 90), "NAME", 22, Px.Ink);
+        float fh = stage.Size.Y - 64;
+        Art.Coach(this, new Rect2(stage.GetCenter().X - fh * 24 / 84, stage.Position.Y + 8, fh * 48 / 84, fh), c, k.Main, k.Secondary);
+        var plate = new Rect2(stage.Position.X + 16, stage.End.Y - 40, stage.Size.X - 32, 28);
+        Px.Frame(this, plate, new Color(5 / 255f, 4 / 255f, 18 / 255f, 0.88f), Px.Gold, Px.ShadowSoft, 2, 2);
+        Px.TextC(this, Px.Big, plate.GetCenter().X, plate.GetCenter().Y + 7, Px.Fit(Px.Big, c.Name.ToUpperInvariant(), 20, plate.Size.X - 16), 20, Px.Ink);
+        Px.TextC(this, Px.Small, plate.GetCenter().X, plate.Position.Y - 6, "MANAGER · " + Coach.Tempers[(int)c.Temper].name.ToUpperInvariant(), 8, Px.Gold);
 
-        float y = 116;
-        // Skin, then hair (or bald), then the cut.
-        Head(px, y + 16, "SKIN");
-        Dots("skin", px + 70, y, Coach.Skins, c.Skin, v => EditCoach(z => z.Skin = v));
-        y += 34;
-        Head(px, y + 16, "HAIR");
-        float hx = Dots("hair", px + 70, y, Coach.Hairs, c.Hair, v => EditCoach(z => z.Hair = v)) + 10;
-        foreach (var (style, name) in Coach.HairStyles)
+        // Name, and a roll of the dice.
+        Place(_coach, true, new Rect2(px + 56, 62, pw - 56 - 118, 40));
+        Px.Text(this, Px.Big, new Vector2(px, 90), "NAME", 22, Px.Ink);
+        GoldButton("surprise", new Rect2(px + pw - 110, 64, 110, 36), "SURPRISE ME", 16, () =>
         {
-            int v = style;
-            hx += Chip("hs" + v, new Vector2(hx, y), name, c.HairStyle == v, () => EditCoach(z => z.HairStyle = v)) + 6;
-        }
-        y += 38;
-        Head(px, y + 16, "HEIGHT");
-        int cm = (int)Math.Round(c.Height * 100);
-        Chip("h-", new Vector2(px + 70, y), "-", false, () => EditCoach(z => z.Height = Math.Max(1.65, Math.Round(z.Height * 100 - 2) / 100)));
-        Px.TextC(this, Px.Big, px + 128, y + 21, cm + " CM", 22, Px.Ink);
-        float bx = Chip("h+", new Vector2(px + 162, y), "+", false, () => EditCoach(z => z.Height = Math.Min(2.0, Math.Round(z.Height * 100 + 2) / 100))) + px + 162 + 24;
-        Head(bx, y + 16, "BUILD");
-        bx += 50;
-        for (int i = 0; i < Coach.Builds.Length; i++)
+            Commit();
+            Club.SetCoach(Coach.Random(new Random(), Club.S.Coach.Name));
+        });
+
+        float y = ChipRow("mp", ManagerParts, _mpart, v => _mpart = v, px, 112, pw) + 6;
+        DrawRect(new Rect2(px, y - 4, pw, 1), Px.Line);
+        switch (_mpart)
         {
-            int v = i;
-            bx += Chip("b" + i, new Vector2(bx, y), Coach.Builds[i], c.Build == i, () => EditCoach(z => z.Build = v)) + 6;
+            case 0:
+                Head(px, y + 8, "SKIN TONE");
+                Dots("skin", px, y + 14, Coach.Skins, c.Skin, v => EditCoach(z => z.Skin = v), 34);
+                y += 70;
+                Head(px, y + 8, "FACIAL HAIR");
+                ChipRow("fa", Coach.Facials, c.Facial, v => EditCoach(z => z.Facial = v), px, y + 14, pw);
+                if (c.Facial > 0 && c.Hair < 0) Px.Text(this, Px.Small, new Vector2(px, y + 62), "BALD MANAGERS GROW A DARK BEARD", 8, Px.InkDim);
+                break;
+            case 1:
+                Head(px, y + 8, "COLOUR · OR SHAVED BALD");
+                Dots("hair", px, y + 14, Coach.Hairs, c.Hair, v => EditCoach(z => z.Hair = v), 34);
+                y += 70;
+                Head(px, y + 8, "CUT");
+                if (c.Hair < 0)
+                {
+                    Px.Text(this, Px.Big, new Vector2(px, y + 34), "Pick a colour to grow some hair", 20, Px.InkDim);
+                    break;
+                }
+                int cut = Array.FindIndex(Coach.HairStyles, h => h.style == c.HairStyle);
+                ChipRow("hs", Array.ConvertAll(Coach.HairStyles, h => h.name), cut, v => EditCoach(z => z.HairStyle = Coach.HairStyles[v].style), px, y + 14, pw);
+                break;
+            case 2:
+            {
+                Head(px, y + 8, "HEIGHT");
+                int cm = (int)Math.Round(c.Height * 100);
+                Chip("h-", new Vector2(px, y + 14), "-", false, () => EditCoach(z => z.Height = Math.Max(1.65, Math.Round(z.Height * 100 - 2) / 100)), 18, 30);
+                Px.TextC(this, Px.Big, px + 70, y + 38, cm + " CM", 24, Px.Ink);
+                Chip("h+", new Vector2(px + 116, y + 14), "+", false, () => EditCoach(z => z.Height = Math.Min(2.0, Math.Round(z.Height * 100 + 2) / 100)), 18, 30);
+                // A ruler, 1.65 to 2.00 m.
+                float rx = px + 160, rw = pw - 160, f = (float)((c.Height - 1.65) / 0.35);
+                DrawRect(new Rect2(rx, y + 28, rw, 4), Px.Hex(0x2b2670));
+                DrawRect(new Rect2(rx, y + 28, rw * f, 4), Px.Cyan);
+                for (int i = 0; i <= 7; i++) DrawRect(new Rect2(rx + rw * i / 7f, y + 24, 1, 12), Px.Line2);
+                DrawRect(new Rect2(rx + rw * f - 2, y + 20, 4, 20), Px.Gold);
+                y += 70;
+                Head(px, y + 8, "BUILD");
+                ChipRow("b", Coach.Builds, c.Build, v => EditCoach(z => z.Build = v), px, y + 14, pw);
+                break;
+            }
+            case 3:
+            {
+                Head(px, y + 8, "STYLE");
+                y = ChipRow("st", Coach.StyleNames, (int)c.Style, v => EditCoach(z => z.Style = (CoachStyle)v), px, y + 14, pw) + 4;
+                var o = Outfit.For(c.Style, k.Main);
+                Head(px, y + 8, "COAT COLOUR");
+                Dots("coat", px, y + 14, Coach.Coats, c.Coat, v => EditCoach(z => z.Coat = v), 28, o.Coat);
+                y += 58;
+                Head(px, y + 8, c.Style switch { CoachStyle.Suit => "TIE", CoachStyle.Coat => "SCARF", CoachStyle.Track => "STRIPES", _ => "QUILTING" } + " · CLUB COLOURS MARKED C");
+                Dots("acc", px, y + 14, Coach.Accents, c.Accent, v => EditCoach(z => z.Accent = v), 28, c.Style == CoachStyle.Suit && o.Trim == 0xf1efe8 ? 0x8f1f24 : o.Trim, k.Main, k.Secondary);
+                break;
+            }
+            default:
+            {
+                Head(px, y + 8, "ON THE TOUCHLINE");
+                float cw = (pw - 12) / 3f;
+                for (int i = 0; i < Coach.Tempers.Length; i++)
+                {
+                    var v = (CoachTemper)i;
+                    string key = "tm" + i;
+                    bool on = c.Temper == v, held = Held(key);
+                    var r = new Rect2(px + i * (cw + 6), y + 16, cw, 216);
+                    var rr = held ? r.Translated(Vector2.One * 2) : r;
+                    Px.Frame(this, rr, on ? new Color(Px.Gold, 0.16f) : new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.85f), on ? Px.Gold : Px.Line2, held || on ? null : Px.ShadowSoft, 2, 3);
+                    // Him, with the face he'd pull.
+                    var face = c.Clone();
+                    face.Temper = v;
+                    Art.Coach(this, new Rect2(rr.GetCenter().X - 40, rr.Position.Y + 8, 80, 140), face, k.Main, k.Secondary);
+                    Px.TextC(this, Px.Big, rr.GetCenter().X, rr.Position.Y + 172, Coach.Tempers[i].name.ToUpperInvariant(), 22, on ? Px.Gold : Px.Ink);
+                    int line = 0;
+                    foreach (var l in Px.Wrap(Px.Small, Coach.Tempers[i].about.ToUpperInvariant(), 7, cw - 12))
+                        Px.TextC(this, Px.Small, rr.GetCenter().X, rr.Position.Y + 190 + line++ * 11, l, 7, Px.InkDim);
+                    Tap(key, r, () => EditCoach(z => z.Temper = v));
+                }
+                break;
+            }
         }
-        y += 38;
-        Head(px, y + 16, "OUTFIT");
-        float ox = px + 70;
-        for (int i = 0; i < Coach.StyleNames.Length; i++)
-        {
-            var v = (CoachStyle)i;
-            ox += Chip("st" + i, new Vector2(ox, y), Coach.StyleNames[i], c.Style == v, () => EditCoach(z => z.Style = v)) + 6;
-        }
-        y += 38;
-        Head(px, y + 16, "TEMPER");
-        float mx = px + 70;
-        for (int i = 0; i < Coach.Tempers.Length; i++)
-        {
-            var v = (CoachTemper)i;
-            mx += Chip("tm" + i, new Vector2(mx, y), Coach.Tempers[i].name, c.Temper == v, () => EditCoach(z => z.Temper = v)) + 6;
-        }
-        y += 44;
-        Px.Text(this, Px.Big, new Vector2(px + 70, y), Coach.Tempers[(int)c.Temper].about, 20, Px.InkDim);
     }
 
-    /// <summary>Colour dots for the manager (-1 = none, drawn crossed out). Returns the right edge.</summary>
-    float Dots(string key, float x, float y, int[] cols, int cur, Action<int> pick)
+    /// <summary>Colour dots for the manager: -1 is "none" or the outfit's own colour (drawn as
+    /// that colour with a slash, or crossed out), -2/-3 the club's colours (marked C).
+    /// Returns the right edge.</summary>
+    float Dots(string key, float x, float y, int[] cols, int cur, Action<int> pick, float s = 26, int own = -1, int main = 0, int second = 0)
     {
-        const float s = 26;
         for (int i = 0; i < cols.Length; i++)
         {
             int col = cols[i];
             var r = new Rect2(x + i * (s + 6), y, s, s);
             if (col == cur) Px.Frame(this, r.Grow(4), Colors.Transparent, Px.Gold, null, 3, 0);
             DrawRect(r, Colors.Black);
-            if (col < 0)
+            int show = col switch { -1 => own, -2 => main, -3 => second, _ => col };
+            if (show < 0)
             {
                 DrawRect(r.Grow(-2), Px.Night);
                 DrawLine(r.Position + new Vector2(5, s - 5), r.Position + new Vector2(s - 5, 5), Px.InkDim, 2);
             }
-            else DrawRect(r.Grow(-2), Px.Hex(col));
+            else
+            {
+                DrawRect(r.Grow(-2), Px.Hex(show));
+                DrawRect(new Rect2(r.Position + Vector2.One * 2, new Vector2(s - 4, 3)), new Color(1, 1, 1, 0.22f));
+                var ink = Px.Hex(show).Luminance > 0.55f ? Px.Dark : Px.Ink;
+                if (col == -1) Px.TextC(this, Px.Small, r.GetCenter().X, r.GetCenter().Y + 4, "AUTO", 7, ink);
+                else if (col < -1) Px.TextC(this, Px.Big, r.GetCenter().X, r.GetCenter().Y + 7, "C", 18, ink);
+            }
             Tap(key + i, r, () => pick(col));
         }
         return x + cols.Length * (s + 6);

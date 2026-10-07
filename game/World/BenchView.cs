@@ -212,14 +212,13 @@ public sealed partial class BenchView
         int shirt, trim, sleeve, cuff, hands, shorts, shortsTrim, legs, socks, sockTrim, boot, sole, number, pattern, numCol;
         if (f.Boss)
         {
-            // The designer's coach (home), else a random one; dressed as Outfit.For has it.
-            var style = coach?.Style ?? (CoachStyle)_rng.Next(4);
-            var o = Outfit.For(style, kit.Shirt, f.Team == 1);
+            // The designer's coach (home), in his own colours, else a random one.
+            var o = coach != null ? Outfit.ForCoach(coach, kit.Shirt, kit.Shirt2, f.Team == 1) : Outfit.For((CoachStyle)_rng.Next(4), kit.Shirt, f.Team == 1);
             if (coach != null)
             {
                 skin = coach.Skin;
                 hair = coach.Hair;
-                f.Hair = coach.Hair < 0 ? -1 : coach.HairStyle switch { 2 => 2, 3 => 3, _ => 1 };
+                f.Hair = coach.Hair < 0 ? -1 : coach.HairStyle;
             }
             else
             {
@@ -275,7 +274,7 @@ public sealed partial class BenchView
         ka[(int)Part.Shin][id] = Lin4(sockTrim, 0);
         Set(Part.Neck, skin);
         Set(Part.Head, skin);
-        ka[(int)Part.Head][id] = Lin4(hair, 0);
+        ka[(int)Part.Head][id] = f.Boss && coach != null ? Lin4(coach.BeardColor, coach.Facial) : Lin4(hair, 0);
         Set(Part.HairShort, hair);
         Set(Part.HairCurly, hair);
         Set(Part.HairQuiff, hair);

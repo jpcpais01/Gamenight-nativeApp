@@ -79,10 +79,38 @@ public sealed class Coach
     public int Build = 1;
     public CoachStyle Style = CoachStyle.Suit;
     public CoachTemper Temper = CoachTemper.Fiery;
+    /// <summary>0 clean-shaven, 1 stubble, 2 a beard, 3 moustache and goatee (as Body.FacialHair).</summary>
+    public int Facial;
+    /// <summary>Coat colour; -1 = the outfit's own.</summary>
+    public int Coat = -1;
+    /// <summary>Tie, scarf, stripes and trim: -1 the outfit's own, -2 club main, -3 club second, else a colour.</summary>
+    public int Accent = -1;
 
-    public static readonly int[] Skins = { 0xf1c9a5, 0xe0ac7e, 0xd9a77c, 0xc68a5c, 0x8d5a3b, 0x5e3a24 };
-    public static readonly int[] Hairs = { 0x1b1410, 0x4a3324, 0x8a5a2e, 0xc9a25a, 0x8f8f8f, 0xd6d3cc, -1 };
-    public static readonly (int style, string name)[] HairStyles = { (0, "Short"), (2, "Curly"), (3, "Quiff") };
+    public static readonly int[] Skins = { 0xf6d5b8, 0xf1c9a5, 0xe0ac7e, 0xd9a77c, 0xc68a5c, 0xa86f45, 0x8d5a3b, 0x5e3a24 };
+    public static readonly int[] Hairs = { 0x1b1410, 0x2e1f15, 0x4a3324, 0x8a5a2e, 0xb5482a, 0xc9a25a, 0x8f8f8f, 0xd6d3cc, 0xf2efe6, -1 };
+    public static readonly (int style, string name)[] HairStyles = { (1, "Buzz"), (0, "Short"), (2, "Curly"), (3, "Quiff") };
+    public static readonly string[] Facials = { "Clean", "Stubble", "Beard", "Goatee" };
+    public static readonly int[] Coats = { -1, 0x23262e, 0x1c2438, 0x15171b, 0x5a5f69, 0xa27a4c, 0x6b2430, 0x2c4a32, 0xe9e6dd };
+    public static readonly int[] Accents = { -1, -2, -3, 0xf1efe8, 0x16110d, 0xd8b04a, 0xb22a2a, 0x2a5ab2 };
+
+    /// <summary>Facial hair takes the hair's colour; a bald man's is a dark brown.</summary>
+    public int BeardColor => Hair < 0 ? 0x4a3324 : Hair;
+
+    /// <summary>A random manager (keeps the name).</summary>
+    public static Coach Random(System.Random r, string name) => new()
+    {
+        Name = name,
+        Skin = Skins[r.Next(Skins.Length)],
+        Hair = r.Next(6) == 0 ? -1 : Hairs[r.Next(Hairs.Length - 1)],
+        HairStyle = HairStyles[r.Next(HairStyles.Length)].style,
+        Height = System.Math.Round(1.68 + r.NextDouble() * 0.26, 2),
+        Build = r.Next(3),
+        Style = (CoachStyle)r.Next(4),
+        Temper = (CoachTemper)r.Next(3),
+        Facial = r.Next(4),
+        Coat = r.Next(2) == 0 ? -1 : Coats[r.Next(Coats.Length)],
+        Accent = r.Next(2) == 0 ? -1 : Accents[r.Next(Accents.Length)],
+    };
     public static readonly string[] Builds = { "Slim", "Average", "Heavy" };
     public static readonly string[] StyleNames = { "Suit", "Coat & scarf", "Tracksuit", "Puffer" };
     public static readonly (string name, string about)[] Tempers =
@@ -117,5 +145,16 @@ public readonly record struct Outfit(int Coat, int Trim, int Pattern, int Cuff, 
             default:
                 return new Outfit(0x15171b, 0x2a2d33, 2, 0x15171b, 0x15171b, 0x15171b, 0x1b1b1d, 0xe8e6df);
         }
+    }
+
+    /// <summary>A manager's own outfit: the style's, with his coat and accent colours on it.</summary>
+    public static Outfit ForCoach(Coach c, int shirt, int second, bool away = false)
+    {
+        var o = For(c.Style, shirt, away);
+        if (c.Coat >= 0)
+            o = o with { Coat = c.Coat, Cuff = o.Cuff == o.Coat ? c.Coat : o.Cuff, Trousers = c.Style == CoachStyle.Suit ? c.Coat : o.Trousers, Stripe = c.Style == CoachStyle.Suit ? c.Coat : o.Stripe };
+        int acc = c.Accent switch { -2 => shirt, -3 => second, _ => c.Accent };
+        if (c.Accent != -1) o = o with { Trim = acc, Stripe = c.Style == CoachStyle.Track ? acc : o.Stripe };
+        return o;
     }
 }

@@ -707,9 +707,11 @@ public static class Art
     /// The manager full length (the PWA's coachSVG): hair, face, coat with its trim, trousers and
     /// shoes, in a 48 x 84 box. Taller and heavier managers fill more of it.
     /// </summary>
-    public static void Coach(CanvasItem ci, Rect2 r, Coach c, int shirt)
+    /// <summary>The manager, full length (r about 48 x 84): his face, hair and beard, and his
+    /// outfit in his own coat and accent colours.</summary>
+    public static void Coach(CanvasItem ci, Rect2 r, Coach c, int shirt, int second = -1)
     {
-        var o = Outfit.For(c.Style, shirt);
+        var o = Outfit.ForCoach(c, shirt, second < 0 ? shirt : second);
         float w = c.Build switch { 0 => 0.88f, 2 => 1.16f, _ => 1f };
         float h = (float)(c.Height / 1.8);
         float k = Mathf.Min(r.Size.X / 48f, r.Size.Y / 84f);
@@ -722,12 +724,18 @@ public static class Art
             var b = At(x + bw, y + bh);
             ci.DrawRect(new Rect2(a, b - a), col);
         }
+        var shade = new Color(0, 0, 0, 0.22f);
+        var light = new Color(1, 1, 1, 0.12f);
         var shadowC = origin + new Vector2(20, 79) * k;
         ci.DrawColoredPolygon(Px.Ellipse(shadowC, 12 * w * k, 2 * k), new Color(0, 0, 0, 0.35f));
         bool longCoat = c.Style == CoachStyle.Coat || c.Style == CoachStyle.Puffer;
         float coatLen = longCoat ? 58 : 48;
+
+        // Legs and shoes.
         Box(13, 46, 6, 30, o.Trousers);
         Box(21, 46, 6, 30, o.Trousers);
+        Box2(17.5f, 46, 1.5f, 30, shade);
+        Box2(25.5f, 46, 1.5f, 30, shade);
         if (o.Stripe != o.Trousers)
         {
             Box(13, 46, 1, 30, o.Stripe);
@@ -735,45 +743,179 @@ public static class Art
         }
         Box(12, 76, 7, 3, o.Shoes);
         Box(21, 76, 7, 3, o.Shoes);
+        Box2(12, 76, 7, 1, light);
+        Box2(21, 76, 7, 1, light);
         Box(12, 78, 7, 1, o.Sole);
         Box(21, 78, 7, 1, o.Sole);
+
+        // Arms, cuffs, hands.
         Box(6, 23, 4.5f, 23, o.Coat);
         Box(29.5f, 23, 4.5f, 23, o.Coat);
+        Box2(32.5f, 23, 1.5f, 23, shade);
         Box(6, 44, 4.5f, 2, o.Cuff);
         Box(29.5f, 44, 4.5f, 2, o.Cuff);
         Box(6.5f, 46, 3.5f, 4, c.Skin);
         Box(30, 46, 3.5f, 4, c.Skin);
+        Box2(6.5f, 49, 3.5f, 1, shade);
+        Box2(30, 49, 3.5f, 1, shade);
+
+        // The body of the coat.
         Box(10, 22, 20, coatLen - 22, o.Coat);
-        if (o.Pattern == 8) Box(18, 23, 4, c.Style == CoachStyle.Coat ? 30 : 22, o.Trim);
-        else if (o.Pattern == 2) foreach (var y in new[] { 29, 35, 41, 47, 53 }) Box(10, y, 20, 1, o.Trim);
-        else
+        Box2(26, 22, 4, coatLen - 22, shade);
+        Box2(10, 22, 20, 1, light);
+        switch (c.Style)
         {
-            Box(10, 23, 1.5f, coatLen - 23, o.Trim);
-            Box(28.5f, 23, 1.5f, coatLen - 23, o.Trim);
-        }
-        Box(17, 18, 6, 5, c.Skin);
-        Box(14, 5, 12, 15, c.Skin);
-        Box(16.5f, 11, 2, 2, 0x1a1410);
-        Box(21.5f, 11, 2, 2, 0x1a1410);
-        Box2(18, 16, 4, 1, new Color(60 / 255f, 25 / 255f, 15 / 255f, 0.6f));
-        if (c.Hair < 0) return;
-        switch (c.HairStyle)
-        {
-            case 2:
-                Box(13, 3, 14, 6, c.Hair);
-                Box(12, 5, 2, 7, c.Hair);
-                Box(26, 5, 2, 7, c.Hair);
+            case CoachStyle.Suit:
+                // White shirt in the V, a tie, lapels and a pocket square.
+                ci.DrawColoredPolygon(new[] { At(16, 22), At(24, 22), At(20, 33) }, Px.Hex(0xf1efe8));
+                Box(19, 23, 2, 2, o.Trim == 0xf1efe8 ? 0x8f1f24 : o.Trim);
+                ci.DrawColoredPolygon(new[] { At(19.2f, 25), At(20.8f, 25), At(21.2f, 32), At(20, 34), At(18.8f, 32) }, Px.Hex(o.Trim == 0xf1efe8 ? 0x8f1f24 : o.Trim));
+                ci.DrawColoredPolygon(new[] { At(15, 22), At(17, 22), At(20, 34), At(18, 34) }, Px.Hex(o.Coat).Darkened(0.25f));
+                ci.DrawColoredPolygon(new[] { At(23, 22), At(25, 22), At(22, 34), At(20, 34) }, Px.Hex(o.Coat).Darkened(0.35f));
+                Box(24, 30, 3, 1, 0xf1efe8);
+                Box(19.5f, 38, 1, 1, 0x0e0e10);
+                Box(19.5f, 43, 1, 1, 0x0e0e10);
                 break;
-            case 3:
-                Box(17, 0, 6, 4, c.Hair);
-                Box(13, 4, 14, 4, c.Hair);
-                Box(13, 6, 2, 5, c.Hair);
-                Box(25, 6, 2, 5, c.Hair);
+            case CoachStyle.Coat:
+                // A scarf in his colour, wrapped and hanging down the front, and buttons.
+                Box(14, 20, 12, 4, o.Trim);
+                Box2(14, 22.5f, 12, 1.5f, shade);
+                Box(17, 23, 4, 18, o.Trim);
+                Box2(17, 39, 4, 2, new Color(1, 1, 1, 0.35f));
+                Box(17, 40, 1, 2, o.Trim);
+                Box(19, 40, 1, 2, o.Trim);
+                foreach (var y in new[] { 44, 49, 54 }) Box(23, y, 1.5f, 1.5f, 0x1a120c);
+                Box2(10, 38, 6, 1, shade);
+                break;
+            case CoachStyle.Track:
+                // Collar, zip, chest badge and sleeve stripes.
+                Box(15, 20, 10, 3, o.Coat);
+                Box(15, 20, 10, 1, o.Trim);
+                Box(19.5f, 22, 1, 26, 0xb9bdc4);
+                Box(19, 26, 2, 2, 0xd8d6cf);
+                Box(23, 27, 3, 3, o.Trim);
+                Box(6, 24, 1, 20, o.Trim);
+                Box(33, 24, 1, 20, o.Trim);
+                Box(10, 46, 20, 2, o.Trim);
                 break;
             default:
-                Box(13, 4, 14, 4, c.Hair);
-                Box(13, 6, 2, 4, c.Hair);
-                Box(25, 6, 2, 4, c.Hair);
+                // Puffer: a tall collar and quilted bands.
+                Box(14, 18, 12, 5, o.Coat);
+                Box2(14, 18, 12, 1, light);
+                foreach (var y in new[] { 28, 34, 40, 46, 52 }) Box(10, y, 20, 1, o.Trim);
+                foreach (var y in new[] { 30, 37 }) Box(6, y, 4.5f, 1, o.Trim);
+                foreach (var y in new[] { 30, 37 }) Box(29.5f, y, 4.5f, 1, o.Trim);
+                Box(19.5f, 23, 1, 35, 0x0e0e10);
+                break;
+        }
+
+        // Neck, ears, head.
+        if (c.Style != CoachStyle.Puffer) Box(17, 18, 6, 4, c.Skin);
+        Box2(17, 18, 6, 2, shade);
+        Box(13, 10, 1.5f, 4, c.Skin);
+        Box(25.5f, 10, 1.5f, 4, c.Skin);
+        Box2(13, 13, 1.5f, 1, shade);
+        Box2(25.5f, 13, 1.5f, 1, shade);
+        Box(14, 5, 12, 15, c.Skin);
+        Box2(23.5f, 5, 2.5f, 15, new Color(0, 0, 0, 0.12f));
+        Box2(14, 18.5f, 12, 1.5f, new Color(0, 0, 0, 0.1f));
+        int brow = c.Hair < 0 ? 0x4a3324 : c.Hair;
+        // Eyes with whites, and brows set by temper.
+        Box(16, 11, 3, 2, 0xf3ede0);
+        Box(21, 11, 3, 2, 0xf3ede0);
+        Box(17, 11, 2, 2, 0x1a1410);
+        Box(22, 11, 2, 2, 0x1a1410);
+        switch (c.Temper)
+        {
+            case CoachTemper.Fiery:
+                ci.DrawColoredPolygon(new[] { At(15.5f, 8.5f), At(19.5f, 9.8f), At(19.5f, 10.8f), At(15.5f, 9.5f) }, Px.Hex(brow));
+                ci.DrawColoredPolygon(new[] { At(20.5f, 9.8f), At(24.5f, 8.5f), At(24.5f, 9.5f), At(20.5f, 10.8f) }, Px.Hex(brow));
+                break;
+            case CoachTemper.Showman:
+                Box(15.5f, 8.5f, 4, 1, brow);
+                Box(20.5f, 8, 4, 1, brow);
+                break;
+            default:
+                Box(15.5f, 9, 4, 1, brow);
+                Box(20.5f, 9, 4, 1, brow);
+                break;
+        }
+        // Nose.
+        Box2(19.5f, 12.5f, 1.5f, 2.5f, new Color(0, 0, 0, 0.15f));
+        Box2(19, 14.5f, 2.5f, 0.8f, new Color(0, 0, 0, 0.22f));
+        // Facial hair, then the mouth over it.
+        var beard = Px.Hex(c.BeardColor);
+        switch (c.Facial)
+        {
+            case 1:
+                Box2(14, 14, 12, 6, new Color(beard, 0.35f));
+                break;
+            case 2:
+                Box2(14, 13, 12, 7, beard);
+                Box2(13, 10, 1.5f, 5, beard);
+                Box2(25.5f, 10, 1.5f, 5, beard);
+                Box2(15, 20, 10, 1.5f, beard);
+                Box2(17, 15, 6, 2, Px.Hex(c.Skin).Darkened(0.05f));
+                break;
+            case 3:
+                Box2(17, 15, 6, 1.2f, beard);
+                Box2(17, 15, 1, 3, beard);
+                Box2(22, 15, 1, 3, beard);
+                Box2(18.5f, 18, 3, 2.5f, beard);
+                break;
+        }
+        var lip = new Color(60 / 255f, 25 / 255f, 15 / 255f, 0.7f);
+        switch (c.Temper)
+        {
+            case CoachTemper.Showman:
+                Box2(18, 16, 4, 1.4f, Px.Hex(0x3a1410));
+                Box2(18.5f, 16, 3, 0.6f, Px.Hex(0xf3ede0));
+                break;
+            case CoachTemper.Fiery:
+                Box2(18, 16.5f, 4, 1, lip);
+                Box2(17.5f, 17, 0.8f, 0.8f, lip);
+                Box2(21.7f, 17, 0.8f, 0.8f, lip);
+                break;
+            default:
+                Box2(18, 16.3f, 4, 1, lip);
+                break;
+        }
+
+        // Hair.
+        if (c.Hair < 0)
+        {
+            Box2(16, 5.5f, 5, 1.5f, new Color(1, 1, 1, 0.25f));
+            return;
+        }
+        var hair = Px.Hex(c.Hair);
+        switch (c.HairStyle)
+        {
+            case 1: // buzz cut: a thin cap with skin showing through
+                Box2(14, 4.5f, 12, 3, new Color(hair, 0.85f));
+                Box2(14, 6.5f, 1.5f, 3.5f, new Color(hair, 0.6f));
+                Box2(24.5f, 6.5f, 1.5f, 3.5f, new Color(hair, 0.6f));
+                break;
+            case 2: // curly
+                Box2(13, 3, 14, 5, hair);
+                foreach (var x in new[] { 13f, 16f, 19f, 22f, 25f }) Box2(x, 2, 2, 1.5f, hair);
+                Box2(12, 5, 2.5f, 7, hair);
+                Box2(25.5f, 5, 2.5f, 7, hair);
+                foreach (var x in new[] { 14.5f, 18.5f, 22.5f }) Box2(x, 4, 1, 1, hair.Darkened(0.3f));
+                break;
+            case 3: // quiff
+                Box2(16, 0, 8, 4, hair);
+                Box2(18, -1, 5, 1.5f, hair);
+                Box2(16, 0.5f, 6, 1, hair.Lightened(0.2f));
+                Box2(13, 4, 14, 4, hair);
+                Box2(13, 6, 2, 5, hair);
+                Box2(25, 6, 2, 5, hair);
+                break;
+            default: // short, side parted
+                Box2(13, 3.5f, 14, 4.5f, hair);
+                Box2(13, 6, 2, 4.5f, hair);
+                Box2(25, 6, 2, 4.5f, hair);
+                Box2(18, 3.5f, 1, 2, hair.Darkened(0.35f));
+                Box2(19, 3.5f, 6, 1, hair.Lightened(0.15f));
                 break;
         }
     }

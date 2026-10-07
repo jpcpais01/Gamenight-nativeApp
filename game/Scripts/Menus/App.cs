@@ -60,6 +60,8 @@ public sealed partial class App : Node
             global::GameNight.League.LeagueScreen.Debug(_menus, arg);
             global::GameNight.League.CupScreen.Debug(_menus, arg);
             if (arg.StartsWith("--tab=")) _menus.ClubStudio.Tab = int.Parse(arg[6..]);
+            if (arg.StartsWith("--mpart=")) _menus.ClubStudio.ManagerPart = int.Parse(arg[8..]);
+            if (arg.StartsWith("--coachseed=")) _menus.Club.SetCoach(GameNight.Club.Coach.Random(new System.Random(int.Parse(arg[12..])), "Test"));
             if (arg.StartsWith("--crest="))
             {
                 var a = arg[8..].Split('@');
