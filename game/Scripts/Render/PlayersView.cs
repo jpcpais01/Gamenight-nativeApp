@@ -763,6 +763,29 @@ public sealed partial class PlayersView
         float actionT = b.ActionT[id], actionDur = b.ActionDur[id];
         float pr = actionDur > 0 ? Clamp(actionT / actionDur, 0, 1) : 0;
         if (action != ActionKind.Trick) _trkW[id * 2] = _trkW[id * 2 + 1] = 0;
+        // The legs and arms as the get-up sees them: lead leg, tucked leg, support hand on the tucked side.
+        Limbs Grab(bool leadR) => new()
+        {
+            HipY = hipY, Lean = leanF, Flex = flexExtra, Roll = roll, Head = headPitch,
+            LeadHip = leadR ? hipR : hipL, LeadKnee = leadR ? kneeR : kneeL, LeadOut = leadR ? legOutR : legOutL,
+            TuckHip = leadR ? hipL : hipR, TuckKnee = leadR ? kneeL : kneeR, TuckOut = leadR ? legOutL : legOutR,
+            SupArm = leadR ? armL : armR, SupOut = leadR ? armOutL : armOutR, SupElbow = leadR ? elbowL : elbowR,
+            FreeArm = leadR ? armR : armL, FreeOut = leadR ? armOutR : armOutL, FreeElbow = leadR ? elbowR : elbowL,
+        };
+        void Pose(in Limbs q, bool leadR)
+        {
+            hipY = q.HipY; leanF = q.Lean; flexExtra = q.Flex; roll = q.Roll; headPitch = q.Head;
+            if (leadR)
+            {
+                hipR = q.LeadHip; kneeR = q.LeadKnee; legOutR = q.LeadOut; hipL = q.TuckHip; kneeL = q.TuckKnee; legOutL = q.TuckOut;
+                armL = q.SupArm; armOutL = q.SupOut; elbowL = q.SupElbow; armR = q.FreeArm; armOutR = q.FreeOut; elbowR = q.FreeElbow;
+            }
+            else
+            {
+                hipL = q.LeadHip; kneeL = q.LeadKnee; legOutL = q.LeadOut; hipR = q.TuckHip; kneeR = q.TuckKnee; legOutR = q.TuckOut;
+                armR = q.SupArm; armOutR = q.SupOut; elbowR = q.SupElbow; armL = q.FreeArm; armOutL = q.FreeOut; elbowL = q.FreeElbow;
+            }
+        }
         switch (action)
         {
             case ActionKind.Trick:
@@ -1032,7 +1055,8 @@ public sealed partial class PlayersView
             case ActionKind.Slide:
             {
                 // Down as he commits, the lead leg along the grass on its committed line, a small
-                // bounce on landing, the support hand a beat later, up as the slide dies.
+                // bounce on landing, the support hand a beat later; once the slide dies he sits up
+                // on that hand, tucks a leg under and comes up through one knee (GetUp).
                 float speedNow = MathF.Sqrt(vx * vx + vz * vz);
                 float entry = Clamp((b.SlideV0[id] - 6) / 2.5f, 0, 1);
                 float vary = MathF.Sin(id * 12.9898f) * 0.5f;
@@ -1041,31 +1065,30 @@ public sealed partial class PlayersView
                 float down = Smooth(0, 0.13f, t);
                 float landT = MathF.Max(0, t - 0.12f);
                 float bounce = landT > 0 ? MathF.Exp(-landT * 9) * MathF.Sin(landT * 26) : 0;
-                float rise = Smooth(stop - 0.1f, actionDur - 0.1f, t) * (1 - Smooth(0.7f, 2.4f, speedNow));
-                float lying = down * (1 - rise);
-                float kneel = rise * (1 - Smooth(actionDur - 0.12f, actionDur, t));
+                float g = Clamp((t - stop + 0.05f) / (actionDur - stop + 0.05f), 0, 1) * (1 - Smooth(0.7f, 2.4f, speedNow));
+                float lying = down;
                 float reach = Smooth(0.03f, 0.12f, t) * (1 - Smooth(stop - 0.05f, stop + 0.15f, t));
                 float cf0 = MathF.Cos(facing), sf0 = MathF.Sin(facing);
                 float lx = b.LegX[id], lz = b.LegZ[id];
                 float aim = Clamp(MathF.Atan2(-lx * sf0 + lz * cf0, lx * cf0 + lz * sf0), -0.6f, 0.6f) * reach;
                 bool right = kickLeg > 0;
+                var stand = Grab(right);
                 float tuck = right ? 1 : -1;
-                hipY = Lerp(hipY, 0.27f - 0.05f * entry + 0.04f * bounce, lying) + 0.3f * kneel;
-                leanF = Lerp(leanF, -(0.78f + 0.25f * entry + 0.08f * vary), lying) + 0.06f * bounce * lying + 0.45f * kneel;
+                hipY = Lerp(hipY, 0.27f - 0.05f * entry + 0.04f * bounce, lying);
+                leanF = Lerp(leanF, -(0.78f + 0.25f * entry + 0.08f * vary), lying) + 0.06f * bounce * lying;
                 roll += tuck * (0.22f + 0.12f * entry + 0.05f * vary) * lying;
                 flexExtra += (0.18f + 0.06f * vary) * lying;
                 float leadHip = Lerp(0.3f, 0.6f + 0.05f * entry, reach), leadKnee = Lerp(0.55f, 0.06f, reach);
                 float foldHip = 0.48f + 0.06f * vary, foldKnee = 1.95f;
-                const float upHip = 1.15f, upKnee = 1.9f;
-                float supp = Smooth(0.08f, 0.26f, t) * (1 - rise);
+                float supp = Smooth(0.08f, 0.26f, t);
                 float freeArm = -1.0f - 0.25f * entry - 0.3f * bounce;
                 if (right)
                 {
-                    hipR = Lerp(Lerp(hipR, leadHip, lying), upHip * 0.6f, kneel);
-                    kneeR = Lerp(Lerp(kneeR, leadKnee, lying), 0.9f, kneel);
+                    hipR = Lerp(hipR, leadHip, lying);
+                    kneeR = Lerp(kneeR, leadKnee, lying);
                     legYawR -= aim;
-                    hipL = Lerp(Lerp(hipL, foldHip, lying), upHip, kneel);
-                    kneeL = Lerp(Lerp(kneeL, foldKnee, lying), upKnee, kneel);
+                    hipL = Lerp(hipL, foldHip, lying);
+                    kneeL = Lerp(kneeL, foldKnee, lying);
                     legOutL = Lerp(legOutL, 0.28f, lying);
                     armL = Lerp(armL, 0.75f, supp);
                     armOutL = Lerp(armOutL, 0.45f, supp);
@@ -1076,11 +1099,11 @@ public sealed partial class PlayersView
                 }
                 else
                 {
-                    hipL = Lerp(Lerp(hipL, leadHip, lying), upHip * 0.6f, kneel);
-                    kneeL = Lerp(Lerp(kneeL, leadKnee, lying), 0.9f, kneel);
+                    hipL = Lerp(hipL, leadHip, lying);
+                    kneeL = Lerp(kneeL, leadKnee, lying);
                     legYawL += aim;
-                    hipR = Lerp(Lerp(hipR, foldHip, lying), upHip, kneel);
-                    kneeR = Lerp(Lerp(kneeR, foldKnee, lying), upKnee, kneel);
+                    hipR = Lerp(hipR, foldHip, lying);
+                    kneeR = Lerp(kneeR, foldKnee, lying);
                     legOutR = Lerp(legOutR, 0.28f, lying);
                     armR = Lerp(armR, 0.75f, supp);
                     armOutR = Lerp(armOutR, 0.45f, supp);
@@ -1089,6 +1112,7 @@ public sealed partial class PlayersView
                     armOutL = Lerp(armOutL, 0.8f + 0.1f * vary, lying);
                     elbowL = Lerp(elbowL, 0.5f, lying);
                 }
+                if (g > 0) Pose(GetUp(g, 0, Grab(right), stand), right);
                 break;
             }
             case ActionKind.Dive:
@@ -1276,18 +1300,19 @@ public sealed partial class PlayersView
             }
             case ActionKind.Fall:
             {
-                // Knocked down the way the hit sends him, arms out, a moment down, up via a knee.
-                float down = Smooth(0, 0.2f, pr);
-                float rise = Smooth(0.62f, 0.9f, pr);
-                float lying = down * (1 - rise);
-                float kneel = rise * (1 - Smooth(0.9f, 1, pr));
+                // Knocked down the way the hit sends him, arms out to break it, a moment on the
+                // grass, then up: off his front via both hands, off his back by sitting up (GetUp).
+                float lying = Smooth(0, 0.2f, pr);
+                float g = Clamp((pr - 0.5f) / 0.5f, 0, 1);
+                bool right = (id & 1) == 0;
+                var stand = Grab(right);
                 float cf0 = MathF.Cos(facing), sf0 = MathF.Sin(facing);
                 float adx = b.ActionDirX[id], adz = b.ActionDirZ[id];
                 float fwd = adx * cf0 + adz * sf0;
                 float lft = -adx * sf0 + adz * cf0;
-                leanF = Lerp(leanF, fwd * 1.3f, lying) + 0.45f * kneel;
+                leanF = Lerp(leanF, fwd * 1.3f, lying);
                 roll += lft * 1.1f * lying;
-                hipY = Lerp(hipY, 0.28f, lying) + 0.3f * kneel;
+                hipY = Lerp(hipY, 0.28f, lying);
                 flexExtra += 0.25f * lying;
                 float reachArm = fwd >= 0 ? 0.6f + 0.8f * fwd : 0.6f + 1.5f * fwd;
                 armL = Lerp(armL, reachArm, lying);
@@ -1295,14 +1320,15 @@ public sealed partial class PlayersView
                 armOutL = Lerp(armOutL, 0.55f + MathF.Max(0, lft) * 0.5f, lying);
                 armOutR = Lerp(armOutR, 0.55f + MathF.Max(0, -lft) * 0.5f, lying);
                 elbowL = elbowR = Lerp(elbowL, 0.3f, lying);
-                hipL = Lerp(Lerp(hipL, 0.55f - fwd * 0.4f, lying), 1.15f, kneel);
-                kneeL = Lerp(Lerp(kneeL, 0.9f, lying), 1.9f, kneel);
-                hipR = Lerp(Lerp(hipR, 0.35f - fwd * 0.4f, lying), 0.7f, kneel);
-                kneeR = Lerp(Lerp(kneeR, 0.5f, lying), 0.9f, kneel);
+                hipL = Lerp(hipL, 0.55f - fwd * 0.4f, lying);
+                kneeL = Lerp(kneeL, 0.9f, lying);
+                hipR = Lerp(hipR, 0.35f - fwd * 0.4f, lying);
+                kneeR = Lerp(kneeR, 0.5f, lying);
                 legOutL = Lerp(legOutL, 0.2f, lying);
                 legOutR = Lerp(legOutR, 0.2f, lying);
-                headLook = false;
                 headPitch = -0.2f * lying * fwd;
+                if (g > 0) Pose(GetUp(g, Smooth(-0.2f, 0.5f, fwd), Grab(right), stand), right);
+                headLook = g > 0.85f;
                 break;
             }
             case ActionKind.Stumble:

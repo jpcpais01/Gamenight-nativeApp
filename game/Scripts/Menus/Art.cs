@@ -158,8 +158,16 @@ public static class Art
     /// <summary>A full player card in the FUT manner; `r` should be about 10 x 14. Rating and
     /// position top left over the nation and club badges, the portrait, the name plate, six
     /// stats, playstyle icons down the right, and a finish (silhouette, colours, texture) per tier.</summary>
-    public static void Card(CanvasItem ci, Rect2 r, Card c, Kit kit, float glow = 0, Crest crest = null)
+    public static void Card(CanvasItem ci, Rect2 r, Card c, Kit kit, float glow = 0, Crest crest = null) => CardFace(ci, r, c, kit, glow, crest, null);
+
+    /// <summary>The mini card for the formation board and the bench: the real card's finish,
+    /// portrait and name plate, without the stats; `r` about 10 x 12. With a slot, the rating
+    /// and position are his in that slot.</summary>
+    public static void MiniCard(CanvasItem ci, Rect2 r, Card c, Kit kit, Pos slot) => CardFace(ci, r, c, kit, 0, null, slot);
+
+    static void CardFace(CanvasItem ci, Rect2 r, Card c, Kit kit, float glow, Crest crest, Pos? slot)
     {
+        bool mini = slot != null;
         float u = r.Size.X / 10f;
         int tier = (int)c.Rarity;
         var ev = Events.Of(c);
@@ -241,6 +249,11 @@ public static class Art
         // The portrait, on a soft halo.
         ci.DrawColoredPolygon(Px.Ellipse(U(6.5f, 5.1f), u * 2.9f, u * 2.9f, 22), new Color(acc, dark ? 0.14f : 0.22f));
         Avatar(ci, new Rect2(U(3.6f, 1.85f), new Vector2(u * 6.1f, u * 6.1f)), c, kit);
+        if (mini)
+        {
+            MiniFace(ci, ir, c, slot.Value, U, u, ink, acc, trim, dark, ev);
+            return;
+        }
         // Rating, position, nation and club down the left.
         Px.TextC(ci, Px.Big, p.X + u * 2.0f, p.Y + u * 3.7f, c.Overall.ToString(), (int)(u * 3.2f), ink);
         Px.TextC(ci, Px.Big, p.X + u * 2.0f, p.Y + u * 5.0f, c.Position.ToString(), (int)(u * 1.4f), ink);
@@ -274,6 +287,38 @@ public static class Art
         }
         ci.DrawRect(new Rect2(U(4.95f, 9.6f), new Vector2(Mathf.Max(1, u * 0.1f), u * 2.75f)), new Color(ink, 0.3f));
         if (u >= 6) Px.TextC(ci, Px.Small, ir.GetCenter().X, p.Y + u * 12.95f, ev?.Label ?? Cards.Label(c.Rarity).ToUpperInvariant(), Math.Max(7, (int)(u * 0.6f)), ev != null ? acc : new Color(ink, 0.7f));
+    }
+
+    /// <summary>The mini card's print: rating and position in his slot, playstyles, the name
+    /// plate, and under it a row kept for the skill-move stars, then the tier or event.</summary>
+    static void MiniFace(CanvasItem ci, Rect2 ir, Card c, Pos slot, Func<float, float, Vector2> U, float u, Color ink, Color acc, Color trim, bool dark, EventDef ev)
+    {
+        var p = ir.Position;
+        var shadow = new Color(0, 0, 0, dark ? 0.5f : 0.25f);
+        int rs = Math.Max(14, (int)(u * 3.3f));
+        Px.TextC(ci, Px.Big, p.X + u * 2.0f, p.Y + u * 1.0f + rs * 0.82f, Cards.RatingIn(c, slot).ToString(), rs, ink, shadow, 1);
+        int ps = Math.Max(7, (int)(u * 1.3f));
+        float py = p.Y + u * 1.0f + rs * 0.82f + ps + 3;
+        if (ps >= 10) Px.TextC(ci, Px.Big, p.X + u * 2.0f, py, slot.ToString(), ps, ink);
+        else Px.TextC(ci, Px.Small, p.X + u * 2.0f, py, slot.ToString(), 7, ink);
+        var styles = Playstyles.Of(c);
+        for (int i = 0; i < styles.Count; i++)
+            Playstyle(ci, U(8.75f, 2.4f + i * 2.1f), Mathf.Max(5, u * 0.95f), styles[i]);
+        // The name plate.
+        var plate = new Rect2(U(0.2f, 7.6f), new Vector2(ir.Size.X - u * 0.4f, Mathf.Max(11, u * 1.9f)));
+        ci.DrawRect(plate, dark ? new Color(0, 0, 0, 0.45f) : new Color(ink, 0.14f));
+        var plateLine = new Color(dark ? acc : trim, 0.75f);
+        ci.DrawRect(new Rect2(plate.Position, new Vector2(plate.Size.X, 1)), plateLine);
+        ci.DrawRect(new Rect2(plate.Position.X, plate.End.Y - 1, plate.Size.X, 1), plateLine);
+        string name = c.LastName.ToUpperInvariant();
+        int ns = (int)(plate.Size.Y * 0.8f);
+        if (ns >= 12) Px.TextC(ci, Px.Big, plate.GetCenter().X, plate.GetCenter().Y + ns * 0.36f, Px.Fit(Px.Big, name, ns, plate.Size.X - 4), ns, ink);
+        else Px.TextC(ci, Px.Small, plate.GetCenter().X, plate.GetCenter().Y + 4, Px.Fit(Px.Small, name, 7, plate.Size.X - 2), 7, ink);
+        // Room under the plate for the skill-move stars (their own thread fills it); then the tier.
+        float below = plate.End.Y + (ir.End.Y - plate.End.Y) * 0.72f;
+        string tier = ev?.Label ?? Cards.Label(c.Rarity).ToUpperInvariant();
+        if (ir.End.Y - plate.End.Y >= 14)
+            Px.TextC(ci, Px.Small, ir.GetCenter().X, below + 3, Px.Fit(Px.Small, tier, 6, ir.Size.X - 4), 6, ev != null ? acc : new Color(ink, 0.7f));
     }
 
     /// <summary>An event pack's badge picture: a jack-o'-lantern, a snowflake, a carnival mask, a
@@ -610,7 +655,7 @@ public static class Art
         Px.TextC(ci, Px.Big, c.X, c.Y + u * 0.75f, "GN", (int)(u * 2.2f), col.Luminance > 0.6f ? Px.Dark : Px.Ink, new Color(0, 0, 0, 0.35f), Mathf.Max(1, u * 0.2f));
     }
 
-    /// <summary>Mini token for the tactics board (about 46 x 56 plus the name below).</summary>
+    /// <summary>A player on the tactics board or the bench: his mini card, how well he fits the slot, the armband.</summary>
     public static void Token(CanvasItem ci, Rect2 r, Card c, Pos slot, Kit kit, bool selected, bool captain)
     {
         if (selected) Px.Frame(ci, r.Grow(5), Colors.Transparent, Px.Cyan, null, 3, 0);
@@ -621,26 +666,21 @@ public static class Art
             Px.TextC(ci, Px.Small, r.GetCenter().X, r.End.Y + 11, slot.ToString(), 8, Px.Ink, new Color(0, 0, 0, 0.7f), 1);
             return;
         }
-        var col = RarityColor(c.Rarity);
-        var ev = Events.Of(c);
-        if (ev != null) col = Px.Hex(ev.Trim);
-        Px.Frame(ci, r, Colors.Transparent, col.Darkened(0.55f), new Color(0, 0, 0, 0.45f), 2, 3);
-        if (ev != null) Px.Bands(ci, r.Grow(-2), new[] { Px.Hex(ev.Face[0]), Px.Hex(ev.Face[2]), Px.Hex(ev.Face[4]) }, new[] { 0, 0.3f, 0.75f });
-        else Px.Bands(ci, r.Grow(-2), new[] { col.Lightened(0.3f), col, col.Darkened(0.25f) }, new[] { 0, 0.25f, 0.7f });
-        Avatar(ci, new Rect2(r.Position + new Vector2(r.Size.X * 0.22f, r.Size.Y * 0.18f), new Vector2(r.Size.X * 0.76f, r.Size.X * 0.76f)), c, kit);
+        MiniCard(ci, r, c, kit, slot);
         double f = Cards.FitFactor(c.Position, slot);
-        Px.Text(ci, Px.Big, r.Position + new Vector2(4, 17), Cards.RatingIn(c, slot).ToString(), 18, ev != null ? Px.Hex(ev.Ink) : CardInk(c.Rarity));
         var fit = f == 1 ? Px.Win : f >= 0.85 ? Px.Gold : Px.Loss;
-        ci.DrawRect(new Rect2(r.End.X - 9, r.Position.Y + 4, 5, 5), fit);
-        string name = $"{slot} {c.LastName}";
-        name = Px.Fit(Px.Small, name, 8, r.Size.X + 34);
-        float w = Px.Width(Px.Small, name, 8) + 6;
-        ci.DrawRect(new Rect2(r.GetCenter().X - w / 2, r.End.Y + 2, w, 12), new Color(0.05f, 0.04f, 0.15f, 0.85f));
-        Px.TextC(ci, Px.Small, r.GetCenter().X, r.End.Y + 11, name, 8, Px.Ink);
-        // Playstyles: little badges up the left edge.
-        var ps = Playstyles.Of(c);
-        for (int i = 0; i < ps.Count; i++)
-            Playstyle(ci, new Vector2(r.Position.X + 2, r.End.Y - 7 - i * 15), 7, ps[i]);
+        // How well he fits the slot: a lamp top right (and his own position, if not this one).
+        var lamp = new Rect2(r.End.X - 11, r.Position.Y + 6, 6, 6);
+        ci.DrawRect(lamp.Grow(1), new Color(0, 0, 0, 0.6f));
+        ci.DrawRect(lamp, fit);
+        if (f < 1)
+        {
+            string own = c.Position.ToString();
+            float w = Px.Width(Px.Small, own, 7) + 6;
+            var tag = new Rect2(r.GetCenter().X - w / 2, r.End.Y + 2, w, 11);
+            ci.DrawRect(tag, new Color(0.05f, 0.04f, 0.15f, 0.88f));
+            Px.TextC(ci, Px.Small, tag.GetCenter().X, tag.End.Y - 2, own, 7, fit);
+        }
         if (captain)
         {
             var cr = new Rect2(r.End.X - 10, r.End.Y - 14, 13, 13);
@@ -703,10 +743,6 @@ public static class Art
 
     // ---------------------------------------------------------------- manager
 
-    /// <summary>
-    /// The manager full length (the PWA's coachSVG): hair, face, coat with its trim, trousers and
-    /// shoes, in a 48 x 84 box. Taller and heavier managers fill more of it.
-    /// </summary>
     /// <summary>The manager, full length (r about 48 x 84): his face, hair and beard, and his
     /// outfit in his own coat and accent colours.</summary>
     public static void Coach(CanvasItem ci, Rect2 r, Coach c, int shirt, int second = -1)
