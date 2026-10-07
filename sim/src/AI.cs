@@ -372,7 +372,7 @@ public sealed partial class AI
         }
         double hold = M.Clamp(power, 0, 1);
         // (How far along his run they meet: kept a touch short, so it is not overhit past him.)
-        double depth = (2 + 14 * hold) * 0.95;
+        double depth = (2 + 14 * hold) * 0.88;
         // The same rule as a pass to feet (HumanReceiver): the direction first, then the distance
         // the hold asks for, then how good his ball is. Lower cost wins.
         double cone = JsMath.Cos((aimed ? 50 : 70) * Math.PI / 180);
