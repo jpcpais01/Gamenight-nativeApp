@@ -85,6 +85,9 @@ public static class Art
 
     public static Color RarityColor(Rarity r) => Px.Hex(Cards.RarityColor[(int)r]);
 
+    /// <summary>A card's colour in lists and tokens: its event's trim, else its rarity's.</summary>
+    public static Color ColorOf(Card c) => Events.Of(c) is EventDef e ? Px.Hex(e.Trim) : RarityColor(c.Rarity);
+
     /// <summary>Ink that reads on the card face.</summary>
     static Color CardInk(Rarity r) => r switch
     {
@@ -118,9 +121,19 @@ public static class Art
         new[] { 0, 0.11f, 0.08f, 0.03f, 0.22f, 0.06f, 0.36f, 0, 0.5f, 0.045f, 0.64f, 0, 0.78f, 0.06f, 0.92f, 0.03f, 1, 0.11f, 1, 0.86f, 0.5f, 1, 0, 0.86f },
     };
 
-    static Vector2[] Shape(Rect2 r, int tier)
+    /// <summary>Event cards' silhouettes: bat wings, icicles, a feather crown, a capsule.</summary>
+    static readonly System.Collections.Generic.Dictionary<string, float[]> EventShapes = new()
     {
-        var n = Shapes[Math.Clamp(tier, 0, 4)];
+        ["halloween"] = new[] { 0, 0.1f, 0.1f, 0.02f, 0.17f, 0.075f, 0.26f, 0.01f, 0.36f, 0.06f, 0.5f, 0.025f, 0.64f, 0.06f, 0.74f, 0.01f, 0.83f, 0.075f, 0.9f, 0.02f, 1, 0.1f, 1, 0.86f, 0.7f, 0.93f, 0.62f, 0.985f, 0.5f, 0.95f, 0.38f, 0.985f, 0.3f, 0.93f, 0, 0.86f },
+        ["frost"] = new[] { 0, 0.07f, 0.2f, 0.015f, 0.5f, 0, 0.8f, 0.015f, 1, 0.07f, 1, 0.85f, 0.88f, 0.885f, 0.83f, 0.95f, 0.77f, 0.9f, 0.64f, 0.94f, 0.5f, 1, 0.36f, 0.94f, 0.23f, 0.9f, 0.17f, 0.95f, 0.12f, 0.885f, 0, 0.85f },
+        ["carnival"] = new[] { 0, 0.12f, 0.07f, 0.02f, 0.19f, 0.09f, 0.31f, 0, 0.41f, 0.075f, 0.5f, 0, 0.59f, 0.075f, 0.69f, 0, 0.81f, 0.09f, 0.93f, 0.02f, 1, 0.12f, 1, 0.86f, 0.5f, 1, 0, 0.86f },
+        ["cosmic"] = new[] { 0.16f, 0.035f, 0.5f, 0, 0.84f, 0.035f, 1, 0.13f, 1, 0.86f, 0.84f, 0.955f, 0.5f, 1, 0.16f, 0.955f, 0, 0.86f, 0, 0.13f },
+    };
+
+    static Vector2[] Shape(Rect2 r, int tier) => Shape(r, Shapes[Math.Clamp(tier, 0, 4)]);
+
+    static Vector2[] Shape(Rect2 r, float[] n)
+    {
         var pts = new Vector2[n.Length / 2];
         for (int i = 0; i < pts.Length; i++) pts[i] = r.Position + new Vector2(n[i * 2], n[i * 2 + 1]) * r.Size;
         return pts;
@@ -149,18 +162,22 @@ public static class Art
     {
         float u = r.Size.X / 10f;
         int tier = (int)c.Rarity;
-        var face = Face[tier];
-        var trim = Px.Hex(Trim[tier]);
-        var acc = Px.Hex(Accent[tier]);
-        var col = RarityColor(c.Rarity);
-        var outer = Shape(r, tier);
+        var ev = Events.Of(c);
+        var outline = ev != null ? EventShapes[ev.Id] : Shapes[tier];
+        var face = ev?.Face ?? Face[tier];
+        var trim = Px.Hex(ev?.Trim ?? Trim[tier]);
+        var acc = Px.Hex(ev?.Accent ?? Accent[tier]);
+        var col = ev != null ? acc : RarityColor(c.Rarity);
+        // Dark faces take light ink, a dark plate and accent lines.
+        bool dark = ev != null ? Px.Hex(ev.Ink).Luminance > 0.5f : tier == 3;
+        var outer = Shape(r, outline);
         if (glow > 0)
-            for (int i = 3; i >= 1; i--) ci.DrawColoredPolygon(Shape(r.Grow(u * 0.45f * i * glow), tier), new Color(col, 0.12f * glow));
-        ci.DrawColoredPolygon(Shape(r.Translated(new Vector2(u * 0.35f, u * 0.45f)), tier), new Color(0, 0, 0, 0.5f));
+            for (int i = 3; i >= 1; i--) ci.DrawColoredPolygon(Shape(r.Grow(u * 0.45f * i * glow), outline), new Color(col, 0.12f * glow));
+        ci.DrawColoredPolygon(Shape(r.Translated(new Vector2(u * 0.35f, u * 0.45f)), outline), new Color(0, 0, 0, 0.5f));
         ci.DrawColoredPolygon(outer, trim.Darkened(0.35f));
         float bw = Mathf.Max(2, u * 0.32f);
         var ir = r.Grow(-bw);
-        var shape = Shape(ir, tier);
+        var shape = Shape(ir, outline);
         ci.DrawColoredPolygon(shape, Px.Hex(face[2]));
         // The face: hard bands, top to bottom.
         float[] stops = { 0, 0.14f, 0.36f, 0.64f, 0.84f, 1.01f };
@@ -169,8 +186,9 @@ public static class Art
         var p = ir.Position;
         Vector2 U(float x, float y) => p + new Vector2(x, y) * u;
 
-        // The tier's texture.
-        switch (tier)
+        // The tier's texture (or the event's).
+        if (ev != null) EventTexture(ci, ev.Id, shape, U, u, acc, trim);
+        else switch (tier)
         {
             case 0:
                 for (float y = 1; y < 14; y += 0.55f) Clip(ci, Quad(p.X, p.Y + y * u, ir.End.X, p.Y + y * u + Mathf.Max(1, u * 0.08f)), shape, new Color(0, 0, 0, 0.07f));
@@ -213,15 +231,15 @@ public static class Art
                 break;
         }
         // The inner trim line, following the silhouette.
-        var line = Shape(ir.Grow(-u * 0.35f), tier);
+        var line = Shape(ir.Grow(-u * 0.35f), outline);
         var closed = new Vector2[line.Length + 1];
         Array.Copy(line, closed, line.Length);
         closed[^1] = line[0];
-        ci.DrawPolyline(closed, new Color(tier == 3 ? acc : trim, tier >= 2 ? 0.85f : 0.45f), Mathf.Max(1, u * 0.12f));
+        ci.DrawPolyline(closed, new Color(tier == 3 && ev == null ? acc : trim, tier >= 2 || ev != null ? 0.85f : 0.45f), Mathf.Max(1, u * 0.12f));
 
-        var ink = CardInk(c.Rarity);
+        var ink = ev != null ? Px.Hex(ev.Ink) : CardInk(c.Rarity);
         // The portrait, on a soft halo.
-        ci.DrawColoredPolygon(Px.Ellipse(U(6.5f, 5.1f), u * 2.9f, u * 2.9f, 22), new Color(acc, tier == 3 ? 0.14f : 0.22f));
+        ci.DrawColoredPolygon(Px.Ellipse(U(6.5f, 5.1f), u * 2.9f, u * 2.9f, 22), new Color(acc, dark ? 0.14f : 0.22f));
         Avatar(ci, new Rect2(U(3.6f, 1.85f), new Vector2(u * 6.1f, u * 6.1f)), c, kit);
         // Rating, position, nation and club down the left.
         Px.TextC(ci, Px.Big, p.X + u * 2.0f, p.Y + u * 3.7f, c.Overall.ToString(), (int)(u * 3.2f), ink);
@@ -237,9 +255,10 @@ public static class Art
             Playstyle(ci, U(8.75f, 2.6f + i * 1.95f), Mathf.Max(5, u * 0.9f), ps[i]);
         // The name plate.
         var plate = new Rect2(U(0.3f, 7.95f), new Vector2(ir.Size.X - u * 0.6f, u * 1.4f));
-        ci.DrawRect(plate, tier == 3 ? new Color(0, 0, 0, 0.35f) : new Color(ink, 0.12f));
-        ci.DrawRect(new Rect2(plate.Position, new Vector2(plate.Size.X, Mathf.Max(1, u * 0.1f))), new Color(tier == 3 ? acc : trim, 0.7f));
-        ci.DrawRect(new Rect2(plate.Position.X, plate.End.Y, plate.Size.X, Mathf.Max(1, u * 0.1f)), new Color(tier == 3 ? acc : trim, 0.7f));
+        ci.DrawRect(plate, dark ? new Color(0, 0, 0, 0.35f) : new Color(ink, 0.12f));
+        var plateLine = new Color(dark ? acc : trim, 0.7f);
+        ci.DrawRect(new Rect2(plate.Position, new Vector2(plate.Size.X, Mathf.Max(1, u * 0.1f))), plateLine);
+        ci.DrawRect(new Rect2(plate.Position.X, plate.End.Y, plate.Size.X, Mathf.Max(1, u * 0.1f)), plateLine);
         int ns = (int)(u * 1.5f);
         Px.TextC(ci, Px.Big, plate.GetCenter().X, plate.GetCenter().Y + ns * 0.36f, Px.Fit(Px.Big, c.LastName.ToUpperInvariant(), ns, plate.Size.X - u * 0.6f), ns, ink);
         // Six stats, two columns of three, split by a rule.
@@ -254,7 +273,172 @@ public static class Art
             Px.Text(ci, Px.Big, new Vector2(x + u * 1.75f, y), fs[i].Item1, ls, new Color(ink, 0.75f));
         }
         ci.DrawRect(new Rect2(U(4.95f, 9.6f), new Vector2(Mathf.Max(1, u * 0.1f), u * 2.75f)), new Color(ink, 0.3f));
-        if (u >= 6) Px.TextC(ci, Px.Small, ir.GetCenter().X, p.Y + u * 12.95f, Cards.Label(c.Rarity).ToUpperInvariant(), Math.Max(7, (int)(u * 0.6f)), new Color(ink, 0.7f));
+        if (u >= 6) Px.TextC(ci, Px.Small, ir.GetCenter().X, p.Y + u * 12.95f, ev?.Label ?? Cards.Label(c.Rarity).ToUpperInvariant(), Math.Max(7, (int)(u * 0.6f)), ev != null ? acc : new Color(ink, 0.7f));
+    }
+
+    /// <summary>An event pack's badge picture: a jack-o'-lantern, a snowflake, a carnival mask, a
+    /// ringed planet.</summary>
+    static void PackMotif(CanvasItem ci, Rect2 b, string id, Color main, Color light, float u)
+    {
+        var c = b.GetCenter();
+        float s = Mathf.Min(b.Size.X, b.Size.Y) * 0.36f;
+        var dark = Px.Hex(0x14121c);
+        switch (id)
+        {
+            case "halloween":
+                ci.DrawRect(new Rect2(c + new Vector2(-s * 0.12f, -s * 1.05f), new Vector2(s * 0.24f, s * 0.35f)), Px.Hex(0x3a7a2a));
+                ci.DrawColoredPolygon(Px.Ellipse(c + new Vector2(0, s * 0.1f), s * 1.05f, s * 0.82f, 20), Px.Hex(0xff7a1a));
+                ci.DrawColoredPolygon(Px.Ellipse(c + new Vector2(0, s * 0.1f), s * 0.35f, s * 0.8f, 14), Px.Hex(0xe0600c));
+                ci.DrawColoredPolygon(new[] { c + new Vector2(-s * 0.6f, -s * 0.05f), c + new Vector2(-s * 0.2f, -s * 0.05f), c + new Vector2(-s * 0.4f, -s * 0.38f) }, dark);
+                ci.DrawColoredPolygon(new[] { c + new Vector2(s * 0.2f, -s * 0.05f), c + new Vector2(s * 0.6f, -s * 0.05f), c + new Vector2(s * 0.4f, -s * 0.38f) }, dark);
+                ci.DrawColoredPolygon(new[] { c + new Vector2(-s * 0.6f, s * 0.3f), c + new Vector2(-s * 0.3f, s * 0.45f), c + new Vector2(0, s * 0.3f), c + new Vector2(s * 0.3f, s * 0.45f), c + new Vector2(s * 0.6f, s * 0.3f), c + new Vector2(s * 0.3f, s * 0.65f), c + new Vector2(-s * 0.3f, s * 0.65f) }, dark);
+                break;
+            case "frost":
+                for (int k = 0; k < 3; k++)
+                {
+                    float a = k * Mathf.Pi / 3 + Mathf.Pi / 2;
+                    var d = new Vector2(Mathf.Cos(a), Mathf.Sin(a));
+                    ci.DrawLine(c - d * s, c + d * s, light, Mathf.Max(2, u * 0.35f));
+                    foreach (float sign in new[] { -1f, 1f })
+                    {
+                        var tip = c + d * s * 0.62f * sign;
+                        var side = new Vector2(-d.Y, d.X) * s * 0.25f;
+                        ci.DrawLine(tip, tip + d * s * 0.25f * sign + side, light, Mathf.Max(1, u * 0.22f));
+                        ci.DrawLine(tip, tip + d * s * 0.25f * sign - side, light, Mathf.Max(1, u * 0.22f));
+                    }
+                }
+                break;
+            case "carnival":
+                for (int i = 0; i < 5; i++)
+                {
+                    float a = -Mathf.Pi / 2 + (i - 2) * 0.35f;
+                    var tip = c + new Vector2(0, -s * 0.2f) + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * s * 1.1f;
+                    ci.DrawColoredPolygon(new[] { c + new Vector2(-s * 0.15f, -s * 0.2f), tip, c + new Vector2(s * 0.15f, -s * 0.2f) }, i % 2 == 0 ? Px.Hex(0x2ef2c8) : Px.Hex(0xffd447));
+                }
+                ci.DrawColoredPolygon(new[] { c + new Vector2(-s, -s * 0.15f), c + new Vector2(s, -s * 0.15f), c + new Vector2(s * 0.85f, s * 0.35f), c + new Vector2(s * 0.15f, s * 0.45f), c + new Vector2(0, s * 0.25f), c + new Vector2(-s * 0.15f, s * 0.45f), c + new Vector2(-s * 0.85f, s * 0.35f) }, light);
+                ci.DrawColoredPolygon(Px.Ellipse(c + new Vector2(-s * 0.45f, s * 0.08f), s * 0.24f, s * 0.15f, 10), dark);
+                ci.DrawColoredPolygon(Px.Ellipse(c + new Vector2(s * 0.45f, s * 0.08f), s * 0.24f, s * 0.15f, 10), dark);
+                break;
+            default:
+                ci.DrawColoredPolygon(Px.Ellipse(c, s * 0.7f, s * 0.7f, 18), Px.Hex(0xffb84a));
+                ci.DrawColoredPolygon(Px.Ellipse(c + new Vector2(-s * 0.2f, -s * 0.2f), s * 0.22f, s * 0.15f, 10), Px.Hex(0xffd88a));
+                var ring = new[] { c + new Vector2(-s * 1.3f, s * 0.35f), c + new Vector2(s * 1.3f, -s * 0.35f) };
+                var n = (ring[1] - ring[0]).Normalized().Orthogonal() * Mathf.Max(2, u * 0.3f);
+                ci.DrawColoredPolygon(new[] { ring[0] - n, ring[1] - n, ring[1] + n, ring[0] + n }, light);
+                foreach (var (x, y) in new[] { (-0.9f, -0.8f), (0.95f, 0.7f), (0.6f, -0.95f), (-1.0f, 0.75f) })
+                    ci.DrawRect(new Rect2(c + new Vector2(x, y) * s, Vector2.One * Mathf.Max(1, u * 0.25f)), Colors.White);
+                break;
+        }
+    }
+
+    /// <summary>The event finishes: a moon, bats and a web; snowflakes and icicles; a feather fan
+    /// and confetti; stars, a nebula and a ringed planet.</summary>
+    static void EventTexture(CanvasItem ci, string id, Vector2[] shape, Func<float, float, Vector2> U, float u, Color acc, Color trim)
+    {
+        float lw = Mathf.Max(1, u * 0.1f);
+        void Bar(Vector2 a, Vector2 b, float w, Color c)
+        {
+            var n = (b - a).Normalized().Orthogonal() * w / 2;
+            Clip(ci, new[] { a - n, b - n, b + n, a + n }, shape, c);
+        }
+        switch (id)
+        {
+            case "halloween":
+            {
+                // A low orange moon behind the portrait, a web in the corner, bats.
+                Clip(ci, Px.Ellipse(U(6.6f, 4.4f), u * 3.3f, u * 3.3f, 26), shape, new Color(1, 0.62f, 0.2f, 0.18f));
+                Clip(ci, Px.Ellipse(U(6.6f, 4.4f), u * 2.5f, u * 2.5f, 24), shape, new Color(1, 0.85f, 0.55f, 0.16f));
+                var o = U(0, 0);
+                for (int i = 0; i < 5; i++)
+                {
+                    float a = i / 4f * Mathf.Pi / 2;
+                    Bar(o, o + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * u * 3.4f, lw, new Color(1, 1, 1, 0.22f));
+                }
+                for (int k = 1; k <= 3; k++)
+                {
+                    var pts = new Vector2[5];
+                    for (int i = 0; i < 5; i++)
+                    {
+                        float a = i / 4f * Mathf.Pi / 2;
+                        pts[i] = o + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * u * k * 0.95f;
+                    }
+                    for (int i = 0; i < 4; i++) Bar(pts[i], pts[i + 1], lw, new Color(1, 1, 1, 0.18f));
+                }
+                foreach (var (x, y, sz) in new[] { (8.6f, 1.2f, 0.8f), (2.6f, 2.2f, 0.6f), (7.2f, 0.7f, 0.5f) })
+                {
+                    var c = U(x, y);
+                    float w = u * sz;
+                    Clip(ci, new[] { c + new Vector2(-w * 1.6f, -w * 0.5f), c + new Vector2(-w * 0.8f, -w * 0.1f), c + new Vector2(-w * 0.3f, -w * 0.5f), c + new Vector2(0, -w * 0.2f), c + new Vector2(w * 0.3f, -w * 0.5f), c + new Vector2(w * 0.8f, -w * 0.1f), c + new Vector2(w * 1.6f, -w * 0.5f), c + new Vector2(w * 0.9f, w * 0.4f), c + new Vector2(0, w * 0.2f), c + new Vector2(-w * 0.9f, w * 0.4f) }, shape, new Color(acc, 0.75f));
+                }
+                // Embers rising from the bottom.
+                for (int i = 0; i < 9; i++) ci.DrawRect(new Rect2(U(0.6f + i * 1.05f, 12.4f - (i * 7 % 5) * 0.5f), Vector2.One * Mathf.Max(1, u * 0.18f)), new Color(acc, 0.6f));
+                break;
+            }
+            case "frost":
+            {
+                for (int i = 0; i < 3; i++)
+                {
+                    float x = 1.5f + i * 3.3f;
+                    Clip(ci, new[] { U(x, 0), U(x + 1.1f, 0), U(x - 3, 14), U(x - 4.1f, 14) }, shape, new Color(1, 1, 1, 0.2f));
+                }
+                // Snowflakes.
+                foreach (var (x, y, sz) in new[] { (8.4f, 1.6f, 0.7f), (1.6f, 8.9f, 0.45f), (8.9f, 7.6f, 0.5f), (3.2f, 1.1f, 0.4f), (5.2f, 13.1f, 0.35f) })
+                {
+                    var c = U(x, y);
+                    for (int k = 0; k < 3; k++)
+                    {
+                        float a = k * Mathf.Pi / 3;
+                        var d = new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * u * sz;
+                        Bar(c - d, c + d, lw, new Color(trim, 0.55f));
+                    }
+                }
+                // Icicles off the top edge.
+                for (int i = 0; i < 8; i++)
+                {
+                    float x = 0.7f + i * 1.2f, len = 0.6f + (i * 5 % 3) * 0.35f;
+                    Clip(ci, new[] { U(x - 0.3f, 0), U(x + 0.3f, 0), U(x, len) }, shape, new Color(1, 1, 1, 0.75f));
+                }
+                break;
+            }
+            case "carnival":
+            {
+                // A fan of feathers behind the portrait.
+                var o = U(6.5f, 7.6f);
+                var cols = new[] { acc, trim, Px.Hex(0x8a3cff), Px.Hex(0xff8a2e) };
+                for (int i = 0; i < 9; i++)
+                {
+                    float a = Mathf.Pi + 0.25f + i * (Mathf.Pi - 0.5f) / 8;
+                    var tip = o + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * u * 7.2f;
+                    var side = new Vector2(-Mathf.Sin(a), Mathf.Cos(a)) * u * 0.55f;
+                    Clip(ci, new[] { o, tip + side, tip - side }, shape, new Color(cols[i % 4], 0.32f));
+                }
+                // Confetti.
+                for (int i = 0; i < 16; i++)
+                {
+                    var c = U(0.4f + (i * 37 % 92) / 10f, 0.5f + (i * 53 % 125) / 10f);
+                    float w = u * 0.32f;
+                    Clip(ci, Quad(c.X, c.Y, c.X + w, c.Y + w * (i % 2 == 0 ? 0.5f : 1.4f)), shape, new Color(cols[i % 4], 0.85f));
+                }
+                break;
+            }
+            case "cosmic":
+            {
+                Clip(ci, Px.Ellipse(U(3.0f, 4.0f), u * 3.4f, u * 2.2f, 22), shape, new Color(acc, 0.12f));
+                Clip(ci, Px.Ellipse(U(7.4f, 9.6f), u * 3.8f, u * 2.0f, 22), shape, new Color(trim, 0.1f));
+                for (int i = 0; i < 22; i++)
+                {
+                    var c = U(0.3f + (i * 41 % 94) / 10f, 0.4f + (i * 67 % 128) / 10f);
+                    float w = Mathf.Max(1, u * (i % 5 == 0 ? 0.24f : 0.13f));
+                    ci.DrawRect(new Rect2(c, new Vector2(w, w)), new Color(1, 1, 1, i % 3 == 0 ? 0.9f : 0.5f));
+                }
+                // A ringed planet in the corner and a shooting star.
+                var pc = U(8.5f, 1.3f);
+                Clip(ci, Px.Ellipse(pc, u * 0.85f, u * 0.85f, 16), shape, Px.Hex(0xffb84a));
+                Bar(pc + new Vector2(-u * 1.5f, u * 0.35f), pc + new Vector2(u * 1.5f, -u * 0.35f), Mathf.Max(1, u * 0.18f), new Color(trim, 0.9f));
+                Bar(U(0.6f, 1.2f), U(2.8f, 2.4f), Mathf.Max(1, u * 0.12f), new Color(1, 1, 1, 0.6f));
+                break;
+            }
+        }
     }
 
     /// <summary>Face-down card back.</summary>
@@ -438,11 +622,14 @@ public static class Art
             return;
         }
         var col = RarityColor(c.Rarity);
+        var ev = Events.Of(c);
+        if (ev != null) col = Px.Hex(ev.Trim);
         Px.Frame(ci, r, Colors.Transparent, col.Darkened(0.55f), new Color(0, 0, 0, 0.45f), 2, 3);
-        Px.Bands(ci, r.Grow(-2), new[] { col.Lightened(0.3f), col, col.Darkened(0.25f) }, new[] { 0, 0.25f, 0.7f });
+        if (ev != null) Px.Bands(ci, r.Grow(-2), new[] { Px.Hex(ev.Face[0]), Px.Hex(ev.Face[2]), Px.Hex(ev.Face[4]) }, new[] { 0, 0.3f, 0.75f });
+        else Px.Bands(ci, r.Grow(-2), new[] { col.Lightened(0.3f), col, col.Darkened(0.25f) }, new[] { 0, 0.25f, 0.7f });
         Avatar(ci, new Rect2(r.Position + new Vector2(r.Size.X * 0.22f, r.Size.Y * 0.18f), new Vector2(r.Size.X * 0.76f, r.Size.X * 0.76f)), c, kit);
         double f = Cards.FitFactor(c.Position, slot);
-        Px.Text(ci, Px.Big, r.Position + new Vector2(4, 17), Cards.RatingIn(c, slot).ToString(), 18, CardInk(c.Rarity));
+        Px.Text(ci, Px.Big, r.Position + new Vector2(4, 17), Cards.RatingIn(c, slot).ToString(), 18, ev != null ? Px.Hex(ev.Ink) : CardInk(c.Rarity));
         var fit = f == 1 ? Px.Win : f >= 0.85 ? Px.Gold : Px.Loss;
         ci.DrawRect(new Rect2(r.End.X - 9, r.Position.Y + 4, 5, 5), fit);
         string name = $"{slot} {c.LastName}";
@@ -622,9 +809,13 @@ public static class Art
         var badge = new Rect2(inner.GetCenter() - new Vector2(u * 2.6f, u * 3.2f), new Vector2(u * 5.2f, u * 4.4f));
         ci.DrawRect(badge, new Color(c2, 0.85f));
         Px.Ring(ci, badge, c3, Math.Max(1, (int)(u * 0.25f)));
-        int ms = (int)(u * 3.4f);
-        while (ms > 6 && Px.Width(Px.Big, p.Mark, ms) > badge.Size.X - u * 0.6f) ms--;
-        Px.TextC(ci, Px.Big, badge.GetCenter().X, badge.GetCenter().Y + ms * 0.38f, p.Mark, ms, c3);
+        if (p.Event != null) PackMotif(ci, badge, p.Event, c1, c3, u);
+        else
+        {
+            int ms = (int)(u * 3.4f);
+            while (ms > 6 && Px.Width(Px.Big, p.Mark, ms) > badge.Size.X - u * 0.6f) ms--;
+            Px.TextC(ci, Px.Big, badge.GetCenter().X, badge.GetCenter().Y + ms * 0.38f, p.Mark, ms, c3);
+        }
         if (p.Id == "ultimate")
         {
             // Gold filigree: a second ring and corner studs.

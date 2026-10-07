@@ -70,7 +70,8 @@ public sealed partial class StoreScreen : PxCanvas
         float tw = Mathf.Clamp((W - 28 - gap * 4) / 5, 150, 176);
         float top = 74, th = H - top - 14;
         int firstSpecial = Array.FindIndex(Packs.All, q => q.Special);
-        float X(int i) => 14 + i * (tw + gap) + (firstSpecial >= 0 && i >= firstSpecial ? split : 0) - Scroll;
+        int firstEvent = Array.FindIndex(Packs.All, q => q.Event != null);
+        float X(int i) => 14 + i * (tw + gap) + (firstSpecial >= 0 && i >= firstSpecial ? split : 0) + (firstEvent >= 0 && i >= firstEvent ? split : 0) - Scroll;
         Content = X(n - 1) + Scroll + tw + 14;
         Px.Text(this, Px.Small, new Vector2(X(0) + 2, top - 8), "PACKS", 8, Px.Cyan);
         if (firstSpecial >= 0)
@@ -78,6 +79,13 @@ public sealed partial class StoreScreen : PxCanvas
             float sx = X(firstSpecial);
             Px.Text(this, Px.Small, new Vector2(sx + 2, top - 8), "SPECIAL PACKS · EACH WITH A TWIST", 8, Px.Neon);
             DrawRect(new Rect2(sx - split / 2 - gap / 2 - 1, top, 2, th), new Color(Px.Neon, 0.35f));
+        }
+        if (firstEvent >= 0)
+        {
+            float ex = X(firstEvent);
+            var gold = Px.Hex(0xff9a2e);
+            Px.Text(this, Px.Small, new Vector2(ex + 2, top - 8), "EVENT PACKS · THEMED CARDS, +4 ON EVERY STAT", 8, gold);
+            DrawRect(new Rect2(ex - split / 2 - gap / 2 - 1, top, 2, th), new Color(gold, 0.35f));
         }
         long freeMs = Club.FreePackIn;
         for (int i = 0; i < n; i++)

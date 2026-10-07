@@ -64,6 +64,8 @@ public sealed class Card
     public int Skin, Hair, HairStyle;
     /// <summary>When it joined the club (unix ms).</summary>
     public long Got;
+    /// <summary>The event it came from (Events.All), or null for an ordinary card.</summary>
+    public string Event;
 
     public int Overall => Cards.OverallAt(Stats, Position);
     public string LastName => Name.Contains(' ') ? Name[(Name.LastIndexOf(' ') + 1)..] : Name;

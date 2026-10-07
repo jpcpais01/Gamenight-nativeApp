@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("0.116", "Event cards: four new event packs in the store, Fright Night (Halloween), Winter Frost, Carnival and Cosmic. Their cards have their own shape and art (bats and a harvest moon, icicles and snowflakes, feathers and confetti, stars and planets) and +4 on every stat."),
         ("0.115", "Every player has his own head now: a little bigger or smaller, rounder, longer or squarer, with his own jaw, chin, cheekbones, nose and brow. It is tied to his name, so he always looks the same."),
         ("0.114", "Light passes pick the near man: a quick tap now looks about 6 m away (it was 12), a team-mate beyond that counts against him more, and one a little off your stick counts less."),
         ("0.113", "A loose ball coming your way: your player now attacks it, running at the ball instead of to the spot it will reach, and no longer pulls up there to wait for it."),

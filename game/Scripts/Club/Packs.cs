@@ -24,11 +24,17 @@ public sealed class PackDef
     public Position[] Positions;
     public bool OneNation, Styled, Special;
     public int MinOvr;
+    /// <summary>Event packs: the theme (Events.All). The best card is always an event card, the
+    /// others sometimes.</summary>
+    public string Event;
 }
 
 /// <summary>The store's packs (the PWA's src/meta/packs.ts).</summary>
 public static class Packs
 {
+    // Declared before All: static fields initialise in order.
+    static readonly double[] EventOdds = { 0, 20, 50, 24, 6 };
+
     public static readonly PackDef[] All =
     {
         new PackDef { Id = "free", Name = "Daily Pack", Tagline = "Free every few hours", Price = 0, Cards = 3, Odds = new double[] { 80, 17, 2.7, 0.3, 0 }, Colors = new[] { 0x3b7a57, 0x1e3f2e, 0x9be0b4 }, Emblem = "DAILY" },
@@ -47,6 +53,12 @@ public static class Packs
             Positions = new[] { Position.GK } },
         new PackDef { Id = "nation", Name = "One Nation", Tagline = "5 players · one country · 1 Legend+", Price = 25000, Cards = 5, Odds = new double[] { 0, 45, 40, 12, 3 }, Guarantee = Rarity.Legendary, Colors = new[] { 0xf2f2f2, 0x2a2a3a, 0xffffff }, Emblem = "NATION", Mark = "1", Special = true, OneNation = true },
         new PackDef { Id = "styled", Name = "Signature", Tagline = "3 players · 85+ · all with playstyles", Price = 40000, Cards = 3, Odds = new double[] { 0, 0, 0, 78, 22 }, Colors = new[] { 0xff4fa3, 0x3a0828, 0xffd0ea }, Emblem = "SIGNATURE", Mark = "PS", Special = true, Styled = true, MinOvr = 85 },
+
+        // Event packs: themed cards with their own look, a few points stronger.
+        new PackDef { Id = "ev-halloween", Name = "Fright Night", Tagline = "4 players · Halloween cards", Price = 30000, Cards = 4, Odds = EventOdds, Guarantee = Rarity.Epic, Colors = new[] { 0xff7a1a, 0x1c0830, 0xffd08a }, Emblem = "FRIGHT", Mark = "", Event = "halloween" },
+        new PackDef { Id = "ev-frost", Name = "Winter Frost", Tagline = "4 players · frozen cards", Price = 30000, Cards = 4, Odds = EventOdds, Guarantee = Rarity.Epic, Colors = new[] { 0x8fd6ff, 0x1c4a7a, 0xffffff }, Emblem = "FROST", Mark = "", Event = "frost" },
+        new PackDef { Id = "ev-carnival", Name = "Carnival", Tagline = "4 players · carnival cards", Price = 30000, Cards = 4, Odds = EventOdds, Guarantee = Rarity.Epic, Colors = new[] { 0xf2308c, 0x4a0830, 0xffd447 }, Emblem = "CARNIVAL", Mark = "", Event = "carnival" },
+        new PackDef { Id = "ev-cosmic", Name = "Cosmic", Tagline = "4 players · cards from space", Price = 30000, Cards = 4, Odds = EventOdds, Guarantee = Rarity.Epic, Colors = new[] { 0x5a3ad8, 0x0a0828, 0x7ff6ff }, Emblem = "COSMIC", Mark = "", Event = "cosmic" },
     };
 
     static Rarity Roll(Rng rng, double[] odds)
@@ -90,7 +102,16 @@ public static class Packs
             }
             cards.Add(c);
         }
-        cards.Sort((a, b) => a.Rarity != b.Rarity ? a.Rarity.CompareTo(b.Rarity) : a.Overall.CompareTo(b.Overall));
+        if (def.Event != null && Array.Find(Events.All, e => e.Id == def.Event) is EventDef ev)
+        {
+            // The best card is always the event's; each other one has a fair chance.
+            int best = 0;
+            for (int i = 1; i < cards.Count; i++)
+                if (cards[i].Rarity > cards[best].Rarity || cards[i].Rarity == cards[best].Rarity && cards[i].Overall > cards[best].Overall) best = i;
+            for (int i = 0; i < cards.Count; i++)
+                if (i == best || rng.Next() < 0.4) Events.Make(cards[i], ev);
+        }
+        cards.Sort((a, b) => a.Rarity != b.Rarity ? a.Rarity.CompareTo(b.Rarity) : (a.Event != null) != (b.Event != null) ? (a.Event != null).CompareTo(b.Event != null) : a.Overall.CompareTo(b.Overall));
         return cards;
     }
 }

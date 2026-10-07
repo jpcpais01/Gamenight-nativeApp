@@ -416,7 +416,7 @@ public sealed partial class PackOpening : PxCanvas
     float CaptionWidth(Card c)
     {
         float max = Size.X * 0.5f;
-        float w = Px.Width(Px.Big, Cards.Label(c.Rarity).ToUpperInvariant() + (c.Position == Pos.GK ? " · GOALKEEPER" : ""), 20) + 20;
+        float w = Px.Width(Px.Big, (Events.Of(c) is EventDef ev ? ev.Label + " · " : "") + Cards.Label(c.Rarity).ToUpperInvariant() + (c.Position == Pos.GK ? " · GOALKEEPER" : ""), 20) + 20;
         w = Mathf.Max(w, Mathf.Min(max, Px.Width(Px.Big, c.Name, 46)));
         var n = Cards.Nations[c.Nation];
         w = Mathf.Max(w, 32 + Px.Width(Px.Small, $"{n.Code} · {c.Height} CM · {c.Weight} KG · {Cards.BodyName(c).ToUpperInvariant()}", 9));
@@ -782,7 +782,7 @@ public sealed partial class PackOpening : PxCanvas
         float off = (1 - k) * (1 - k) * 80;
         float x = r.End.X + 44 + off, y = r.Position.Y + 20;
         var col = Tier >= 4 ? Hue : Col(Tier);
-        string label = Cards.Label(c.Rarity).ToUpperInvariant() + (c.Position == Pos.GK ? " · GOALKEEPER" : "");
+        string label = (Events.Of(c) is EventDef ev ? ev.Label + " · " : "") + Cards.Label(c.Rarity).ToUpperInvariant() + (c.Position == Pos.GK ? " · GOALKEEPER" : "");
         float lw = Px.Width(Px.Big, label, 20) + 20;
         Px.Frame(this, new Rect2(x, y, lw, 28), col, col.Darkened(0.5f), new Color(0, 0, 0, 0.5f), 2, 4);
         Px.Text(this, Px.Big, new Vector2(x + 10, y + 21), label, 20, col.Luminance > 0.55f ? Px.Dark : Px.Ink);

@@ -502,7 +502,7 @@ public sealed partial class RosterList : PxCanvas
     {
         bool held = Held("c" + c.Id);
         var rr = held ? new Rect2(r.Position + new Vector2(2, 2), r.Size) : r;
-        var col = Art.RarityColor(c.Rarity);
+        var col = Art.ColorOf(c);
         Px.Frame(this, rr, bench || starter ? new Color(28 / 255f, 24 / 255f, 80 / 255f, 0.9f) : new Color(16 / 255f, 14 / 255f, 44 / 255f, 0.82f), starter ? new Color(Px.Cyan, 0.45f) : bench ? new Color(Px.Gold, 0.35f) : Px.Line, null, 2);
         var ob = new Rect2(rr.Position + new Vector2(2, 2), new Vector2(38, rr.Size.Y - 4));
         Px.Bands(this, ob, new[] { col.Lightened(0.3f), col, col.Darkened(0.25f) }, new[] { 0, 0.3f, 0.75f });
