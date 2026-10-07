@@ -4,7 +4,7 @@ namespace GameNight.Sim;
 
 public enum Role { GK, DEF, MID, FWD }
 
-public enum ActionKind { None, Kick, Tackle, Slide, Dive, Stumble, Fall, Header, Throw, Catch, Celebrate, Stretch, Punch }
+public enum ActionKind { None, Kick, Tackle, Slide, Dive, Stumble, Fall, Header, Throw, Catch, Celebrate, Stretch, Punch, Trick }
 
 public enum KickType { Pass, Lob, Through, Shot, Clear, Cross }
 
@@ -33,6 +33,8 @@ public sealed class Attributes
     public double Height;
     /// <summary>Body: kilograms.</summary>
     public double Weight;
+    /// <summary>Skill moves, 1..5 stars (0 = not set: the match works it out from his touch).</summary>
+    public int Skill;
 
     public Attributes Clone() => (Attributes)MemberwiseClone();
 }
@@ -156,6 +158,19 @@ public sealed class Player
     // ---- animation (read by the renderer)
     public double StridePhase, LeanFwd, LeanSide, PrevSpeed;
 
+    // ---- skill moves (Match.Skills): the move, its exit side (+1 left), the frame it's done in,
+    // the speed he came in at, where he goes after it and where the ball sat when he started.
+    public SkillMove Trick;
+    public int TrickSide = 1;
+    public double TrickV0, TrickExitX = 1, TrickExitZ, TrickBallF, TrickBallL;
+    public bool TrickReleased, TrickFeinted;
+    /// <summary>Match time he can start another move.</summary>
+    public double TrickReady;
+    /// <summary>Sold a dummy: seconds he's still wrong-footed, how, and which way he's leaning.</summary>
+    public double FooledT;
+    public Skills.Fool FoolKind;
+    public double FoolX, FoolZ;
+
     /// <summary>Speed a slide tackle starts with, and when the grass has stopped it (set as he goes down).</summary>
     public double SlideV0 = 7.5, SlideStop = 0.8;
     /// <summary>Where a tackling leg reaches (unit, on the ground), fixed when he commits.</summary>
@@ -272,6 +287,7 @@ public sealed class Player
         double tx = MoveX * WantSpeed;
         double tz = MoveZ * WantSpeed;
 
+        bool trick = false;
         // Actions override locomotion.
         if (Action != ActionKind.None)
         {
@@ -351,6 +367,11 @@ public sealed class Player
                 tx = Vel.X * 0.3;
                 tz = Vel.Z * 0.3;
             }
+            else if (a == ActionKind.Trick)
+            {
+                // A skill move: the feet are quick and sure (Match.Skills scripts the run).
+                trick = true;
+            }
             else if (a == ActionKind.Celebrate)
             {
                 tx = MoveX * WantSpeed;
@@ -380,7 +401,22 @@ public sealed class Player
                 }
             }
             double accel = AccelRate * accelScale * (Burst ? 1.7 : 1);
-            if (sp < 0.6)
+            if (trick)
+            {
+                // Short, sharp steps under him: the script's line is held to a firm limit.
+                double dvx = tx - vx;
+                double dvz = tz - vz;
+                double m = Math.Sqrt(dvx * dvx + dvz * dvz);
+                double lim = (16 + 6 * Attrs.Agility) * dt;
+                if (m > lim)
+                {
+                    dvx *= lim / m;
+                    dvz *= lim / m;
+                }
+                Vel.X += dvx;
+                Vel.Z += dvz;
+            }
+            else if (sp < 0.6)
             {
                 // Near a standstill the first step can go any way.
                 double dvx = tx - vx;

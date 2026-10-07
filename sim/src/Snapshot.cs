@@ -40,6 +40,9 @@ public sealed class MatchSnapshot
     public readonly float[] PullX = new float[N], PullZ = new float[N], PullT = new float[N];
     public readonly float[] KickPower = new float[N], KickHeight = new float[N], KickRel = new float[N], SlideV0 = new float[N];
     public readonly bool[] Sprinting = new bool[N];
+    /// <summary>The skill move being animated (Action = Trick) and its exit side (+1 left, -1 right).</summary>
+    public readonly SkillMove[] Trick = new SkillMove[N];
+    public readonly sbyte[] TrickSide = new sbyte[N];
     public readonly float[] Stamina = new float[N];
     /// <summary>Yellow cards; 3 = sent off (walking off, or gone).</summary>
     public readonly byte[] Cards = new byte[N];
@@ -117,6 +120,8 @@ public sealed class MatchSnapshot
     public float KickMax;
     public int Whistle, Goal = -1, Foul, Card, Offside, Sub;
     public float Post, Net, Bounce, Save, Tackle;
+    /// <summary>A skill move sold its dummy: its stars (one more for a man left on the floor).</summary>
+    public float Skill;
 
     public void CopyFrom(MatchSnapshot o)
     {
@@ -137,6 +142,7 @@ public sealed class MatchSnapshot
         Array.Copy(o.PullX, PullX, N); Array.Copy(o.PullZ, PullZ, N); Array.Copy(o.PullT, PullT, N);
         Array.Copy(o.KickPower, KickPower, N); Array.Copy(o.KickHeight, KickHeight, N); Array.Copy(o.KickRel, KickRel, N); Array.Copy(o.SlideV0, SlideV0, N);
         Array.Copy(o.Sprinting, Sprinting, N); Array.Copy(o.Stamina, Stamina, N); Array.Copy(o.Cards, Cards, N);
+        Array.Copy(o.Trick, Trick, N); Array.Copy(o.TrickSide, TrickSide, N);
         Array.Copy(o.Team, Team, N); Array.Copy(o.Index, Index, N); Array.Copy(o.Number, Number, N);
         Array.Copy(o.Role, Role, N); Array.Copy(o.Foot, Foot, N);
         Array.Copy(o.Height, Height, N); Array.Copy(o.Build, Build, N);
@@ -164,7 +170,7 @@ public sealed class MatchSnapshot
         KickCount = o.KickCount; KickMax = o.KickMax;
         InvaderT = o.InvaderT; InvaderSeed = o.InvaderSeed;
         Whistle = o.Whistle; Goal = o.Goal; Foul = o.Foul; Card = o.Card; Offside = o.Offside; Sub = o.Sub;
-        Post = o.Post; Net = o.Net; Bounce = o.Bounce; Save = o.Save; Tackle = o.Tackle;
+        Post = o.Post; Net = o.Net; Bounce = o.Bounce; Save = o.Save; Tackle = o.Tackle; Skill = o.Skill;
     }
 
     /// <summary>Fold another step's events into these (a frame that spans several steps keeps them all).</summary>
@@ -183,6 +189,7 @@ public sealed class MatchSnapshot
         Bounce = Math.Max(Bounce, (float)e.Bounce);
         Save = Math.Max(Save, (float)e.Save);
         Tackle = Math.Max(Tackle, (float)e.Tackle);
+        Skill = Math.Max(Skill, (float)e.Skill);
     }
 
     public void ClearEvents()
@@ -191,7 +198,7 @@ public sealed class MatchSnapshot
         KickMax = 0;
         Whistle = Foul = Card = Offside = Sub = 0;
         Goal = -1;
-        Post = Net = Bounce = Save = Tackle = 0;
+        Post = Net = Bounce = Save = Tackle = Skill = 0;
     }
 }
 
@@ -224,6 +231,8 @@ public sealed partial class Match
             s.ActionDur[i] = (float)p.ActionDur;
             s.ActionDirX[i] = (float)p.ActionDirX;
             s.ActionDirZ[i] = (float)p.ActionDirZ;
+            s.Trick[i] = p.Action == ActionKind.Trick ? p.Trick : SkillMove.None;
+            s.TrickSide[i] = (sbyte)p.TrickSide;
             s.KickLeg[i] = (sbyte)p.KickLeg;
             s.KickType[i] = p.KickType;
             s.KickContact[i] = (float)p.KickContact;

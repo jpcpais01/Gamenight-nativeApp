@@ -762,8 +762,14 @@ public sealed partial class PlayersView
         // ---------------- actions
         float actionT = b.ActionT[id], actionDur = b.ActionDur[id];
         float pr = actionDur > 0 ? Clamp(actionT / actionDur, 0, 1) : 0;
+        if (action != ActionKind.Trick) _trkW[id * 2] = _trkW[id * 2 + 1] = 0;
         switch (action)
         {
+            case ActionKind.Trick:
+                TrickPose(a, b, alpha, id, facing, actionT, actionDur, ref hipL, ref hipR, ref kneeL, ref kneeR, ref legOutL, ref legOutR,
+                    ref legYawL, ref legYawR, ref armL, ref armR, ref armOutL, ref armOutR, ref elbowL, ref elbowR, ref hipY, ref leanF, ref leanS,
+                    ref flexExtra, ref pelvisYaw, ref twist, ref lift, ref headPitch);
+                break;
             case ActionKind.Kick:
             {
                 // A real strike, timed to the moment the ball leaves the foot (KickContact):
@@ -1859,6 +1865,15 @@ public sealed partial class PlayersView
                 }
             }
 
+            // A skill move's foot on the ball (PlayersView.Tricks).
+            float trkW = _trkW[fi];
+            if (trkW > 0.001f && LegIK(_trkT[fi], hipX, yaw, sideSign, l1, l2, true))
+            {
+                hip = Lerp(hip, _ikH, trkW);
+                knee = Lerp(knee, _ikK, trkW);
+                outA = Lerp(outA, _ikOut, trkW);
+            }
+
             if (wf > 0.001f)
             {
                 // Ankle target: behind the planted ball of the foot, raised as the heel lifts.
@@ -1913,6 +1928,6 @@ public sealed partial class PlayersView
     {
         ActionKind.Kick => 4, ActionKind.Tackle => 6, ActionKind.Slide => 5, ActionKind.Dive => 4, ActionKind.Stumble => 7,
         ActionKind.Fall => 4, ActionKind.Header => 6, ActionKind.Throw => 5, ActionKind.Catch => 5, ActionKind.Celebrate => 9,
-        ActionKind.Stretch => 7, ActionKind.Punch => 5, _ => 4,
+        ActionKind.Stretch => 7, ActionKind.Punch => 5, ActionKind.Trick => 5, _ => 4,
     };
 }

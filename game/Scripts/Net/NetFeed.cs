@@ -111,5 +111,6 @@ public sealed class NetFeed
         into.Bounce = Math.Max(into.Bounce, from.Bounce);
         into.Save = Math.Max(into.Save, from.Save);
         into.Tackle = Math.Max(into.Tackle, from.Tackle);
+        into.Skill = Math.Max(into.Skill, from.Skill);
     }
 }

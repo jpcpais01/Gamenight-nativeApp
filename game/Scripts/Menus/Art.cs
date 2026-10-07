@@ -982,4 +982,20 @@ public static class Art
         if (u >= 8) Px.TextC(ci, Px.Small, inner.GetCenter().X, inner.Position.Y + inner.Size.Y * 0.9f, $"{p.Cards} PLAYERS", Math.Max(8, (int)(u * 0.7f)), c2.Darkened(0.2f));
         if (charge > 0) ci.DrawRect(inner, new Color(1, 1, 1, 0.12f * charge));
     }
+
+    /// <summary>A five-pointed star (skill moves), with a hard pixel shadow.</summary>
+    public static void Star(CanvasItem c, Vector2 centre, float r, Color col)
+    {
+        var pts = new Vector2[10];
+        var sh = new Vector2[10];
+        for (int j = 0; j < 10; j++)
+        {
+            float a = -Mathf.Pi / 2 + j * Mathf.Pi / 5;
+            float rr = j % 2 == 0 ? r : r * 0.45f;
+            pts[j] = centre + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * rr;
+            sh[j] = pts[j] + new Vector2(1, 1);
+        }
+        if (col.A > 0.5f) c.DrawColoredPolygon(sh, new Color(0, 0, 0, 0.5f));
+        c.DrawColoredPolygon(pts, col);
+    }
 }

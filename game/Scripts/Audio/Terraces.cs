@@ -532,6 +532,13 @@ public sealed class Terraces
             Add(React.Cheer, end, 0.15, end == 0 ? 0.7f : 0.5f);
             Add(React.Applause, end, 0.4, 0.5f, 2.2f);
         }
+        // A skill move that sold a man a dummy: an "oooh" round the ground for the good ones, and
+        // the dribbler's end gets up when one's left on the floor.
+        if (e.Skill >= 2)
+        {
+            Add(React.Ooh, -1, 0.05, Math.Min(1, 0.3f + 0.18f * e.Skill));
+            if (e.Skill >= 3 && e.LastTouchTeam >= 0) Add(React.Cheer, End(e.LastTouchTeam), 0.25, 0.4f + 0.1f * e.Skill);
+        }
     }
 
     /// <summary>This frame for the audio: the clock, the song, and the reactions (drained).</summary>

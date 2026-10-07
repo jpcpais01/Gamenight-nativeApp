@@ -95,9 +95,11 @@ public sealed partial class Match
         else input2?.Events.Clear();
         AI.Update();
         TryStretches();
+        TricksIntent();
 
         // Locomotion.
         foreach (var p in Players) p.Move(DT);
+        TricksFacing();
         CollidePlayers();
         ConfineToPitch();
         KeepRestartDistance();
@@ -129,6 +131,7 @@ public sealed partial class Match
             ball.Step(DT);
             ConsumeBallEvents();
             CloseControl();
+            TricksBall();
             if (Phase == Phase.Play || Phase == Phase.Goal || Phase == Phase.Fulltime || Phase == Phase.Halftime) BallTouches();
         }
 
@@ -372,6 +375,18 @@ public sealed partial class Match
                     if (!seat.Controlled.IsBusy) LungeAt(seat.Controlled, dbl);
                 }
             }
+        }
+        // Double tap SPRINT on the ball: a skill move (the stick picks it). Off the ball SPRINT is
+        // only ever pressing, the same as before.
+        if (sprintDown && attacking && Owner == c && Phase == Phase.Play && SetPiece == null)
+        {
+            if (Time - seat.LastSprintTap < 0.32)
+            {
+                bool idle = m < 0.3;
+                TryTrick(c, idle ? 0 : input.MoveX / m, idle ? 0 : -input.MoveY / m, idle);
+                seat.LastSprintTap = -10;
+            }
+            else seat.LastSprintTap = Time;
         }
         // One button: going hard. Whenever the ball isn't ours, that's pressing for it.
         seat.PressHeld = input.Sprint && Owner?.Team != c.Team;
@@ -802,6 +817,8 @@ public sealed partial class Match
     /// </summary>
     public void StartTackle(Player p, double dx, double dz, bool slide)
     {
+        // Sold a dummy: he's on the wrong foot.
+        if (p.FooledT > 0) return;
         double want = JsMath.Atan2(dz, dx);
         double sp = p.Speed;
         double body = want;

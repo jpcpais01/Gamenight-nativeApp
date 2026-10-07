@@ -109,6 +109,8 @@ public sealed class MatchEvents
     public int Offside;
     /// <summary>A substitution was made (see Match.Subs).</summary>
     public int Sub;
+    /// <summary>A skill move sold its dummy: the move's stars (one more when he left a man on the floor).</summary>
+    public double Skill;
 
     public void Clear()
     {
@@ -117,6 +119,7 @@ public sealed class MatchEvents
         Goal = -1;
         Post = Net = NetX = NetY = NetZ = Bounce = Save = Tackle = 0;
         Foul = Card = Offside = Sub = 0;
+        Skill = 0;
     }
 }
 
@@ -162,6 +165,8 @@ public sealed class Seat
     public double SwitchT;
     internal bool SprintWas;
     internal double LastTackleTap = -10;
+    /// <summary>Last SPRINT press on the ball (a second one quickly after is a skill move).</summary>
+    internal double LastSprintTap = -10;
     /// <summary>Sprint-swipe tackle: committed, waiting for the moment to strike.</summary>
     internal bool LungeOn, LungeSlide;
     internal double LungeUntil;
@@ -339,6 +344,8 @@ public sealed partial class Match
             Teams.Add(team);
         }
         All.AddRange(Players);
+        foreach (var p in Players)
+            if (p.Attrs.Skill <= 0) p.Attrs.Skill = Skills.StarsFrom(p.Attrs, p.Role);
         MakeBenches(seed, setup);
         AI = new AI(this);
         Seats[0].Controlled = Teams[0].Players[9];
