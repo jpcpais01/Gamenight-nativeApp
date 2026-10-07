@@ -822,6 +822,13 @@ public sealed partial class Match
                 if (human && AimingGoalKick) return (t, sp.Target!.X, sp.Target.Z, sp.Kind);
                 return (t, sp.X + dir * 40, sp.Z * 0.3, sp.Kind);
             }
+            if (sp.Kind == SetPieceKind.Corner)
+            {
+                // Yours: eyes on the ring; theirs: the penalty spot, once he's at the flag.
+                if (human && AimingCorner) return (t, sp.Target!.X, sp.Target.Z, sp.Kind);
+                if (human || JsMath.Hypot(t.Pos.X - sp.X, t.Pos.Z - sp.Z) > 3) return null;
+                return (t, dir * (Pitch.HalfL - 11), 0, sp.Kind);
+            }
             if (sp.Kind != SetPieceKind.Penalty && !sp.Direct) return null;
             if (human)
             {

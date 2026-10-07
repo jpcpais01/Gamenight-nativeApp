@@ -57,12 +57,12 @@ public sealed partial class SquadScreen : PxCanvas
     Vector2 ToBoard(double x, double z) => _pitch.Position + new Vector2((0.07f + ((float)x - X0) / (X1 - X0) * 0.86f) * _pitch.Size.X, (0.05f + ((float)z + 1) / 2 * 0.88f) * _pitch.Size.Y);
     (double x, double z) FromBoard(Vector2 p) => (X0 + ((p.X - _pitch.Position.X) / _pitch.Size.X - 0.07f) / 0.86f * (X1 - X0), ((p.Y - _pitch.Position.Y) / _pitch.Size.Y - 0.05f) / 0.88f * 2 - 1);
 
-    float TokenH => Mathf.Clamp(_pitch.Size.Y * 0.155f, 36, 64);
+    float TokenH => Mathf.Clamp(_pitch.Size.Y * 0.205f, 40, 86);
 
     Rect2 TokenRect(Vector2 at)
     {
         float th = TokenH, tw = th * 0.82f;
-        return new Rect2(at - new Vector2(tw / 2, th / 2 + 6), new Vector2(tw, th));
+        return new Rect2(at - new Vector2(tw / 2, th / 2), new Vector2(tw, th));
     }
 
     protected override void Paint()
@@ -223,15 +223,15 @@ public sealed partial class SquadScreen : PxCanvas
         Px.TextC(this, Px.Small, label.GetCenter().X, label.GetCenter().Y + 14, "7 SUBS", 7, Px.InkDim);
         var bench = Club.BenchSeven();
         var kit = Club.Info().Kit;
-        float th = Mathf.Min(d.Size.Y - 28, 64), tw = th * 0.82f;
+        float th = Mathf.Min(d.Size.Y - 12, 80), tw = th * 0.82f;
         float x = label.End.X + 6, gap = Mathf.Min(52, (d.End.X - 8 - x - tw * 7) / 6);
         float total = tw * 7 + gap * 6;
         x += Mathf.Max(0, (d.End.X - 8 - x - total) / 2);
         for (int i = 0; i < 7; i++)
         {
-            var at = 100 + i == _drag && _dragMoved ? _dragAt : new Vector2(x + i * (tw + gap) + tw / 2, d.Position.Y + 12 + th / 2 + 6);
-            var r = new Rect2(at - new Vector2(tw / 2, th / 2 + 6), new Vector2(tw, th));
-            _seats[i] = 100 + i == _drag && _dragMoved ? new Rect2(new Vector2(x + i * (tw + gap), d.Position.Y + 12), new Vector2(tw, th)) : r;
+            var at = 100 + i == _drag && _dragMoved ? _dragAt : new Vector2(x + i * (tw + gap) + tw / 2, d.Position.Y + 6 + th / 2);
+            var r = new Rect2(at - new Vector2(tw / 2, th / 2), new Vector2(tw, th));
+            _seats[i] = 100 + i == _drag && _dragMoved ? new Rect2(new Vector2(x + i * (tw + gap), d.Position.Y + 6), new Vector2(tw, th)) : r;
             int seat = i;
             var c = bench[i];
             if (c == null)

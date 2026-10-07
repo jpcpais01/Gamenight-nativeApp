@@ -5,6 +5,11 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("1.5", "Corners in third person, like free kicks and goal kicks: the camera drops in behind the taker at the flag, looking into the box. The stick moves the ring as you see it: up is further from you, right is right."),
+        ("1.4", "New stand set HAUNT for Halloween: purple brick and black iron, a glowing orange band, jack-o'-lanterns grinning along the balcony, iron spikes on the roof, bats over it, giant cobwebs with spiders across the corners and a crooked lit spire behind each end."),
+        ("1.3", "New stand set FINAL: a colossal three-tier bowl for final nights. A roof ring reaches far over the seats, a midnight-blue skin and roof front twinkle with stars under the floodlights, and each end hangs a giant ring of stars. Build it in STANDS; it carries the giant tifo too."),
+        ("1.2", "Getting up looks real now: after a slide a player sits up on a hand, tucks a leg under and rises through one knee; knocked flat on his front he pushes up on both hands first. No more floating up off the grass. Slides keep him down a touch longer."),
+        ("1.1", "A gift of 1,000,000 coins for every club. The squad board now shows real mini cards: each player's own card finish (bronze to icon, and event themes), portrait and name, without the stats, bigger on the pitch and on the bench."),
         ("1.0", "GameNight 1.0: the first full version. Everything so far, now with a 1 in front; updates carry on as usual from the UPDATE key."),
         ("0.118", "Passes reworked: PASS always goes to a team-mate's feet (never into space; that's THROUGH), only a step into his stride when he's running, and the hold now sets the pace too: a tap rolls it softly, a long hold zips it in."),
         ("0.117", "Coach creator rebuilt: face, hair, body, outfit and manner sections, beards and stubble, a buzz cut, more skin tones and hair colours, your own coat colour and a tie, scarf or stripes in any colour (or the club's), and SURPRISE ME. Your touchline coach matches."),

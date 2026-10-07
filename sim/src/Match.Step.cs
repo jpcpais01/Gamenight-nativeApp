@@ -4,6 +4,9 @@ namespace GameNight.Sim;
 
 public sealed partial class Match
 {
+    /// <summary>Seconds from a slide's stop to standing again (push up, kneel, rise).</summary>
+    public const double SlideGetUp = 0.7;
+
 
     // ------------------------------------------------------------------ main step
 
@@ -408,12 +411,15 @@ public sealed partial class Match
             var sp = SetPiece;
             if (AimingCorner && m > 0.12)
             {
-                // The ring moves with the stick as you see it: right is right, up is away.
+                // The ring moves with the stick as you see it from behind the taker: up is away
+                // from him, right is his right.
                 var t = sp.Target!;
                 double dir = Teams[sp.Team].Dir;
                 double gx = Pitch.HalfL * dir;
-                t.X += input.MoveX * 9 * DT;
-                t.Z -= input.MoveY * 9 * DT;
+                double fl = JsMath.Or1(JsMath.Hypot(t.X - sp.X, t.Z - sp.Z));
+                double fx = (t.X - sp.X) / fl, fz = (t.Z - sp.Z) / fl;
+                t.X += (input.MoveY * fx - input.MoveX * fz) * 9 * DT;
+                t.Z += (input.MoveY * fz + input.MoveX * fx) * 9 * DT;
                 double depth = M.Clamp((gx - t.X) * dir, 1.5, 32);
                 t.X = gx - dir * depth;
                 t.Z = M.Clamp(t.Z, -Pitch.HalfW + 2.5, Pitch.HalfW - 2.5);
@@ -829,7 +835,7 @@ public sealed partial class Match
             p.Vel.Z = bz * v0;
             p.SlideV0 = v0;
             p.SlideStop = v0 / Player.SlideDecel;
-            p.StartAction(ActionKind.Slide, p.SlideStop + 0.55, bx, bz);
+            p.StartAction(ActionKind.Slide, p.SlideStop + SlideGetUp, bx, bz);
         }
         else p.StartAction(ActionKind.Tackle, 0.42, bx, bz);
     }
