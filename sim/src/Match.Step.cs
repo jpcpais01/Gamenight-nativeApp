@@ -4,6 +4,9 @@ namespace GameNight.Sim;
 
 public sealed partial class Match
 {
+    /// <summary>Seconds from a slide's stop to standing again (push up, kneel, rise).</summary>
+    public const double SlideGetUp = 0.7;
+
 
     // ------------------------------------------------------------------ main step
 
@@ -829,7 +832,7 @@ public sealed partial class Match
             p.Vel.Z = bz * v0;
             p.SlideV0 = v0;
             p.SlideStop = v0 / Player.SlideDecel;
-            p.StartAction(ActionKind.Slide, p.SlideStop + 0.55, bx, bz);
+            p.StartAction(ActionKind.Slide, p.SlideStop + SlideGetUp, bx, bz);
         }
         else p.StartAction(ActionKind.Tackle, 0.42, bx, bz);
     }

@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("1.2", "Getting up looks real now: after a slide a player sits up on a hand, tucks a leg under and rises through one knee; knocked flat on his front he pushes up on both hands first. No more floating up off the grass. Slides keep him down a touch longer."),
         ("1.1", "A gift of 1,000,000 coins for every club. The squad board now shows real mini cards: each player's own card finish (bronze to icon, and event themes), portrait and name, without the stats, bigger on the pitch and on the bench."),
         ("1.0", "GameNight 1.0: the first full version. Everything so far, now with a 1 in front; updates carry on as usual from the UPDATE key."),
         ("0.118", "Passes reworked: PASS always goes to a team-mate's feet (never into space; that's THROUGH), only a step into his stride when he's running, and the hold now sets the pace too: a tap rolls it softly, a long hold zips it in."),
