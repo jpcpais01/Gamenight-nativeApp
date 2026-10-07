@@ -146,6 +146,14 @@ gn_phones={
 "type": "float",
 "value": 0.0
 }
+gn_party={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+gn_leave={
+"type": "vec2",
+"value": Vector2(0, 0)
+}
 gn_gasp={
 "type": "vec4",
 "value": Vector4(-1, 99, 0, 0)
