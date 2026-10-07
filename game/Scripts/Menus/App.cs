@@ -72,6 +72,7 @@ public sealed partial class App : Node
             if (arg == "--screen=notes") _menus.Open(new NotesModal(_menus));
             if (arg == "--screen=settings") _menus.Open(new SettingsModal(_menus));
             if (arg == "--screen=drills") PickDrill();
+            if (arg.StartsWith("--drill=")) Callable.From(() => StartDrill((DrillKind)int.Parse(arg[8..]))).CallDeferred();
             if (arg == "--screen=player") _menus.OpenPlayer(_club.S.Cards[0]);
             if (arg == "--screen=opening") _menus.Open(new PackOpening(_menus, Packs.All[3], Packs.Open(Packs.All[3], 7)));
             if (arg.StartsWith("--phase="))

@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("1.20", "Training works again: drills opened to a black screen because the touchline crashed every frame at the training ground (it has no photographers). Fixed."),
         ("1.19", "Card stats fit properly now: the six numbers sit in two neat centred columns above where the card narrows, on every card and event design, instead of running into the edges and the bottom label."),
         ("1.18", "Three new event packs in the store: Inferno (flame-crowned cards with lava cracks and fire), Neon City (synthwave sun, grid and skyline) and Dragon New Year (red and gold, a pagoda roof, scales and clouds). Same deal: +4 on every stat, best card always an event card."),
         ("1.17", "Cleaner player sheet: the skill stars and the signature skill's name and stars stand on their own, without the helper text beside them."),
