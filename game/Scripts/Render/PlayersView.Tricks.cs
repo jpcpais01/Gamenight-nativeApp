@@ -230,6 +230,99 @@ public sealed partial class PlayersView
                 headPitch += 0.3f * (1 - Smooth(0.25f, 0.35f, t)) * env - 0.35f * Smooth(0.3f, 0.45f, t) * env;
                 break;
             }
+            case SkillMove.RonaldoChop:
+            {
+                // The far foot swings across behind the standing leg and the inside of it chops
+                // the ball square; he sits down on the standing leg and turns with it.
+                float reach = Bump(0.06f, 0.34f, t);
+                Leg(A, -0.25f, 1.35f, reach);
+                _tY[A] += sA * 0.4f * reach;
+                Foot(fA, Side(-exitL) - fwd * 0.06f, Bump(0.12f, 0.32f, t));
+                _tK[B] += 0.45f * reach;
+                hipY -= 0.1f * reach;
+                leanF -= 0.08f * reach;
+                leanS += e * 0.22f * Bump(0.2f, 0.5f, t);
+                Arms(0.55f, 0.1f, 0.6f * env);
+                headPitch += 0.25f * env;
+                break;
+            }
+            case SkillMove.McGeadySpin:
+            {
+                // The exit-side sole drags it across while he spins the other way, arms wrapped
+                // in tight, then flung out as he comes round.
+                Foot(fB, Sole(), Hold(0.03f, 0.08f, 0.5f, 0.6f, t));
+                float spin = Bump(0.06f, 0.7f, t);
+                _tK[A] += 0.35f * spin;
+                hipY -= 0.08f * spin;
+                Arms(0.15f + 0.5f * Smooth(0.45f, 0.65f, t), 0.05f, 0.7f * env);
+                headPitch += 0.25f * env;
+                break;
+            }
+            case SkillMove.HocusPocus:
+            {
+                // A lean the dummy way, then the dummy-side foot hooks behind the standing leg
+                // and flicks it across with the outside.
+                float sell = Bump(0, 0.2f, t);
+                leanS += e * 0.2f * sell;
+                twist += -sA * 0.2f * sell;
+                float hook = Bump(0.06f, 0.26f, t);
+                Leg(A, -0.35f, 1.25f, hook);
+                _tY[A] += sA * 0.35f * hook;
+                Foot(fA, new Vector3(bx, 0.1f, bz) - fwd * 0.1f - exitL * 0.04f, Bump(0.08f, 0.24f, t));
+                _tK[B] += 0.35f * hook;
+                hipY -= 0.07f * hook;
+                leanS -= e * 0.2f * Bump(0.2f, 0.45f, t);
+                Arms(0.5f, 0.1f, 0.55f * env);
+                headPitch += 0.25f * env;
+                break;
+            }
+            case SkillMove.StepOverStorm:
+            {
+                // Three step overs, foot after foot, inside to out, the hips dropping with each;
+                // then the outside of the foot takes it away.
+                for (int k = 0; k < 3; k++)
+                {
+                    float t0 = 0.04f + k * 0.26f;
+                    int f = k % 2 == 0 ? fA : fB;
+                    float sd = k % 2 == 0 ? 1 : -1;
+                    float u = Math.Clamp((t - t0) / 0.24f, 0, 1);
+                    float arc = MathF.Sin(u * PI);
+                    var over = new Vector3(bx, 0.11f + 0.15f * arc, bz) + exitL * (sd * 0.22f * MathF.Cos(u * PI)) + fwd * (0.06f + 0.14f * arc);
+                    Foot(f, over, Hold(t0 - 0.02f, t0 + 0.03f, t0 + 0.22f, t0 + 0.27f, t));
+                }
+                float dip = Bump(0.02f, 0.84f, t);
+                hipY -= 0.09f * dip;
+                _tK[0] += 0.3f * dip;
+                _tK[1] += 0.3f * dip;
+                Arms(0.5f, 0.1f, 0.6f * dip);
+                Foot(fB, Side(-exitL) - fwd * 0.02f, Bump(0.78f, 0.92f, t));
+                headPitch += 0.25f * env;
+                break;
+            }
+            case SkillMove.Sombrero:
+            {
+                // He checks, the toe slides under the ball and the leg lifts it up and over.
+                Foot(fA, ball - up * 0.02f + fwd * -0.1f, Bump(0.08f, 0.28f, t));
+                float scoop = Bump(0.18f, 0.42f, t);
+                Leg(A, 0.75f, 0.35f, scoop);
+                _tK[B] += 0.3f * Bump(0.04f, 0.3f, t);
+                leanF -= 0.12f * scoop;
+                Arms(0.55f, 0.15f, 0.6f * env);
+                headPitch += 0.3f * (1 - Smooth(0.24f, 0.34f, t)) * env - 0.3f * Smooth(0.3f, 0.42f, t) * env;
+                break;
+            }
+            case SkillMove.Panna:
+            {
+                // The inside of the foot slips it through the man's legs; then the run round him.
+                Foot(fA, Side(-exitL) - fwd * 0.04f, Bump(0.04f, 0.2f, t));
+                float push = Bump(0.04f, 0.24f, t);
+                _tK[B] += 0.3f * push;
+                hipY -= 0.05f * push;
+                leanS += -e * 0.18f * Bump(0.15f, 0.72f, t);
+                Arms(0.4f, 0.15f, 0.5f * env);
+                headPitch += 0.2f * env;
+                break;
+            }
         }
 
         hipL = _tH[0]; hipR = _tH[1]; kneeL = _tK[0]; kneeR = _tK[1]; legOutL = _tO[0]; legOutR = _tO[1];

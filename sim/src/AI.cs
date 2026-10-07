@@ -2070,6 +2070,9 @@ public sealed partial class AI
         int stars = Math.Max(1, p.Attrs.Skill);
         if (m.Rng.Next() >= 0.04 + 0.035 * stars) return false;
         bool idle = distGoal < 24 && m.Rng.Next() < 0.35;
+        // Now and then his own signature skill instead.
+        var sig = Match.SignatureOf(p);
+        if (!idle && sig != SkillMove.None && m.Rng.Next() < 0.3) return m.TryTrick(p, dribX[p.Id], dribZ[p.Id], false, sig);
         return m.TryTrick(p, dribX[p.Id], dribZ[p.Id], idle);
     }
 

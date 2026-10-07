@@ -323,10 +323,18 @@ public static class Art
             float sx = ir.GetCenter().X - (5 * sr * 2 + 4 * sg) / 2 + sr;
             for (int i = 0; i < 5; i++)
                 Star(ci, new Vector2(sx + i * (sr * 2 + sg), sy), sr, i < stars ? Px.Gold : new Color(ink, 0.18f));
+            // A signature skill: a cyan gem after the stars.
+            if (SkillStars.Signature(c) != GameNight.Sim.SkillMove.None)
+            {
+                var g = new Vector2(sx + 5 * (sr * 2 + sg) - sr * 0.3f, sy);
+                ci.DrawColoredPolygon(new[] { g + new Vector2(0, -sr), g + new Vector2(sr * 0.75f, 0), g + new Vector2(0, sr), g + new Vector2(-sr * 0.75f, 0) }, Px.Cyan);
+            }
         }
-        string tier = ev?.Label ?? Cards.Label(c.Rarity).ToUpperInvariant();
+        // The tier; for a man with a signature skill, its name instead, in cyan.
+        var sig = SkillStars.Signature(c);
+        string tier = sig != GameNight.Sim.SkillMove.None ? GameNight.Sim.Skills.Name(sig).ToUpperInvariant() : ev?.Label ?? Cards.Label(c.Rarity).ToUpperInvariant();
         if (ir.End.Y - plate.End.Y >= 14)
-            Px.TextC(ci, Px.Small, ir.GetCenter().X, below + 3, Px.Fit(Px.Small, tier, 6, ir.Size.X - 4), 6, ev != null ? acc : new Color(ink, 0.7f));
+            Px.TextC(ci, Px.Small, ir.GetCenter().X, below + 3, Px.Fit(Px.Small, tier, 6, ir.Size.X - 4), 6, sig != GameNight.Sim.SkillMove.None ? Px.Cyan : ev != null ? acc : new Color(ink, 0.7f));
     }
 
     /// <summary>An event pack's badge picture: a jack-o'-lantern, a snowflake, a carnival mask, a

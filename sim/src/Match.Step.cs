@@ -379,6 +379,19 @@ public sealed partial class Match
                 }
             }
         }
+        // Double tap SPRINT on the ball: his own signature skill (4 and 5-star men). Off the
+        // ball SPRINT is only ever pressing.
+        if (sprintDown && attacking && Owner == c && Phase == Phase.Play && SetPiece == null)
+        {
+            var sig = SignatureOf(c);
+            if (sig != SkillMove.None && Time - seat.LastSprintTap < 0.32)
+            {
+                bool idle = m < 0.3;
+                TryTrick(c, idle ? 0 : input.MoveX / m, idle ? 0 : -input.MoveY / m, idle, sig);
+                seat.LastSprintTap = -10;
+            }
+            else seat.LastSprintTap = Time;
+        }
         // One button: going hard. Whenever the ball isn't ours, that's pressing for it.
         seat.PressHeld = input.Sprint && Owner?.Team != c.Team;
         input.Events.Clear();

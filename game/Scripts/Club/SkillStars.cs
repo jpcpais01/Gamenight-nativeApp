@@ -25,6 +25,21 @@ public static class SkillStars
         return stars;
     }
 
+    /// <summary>His signature skill (double tap SPRINT): a 4-star man one of the 4-star three, a
+    /// 5-star man one of the 5-star three, rolled from the card's id; none below 4 stars.</summary>
+    public static SkillMove Signature(Card c)
+    {
+        int stars = Of(c);
+        if (stars < 4) return SkillMove.None;
+        uint h = 2166136261;
+        foreach (char ch in c.Id + "signature")
+        {
+            h ^= ch;
+            h *= 16777619;
+        }
+        return Skills.SignatureFor(stars, h);
+    }
+
     static int Roll(Card c)
     {
         if (c.Position == Position.GK) return 1;

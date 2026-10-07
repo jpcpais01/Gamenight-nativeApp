@@ -3,7 +3,12 @@ using System;
 namespace GameNight.Sim;
 
 /// <summary>The special moves a player on the ball can pull off (slide SPRINT on the ball; each way is a slot the club fills).</summary>
-public enum SkillMove : byte { None, BodyFeint, StepOver, DragBack, CruyffTurn, FakeShot, Roulette, Croqueta, HeelToHeel, Elastico, Rainbow }
+public enum SkillMove : byte
+{
+    None, BodyFeint, StepOver, DragBack, CruyffTurn, FakeShot, Roulette, Croqueta, HeelToHeel, Elastico, Rainbow,
+    // Signature skills (double tap SPRINT): one per 4-star or 5-star man, his own.
+    RonaldoChop, McGeadySpin, HocusPocus, StepOverStorm, Sombrero, Panna,
+}
 
 /// <summary>
 /// What a skill move does, written once for the sim and the renderer. Every move is a short
@@ -22,9 +27,20 @@ public static class Skills
         SkillMove.Elastico, SkillMove.Rainbow,
     };
 
-    /// <summary>1, 2 or 3 stars: how hard the move is.</summary>
+    /// <summary>The signature skills: three for 4-star men, three for 5-star men.</summary>
+    public static readonly SkillMove[] Signatures4 = { SkillMove.RonaldoChop, SkillMove.McGeadySpin, SkillMove.HocusPocus };
+    public static readonly SkillMove[] Signatures5 = { SkillMove.StepOverStorm, SkillMove.Sombrero, SkillMove.Panna };
+
+    /// <summary>A man's own signature skill from his skill stars and a seed that's his alone
+    /// (none below 4 stars).</summary>
+    public static SkillMove SignatureFor(int stars, uint seed) =>
+        stars >= 5 ? Signatures5[seed % 3] : stars == 4 ? Signatures4[seed % 3] : SkillMove.None;
+
+    /// <summary>1, 2 or 3 stars: how hard the move is (4 and 5 for the signatures).</summary>
     public static int Tier(SkillMove m) => m switch
     {
+        SkillMove.RonaldoChop or SkillMove.McGeadySpin or SkillMove.HocusPocus => 4,
+        SkillMove.StepOverStorm or SkillMove.Sombrero or SkillMove.Panna => 5,
         SkillMove.Roulette or SkillMove.Croqueta or SkillMove.HeelToHeel => 2,
         SkillMove.Elastico or SkillMove.Rainbow => 3,
         SkillMove.None => 0,
@@ -43,6 +59,12 @@ public static class Skills
         SkillMove.HeelToHeel => "Heel to Heel",
         SkillMove.Elastico => "Elastico",
         SkillMove.Rainbow => "Rainbow Flick",
+        SkillMove.RonaldoChop => "Ronaldo Chop",
+        SkillMove.McGeadySpin => "McGeady Spin",
+        SkillMove.HocusPocus => "Hocus Pocus",
+        SkillMove.StepOverStorm => "Step Over Storm",
+        SkillMove.Sombrero => "Sombrero Flick",
+        SkillMove.Panna => "Panna",
         _ => "",
     };
 
@@ -59,6 +81,12 @@ public static class Skills
         SkillMove.HeelToHeel => "Back-heels it through his own legs",
         SkillMove.Elastico => "Outside of the foot one way, snaps it back",
         SkillMove.Rainbow => "Flicks it up over his head and the man",
+        SkillMove.RonaldoChop => "Chops it behind his standing leg, cuts away",
+        SkillMove.McGeadySpin => "Sole-drags it sideways, spins right round",
+        SkillMove.HocusPocus => "Flicks it behind his leg and across",
+        SkillMove.StepOverStorm => "Three quick step overs, then explodes",
+        SkillMove.Sombrero => "Scoops it over his man's head, runs round",
+        SkillMove.Panna => "Through the man's legs, round him, gone",
         _ => "",
     };
 
@@ -87,6 +115,9 @@ public static class Skills
 
     public struct Timing
     {
+        /// <summary>The script runs his body to the end of the move, not just to the release (the
+        /// panna's run round his man).</summary>
+        public bool Whole;
         /// <summary>Whole move (s); the ball goes back to the physics at Release; the dummy is sold at Feint.</summary>
         public double Dur, Release, Feint;
         public Fool Fool;
@@ -106,6 +137,12 @@ public static class Skills
         SkillMove.HeelToHeel => new Timing { Dur = 0.52, Release = 0.27, Feint = 0.15, Fool = Fool.Freeze, ExitF = 0.94, ExitL = 0.34 },
         SkillMove.Elastico => new Timing { Dur = 0.62, Release = 0.36, Feint = 0.2, Fool = Fool.Side, ExitF = 0.6, ExitL = 0.8 },
         SkillMove.Rainbow => new Timing { Dur = 0.55, Release = 0.31, Feint = 0.24, Fool = Fool.Freeze, ExitF = 1, ExitL = 0 },
+        SkillMove.RonaldoChop => new Timing { Dur = 0.56, Release = 0.3, Feint = 0.2, Fool = Fool.Overrun, ExitF = 0.2, ExitL = 0.98 },
+        SkillMove.McGeadySpin => new Timing { Dur = 0.9, Release = 0.66, Feint = 0.32, Fool = Fool.Overrun, ExitF = 0.75, ExitL = 0.66 },
+        SkillMove.HocusPocus => new Timing { Dur = 0.52, Release = 0.25, Feint = 0.14, Fool = Fool.Side, ExitF = 0.72, ExitL = 0.7 },
+        SkillMove.StepOverStorm => new Timing { Dur = 1.06, Release = 0.84, Feint = 0.64, Fool = Fool.Side, ExitF = 0.72, ExitL = 0.7 },
+        SkillMove.Sombrero => new Timing { Dur = 0.5, Release = 0.3, Feint = 0.22, Fool = Fool.Freeze, ExitF = 1, ExitL = 0 },
+        SkillMove.Panna => new Timing { Dur = 0.8, Release = 0.2, Feint = 0.12, Fool = Fool.Freeze, ExitF = 1, ExitL = 0, Whole = true },
         _ => new Timing { Dur = 0.5, Release = 0.3, Feint = 0.2, ExitF = 1 },
     };
 
@@ -119,6 +156,11 @@ public static class Skills
         SkillMove.HeelToHeel => Math.Max(v0, 5) + 1.5,
         SkillMove.Rainbow => Math.Max(v0, 5),
         SkillMove.Croqueta => Math.Max(v0, 4) + 0.6,
+        SkillMove.RonaldoChop => Math.Max(v0, 4.5) * 0.85 + 0.5,
+        SkillMove.McGeadySpin => 5,
+        SkillMove.Sombrero => Math.Max(v0, 4) + 0.5,
+        SkillMove.Panna => Math.Max(v0, 4.5) + 0.8,
+        SkillMove.StepOverStorm => 6.2,
         _ => Math.Max(v0, 4.5) + 0.6,
     };
 
@@ -224,6 +266,63 @@ public static class Skills
                 ballF = 0.45 - 0.62 * S(0, 0.2, t);
                 ballL = 0.06 * S(0, 0.2, t);
                 ballY = r + 0.16 * S(0.14, 0.3, t);
+                break;
+            case SkillMove.RonaldoChop:
+                // On the run, the far foot reaches behind the standing leg and chops it square
+                // across him; he checks and cuts away with it.
+                bodyF = v0 * (1 - 0.6 * S(0.05, 0.3, t));
+                bodyL = 2.6 * S(0.24, 0.4, t);
+                yaw = 1.2 * S(0.22, 0.42, t);
+                ballF = 0.5 - 0.32 * S(0.12, 0.3, t);
+                ballL = -0.06 * S(0, 0.12, t) + 0.36 * S(0.16, 0.3, t);
+                break;
+            case SkillMove.McGeadySpin:
+                // The sole drags it across him while he spins right round the other way, and he
+                // comes out of the turn already running.
+                bodyF = v0 * 0.4 * (1 - S(0, 0.2, t)) + 0.9 * S(0.55, 0.7, t);
+                bodyL = 2.2 * S(0.1, 0.6, t);
+                yaw = -2 * Math.PI * S(0.08, 0.68, t);
+                ballF = 0.38 - 0.24 * S(0.04, 0.24, t);
+                ballL = 0.3 * S(0.06, 0.3, t);
+                break;
+            case SkillMove.HocusPocus:
+                // A lean the dummy way, then the foot that's behind flicks it across behind his
+                // standing leg and he's off the other way.
+                bodyF = v0 * 0.8;
+                bodyL = -0.9 * Bump(0, 0.2, t) + 2.3 * S(0.18, 0.32, t);
+                yaw = -0.22 * Bump(0, 0.2, t) + 0.3 * S(0.2, 0.36, t);
+                ballF = 0.42 - 0.24 * S(0, 0.12, t);
+                ballL = -0.1 * S(0, 0.1, t) + 0.44 * S(0.1, 0.22, t);
+                break;
+            case SkillMove.StepOverStorm:
+            {
+                // Three step overs, one foot then the other, the body swaying with each; then
+                // the outside of the foot and a burst.
+                double sway = Math.Sin(Math.Clamp((t - 0.04) / 0.78, 0, 1) * 3 * Math.PI);
+                bodyF = v0 * 0.55 + 0.3;
+                bodyL = -0.9 * sway * (1 - S(0.7, 0.8, t)) + 2.2 * S(0.78, 0.9, t);
+                yaw = -0.24 * sway * (1 - S(0.7, 0.8, t)) + 0.3 * S(0.78, 0.92, t);
+                ballF = 0.52;
+                ballL = 0;
+                break;
+            }
+            case SkillMove.Sombrero:
+                // He checks, gets the toe under it and scoops it up over the head of the man in
+                // front; then runs round him to meet it.
+                bodyF = v0 * (1 - 0.5 * S(0, 0.2, t));
+                bodyL = 0;
+                ballF = 0.5 - 0.1 * S(0, 0.15, t);
+                ballL = 0;
+                ballY = r + 0.1 * S(0.16, 0.3, t);
+                break;
+            case SkillMove.Panna:
+                // Straight at his man, the ball slipped through his legs, and round him the other
+                // side to pick it up.
+                bodyF = Math.Max(v0, 3.5) * (1 - 0.25 * Bump(0.15, 0.6, t));
+                bodyL = 2.1 * Bump(0.12, 0.72, t);
+                yaw = 0.4 * Bump(0.12, 0.42, t) - 0.35 * Bump(0.42, 0.76, t);
+                ballF = 0.5;
+                ballL = 0;
                 break;
             default:
                 bodyF = v0;

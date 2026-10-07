@@ -287,6 +287,7 @@ public static class Cards
                 Height = h,
                 Weight = c.Weight,
                 Skill = SkillStars.Of(c),
+                Signature = SkillStars.Signature(c),
             },
             Look = new Look
             {

@@ -60,7 +60,7 @@ public sealed partial class SquadScreen
     void Pad(Rect2 r)
     {
         var slots = Slots;
-        float noteH = 44;
+        float noteH = 56;
         var c = new Vector2(r.GetCenter().X, r.Position.Y + (r.Size.Y - noteH) / 2);
         float br = Mathf.Clamp((r.Size.Y - noteH) * 0.13f, 24, 40);
         float sw = Mathf.Min(122, (r.Size.X - 2 * br - 28) / 2), sh = Mathf.Clamp((r.Size.Y - noteH - 2 * br) / 2 - 14, 40, 60);
@@ -80,7 +80,7 @@ public sealed partial class SquadScreen
             Slot(box, i, slots[i]);
         }
 
-        var note = Px.Wrap(Px.Small, "Everyone can do the 1-star moves. 2-star moves need 3 skill stars, 3-star moves need 5. A man who can't do a slot's move just keeps the ball.", 8, r.Size.X - 20);
+        var note = Px.Wrap(Px.Small, "Everyone can do the 1-star moves. 2-star moves need 3 skill stars, 3-star moves need 5. A man who can't do a slot's move just keeps the ball. Double tap SPRINT: a 4 or 5-star man's own signature skill.", 8, r.Size.X - 20);
         float ny = r.End.Y - noteH + 8;
         foreach (var line in note)
         {

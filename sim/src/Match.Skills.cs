@@ -3,7 +3,7 @@ using System;
 namespace GameNight.Sim;
 
 /// <summary>
-/// Skill moves (slide SPRINT on the ball, one move per slot; the computer's dribblers use them too). A move is
+/// Skill moves (slide SPRINT on the ball, one move per slot; double tap for his signature skill; the computer's dribblers use them too). A move is
 /// an action (ActionKind.Trick) playing one of the Skills scripts: through it his run is the
 /// script's, the ball rides his foot along the script's path (nobody can just walk in and take
 /// it, though a tackle still can), at the feint the men in front may buy the dummy, and at the
@@ -33,6 +33,16 @@ public sealed partial class Match
         }
         if (move == SkillMove.None) move = Skills.Pick(Math.Max(1, p.Attrs.Skill), idle, fwd, v0, Rng.Next());
         var tm = Skills.TimingOf(move);
+        // The panna goes straight at the man in front, to put it through his legs.
+        if (move == SkillMove.Panna && NearestOpponent(p) is { } mark)
+        {
+            double dx = mark.Pos.X - p.Pos.X, dz = mark.Pos.Z - p.Pos.Z, d = JsMath.Hypot(dx, dz);
+            if (d < 4.5 && d > 0.3 && (dx * fx + dz * fz) / d > 0.4)
+            {
+                fx = dx / d;
+                fz = dz / d;
+            }
+        }
 
         p.StartAction(ActionKind.Trick, tm.Dur, fx, fz);
         p.Trick = move;
@@ -45,7 +55,7 @@ public sealed partial class Match
         // Out of it toward the script's exit, bent toward the stick on the moves that go forward.
         double ex = fx * tm.ExitF + fz * tm.ExitL * e;
         double ez = fz * tm.ExitF - fx * tm.ExitL * e;
-        bool turn = move is SkillMove.DragBack or SkillMove.CruyffTurn or SkillMove.Roulette;
+        bool turn = move is SkillMove.DragBack or SkillMove.CruyffTurn or SkillMove.Roulette or SkillMove.McGeadySpin or SkillMove.RonaldoChop or SkillMove.Panna;
         if (!idle && !turn && fwd > -0.2)
         {
             ex = ex * 0.6 + sx * 0.4;
@@ -60,6 +70,21 @@ public sealed partial class Match
         p.TrickBallL = (bx * fz - bz * fx) * e;
         p.TrickReady = Time + (Piloted(p) && !AutoPlay ? 0.9 : 6);
         return true;
+    }
+
+    /// <summary>His signature skill: his card's, or (no card) one tied to his name; none for a
+    /// keeper or a man under 4 skill stars.</summary>
+    public static SkillMove SignatureOf(Player p)
+    {
+        if (p.Role == Role.GK) return SkillMove.None;
+        if (p.Attrs.Signature != SkillMove.None) return p.Attrs.Signature;
+        uint h = 2166136261;
+        foreach (char ch in p.Name + "sig")
+        {
+            h ^= ch;
+            h *= 16777619;
+        }
+        return Skills.SignatureFor(p.Attrs.Skill, h);
     }
 
     Player? NearestOpponent(Player p)
@@ -95,7 +120,7 @@ public sealed partial class Match
             double t = p.ActionT + DT;
             double fx = p.ActionDirX, fz = p.ActionDirZ, e = p.TrickSide;
             double vx, vz;
-            if (!p.TrickReleased && t < tm.Release + 0.02)
+            if (tm.Whole ? t < tm.Dur : !p.TrickReleased && t < tm.Release + 0.02)
             {
                 Skills.Script(p.Trick, t, p.TrickV0, out double bf, out double bl, out _, out _, out _, out _);
                 vx = fx * bf + fz * bl * e;
@@ -172,11 +197,13 @@ public sealed partial class Match
         double ex = p.TrickExitX, ez = p.TrickExitZ;
         double v = Skills.ExitSpeed(p.Trick, p.TrickV0);
         double ctrl = p.Attrs.Control;
-        if (p.Trick == SkillMove.Rainbow)
+        if (p.Trick is SkillMove.Rainbow or SkillMove.Sombrero)
         {
-            // Up and over: high enough to clear a man, far enough that he runs onto it.
-            double vy = 6.4 + 0.5 * ctrl;
-            double vh = v * 0.92 + 0.4;
+            // Up and over: high enough to clear a man, far enough that he runs onto it (the
+            // sombrero's scoop goes up steeper and lands shorter).
+            bool som = p.Trick == SkillMove.Sombrero;
+            double vy = (som ? 6.6 : 6.4) + 0.5 * ctrl;
+            double vh = som ? 0.55 * v + 1.2 : v * 0.92 + 0.4;
             double a = JsMath.Atan2(ez, ex) + Rng.Gauss() * (0.05 + (1 - ctrl) * 0.08);
             b.Kick(JsMath.Cos(a) * vh, vy, JsMath.Sin(a) * vh, 0, 0, 0);
             b.Spin.Set(0, 0, 0);
@@ -190,8 +217,9 @@ public sealed partial class Match
         }
         else
         {
-            // A touch he'll meet again in stride (as DribbleTouch weighs it).
-            const double T = 0.45;
+            // A touch he'll meet again in stride (as DribbleTouch weighs it); the panna's goes
+            // through the man and on while he runs round.
+            double T = p.Trick == SkillMove.Panna ? 0.7 : 0.45;
             double vEst = v + 1;
             double decel = BallK.RollDecel + 0.025 * vEst * vEst;
             double s = v + (decel * T) / 2 + 0.35;
@@ -218,7 +246,8 @@ public sealed partial class Match
     void SellDummy(Player p, Skills.Timing tm)
     {
         p.TrickFeinted = true;
-        int tier = Skills.Tier(p.Trick);
+        // Signatures bite a little harder than the 3-star moves, not twice as hard.
+        double tier = Math.Min(3 + 0.3 * (Skills.Tier(p.Trick) - 3), Skills.Tier(p.Trick));
         int stars = Math.Max(1, p.Attrs.Skill);
         double fx = p.ActionDirX, fz = p.ActionDirZ, e = p.TrickSide;
         double best = 0;
@@ -241,12 +270,14 @@ public sealed partial class Match
             // The dummy side: the way the move first went.
             q.FoolX = -fz * e;
             q.FoolZ = fx * e;
-            best = Math.Max(best, tier);
+            best = Math.Max(best, Skills.Tier(p.Trick));
+            // Nutmegged: the ball's through his legs before he can touch it.
+            if (p.Trick == SkillMove.Panna && d < 3.5) q.TouchCooldown = Math.Max(q.TouchCooldown, 0.5);
             // On his heels and turned the wrong way: now and then he goes down.
             if (!keeper && ac == ActionKind.None && d < 3 && Rng.Next() < 0.08 + 0.17 * (tier - 1))
             {
                 q.StartAction(ActionKind.Stumble, 0.7, q.FoolX, q.FoolZ);
-                best = Math.Max(best, tier + 1);
+                best = Math.Max(best, Skills.Tier(p.Trick) + 1);
             }
         }
         if (best > 0) Events.Skill = Math.Max(Events.Skill, best);

@@ -35,6 +35,8 @@ public sealed class Attributes
     public double Weight;
     /// <summary>Skill moves, 1..5 stars (0 = not set: the match works it out from his touch).</summary>
     public int Skill;
+    /// <summary>His signature skill (double tap SPRINT): 4 and 5-star men have one; None below.</summary>
+    public SkillMove Signature;
 
     public Attributes Clone() => (Attributes)MemberwiseClone();
 }
