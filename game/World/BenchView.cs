@@ -382,7 +382,7 @@ public sealed partial class BenchView
             Shape(f, dt, reacting);
             Pose(i, f, dt);
         }
-        if (_n > Count) PressUpdate(replay ?? s, dt, replay != null);
+        if (_n > PressBase) PressUpdate(replay ?? s, dt, replay != null);
         Upload();
     }
 
