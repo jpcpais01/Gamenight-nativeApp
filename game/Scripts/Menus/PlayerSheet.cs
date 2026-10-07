@@ -44,15 +44,12 @@ public sealed partial class PlayerSheet : Modal
             }
             bx += 16;
         }
-        // Skill moves: his stars, and the moves they give him (slide SPRINT on the ball); 4 and 5-star
-        // men also have a signature skill (double tap SPRINT).
+        // Skill moves: his stars; 4 and 5-star men also have a signature skill.
         int stars = SkillStars.Of(c);
         y += 22;
         Px.Text(this, Px.Small, new Vector2(x, y - 1), "SKILL MOVES", 8, Px.InkDim);
         bx = x + Px.Width(Px.Small, "SKILL MOVES", 8) + 8;
         for (int i = 0; i < 5; i++) Art.Star(this, new Vector2(bx + 7 + i * 15, y - 5), 6.5f, i < stars ? Px.Gold : new Color(1, 1, 1, 0.14f));
-        string knows = stars >= 5 ? "ALL 10 MOVES" : stars >= 3 ? "8 MOVES · UP TO 2-STAR" : "5 MOVES · 1-STAR";
-        Px.Text(this, Px.Small, new Vector2(bx + 84, y - 1), knows, 8, Px.Ink);
         var sig = SkillStars.Signature(c);
         if (sig != SkillMove.None)
         {
@@ -63,8 +60,6 @@ public sealed partial class PlayerSheet : Modal
             Px.Text(this, Px.Big, new Vector2(bx, y + 1), sn, 18, Px.Cyan);
             bx += Px.Width(Px.Big, sn, 18) + 8;
             for (int i = 0; i < Skills.Tier(sig); i++) Art.Star(this, new Vector2(bx + 6 + i * 13, y - 5), 5.5f, Px.Gold);
-            bx += Skills.Tier(sig) * 13 + 10;
-            Px.Text(this, Px.Small, new Vector2(bx, y - 1), Px.Fit(Px.Small, "DOUBLE TAP SPRINT · " + Skills.How(sig).ToUpperInvariant(), 8, b.End.X - 16 - bx), 8, Px.Ink);
         }
         var traits = Cards.Traits(c);
         if (traits.Count > 0)
