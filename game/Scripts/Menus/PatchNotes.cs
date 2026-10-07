@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("1.13", "Smoother menus: the squad page draws each player's card once and just moves it, instead of redrawing all of them every frame, and the patch notes stop re-measuring every word, so both run at full frame rate again."),
         ("1.12", "Skill moves now go on SPRINT: hold it on the ball and slide up, left, right or down for the move in that slot, whatever the stick does. Pick your four in SQUAD > SKILL MOVES, or leave slots empty. A player only does a move his skill stars allow."),
         ("1.11", "Goalkeepers rebuilt again. They read every shot as it's struck, step across for what their feet reach, dive only when they must and let wide ones go. Hard shots at them are held, parried, tipped or blocked, never through the gloves, and the hands go out to meet the ball."),
         ("1.10", "Free kicks, penalties, corners and goal kicks stay in third person through the run-up: the camera holds still behind the taker as he runs in, and only lifts back to the match view once the ball is struck."),

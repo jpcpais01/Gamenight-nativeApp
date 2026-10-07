@@ -100,7 +100,17 @@ public static class Px
 
     // ---------------------------------------------------------------- text
 
-    public static float Width(Font f, string s, int size) => f.GetStringSize(s, HorizontalAlignment.Left, -1, size).X;
+    // Measuring text is a call into the engine; menus measure the same strings every frame, so
+    // remember them (cleared when it grows large, e.g. after many changing numbers).
+    static readonly System.Collections.Generic.Dictionary<(Font, int, string), float> Widths = new();
+    static readonly System.Collections.Generic.Dictionary<(Font, int, float, string), string[]> Wraps = new();
+
+    public static float Width(Font f, string s, int size)
+    {
+        if (Widths.TryGetValue((f, size, s), out float w)) return w;
+        if (Widths.Count > 20000) Widths.Clear();
+        return Widths[(f, size, s)] = f.GetStringSize(s, HorizontalAlignment.Left, -1, size).X;
+    }
 
     /// <summary>Text with its baseline-left at `p` (rounded to whole pixels).</summary>
     public static void Text(CanvasItem ci, Font f, Vector2 p, string s, int size, Color c, Color? shadow = null, float sh = 2)
@@ -128,6 +138,16 @@ public static class Px
 
     /// <summary>Wraps text into lines no wider than `max`.</summary>
     public static System.Collections.Generic.List<string> Wrap(Font f, string s, int size, float max)
+    {
+        if (!Wraps.TryGetValue((f, size, max, s), out var done))
+        {
+            if (Wraps.Count > 4000) Wraps.Clear();
+            Wraps[(f, size, max, s)] = done = WrapNow(f, s, size, max).ToArray();
+        }
+        return new System.Collections.Generic.List<string>(done);
+    }
+
+    static System.Collections.Generic.List<string> WrapNow(Font f, string s, int size, float max)
     {
         var lines = new System.Collections.Generic.List<string>();
         var line = "";

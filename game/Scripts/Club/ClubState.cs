@@ -161,8 +161,12 @@ public sealed class ClubState
         if (l.Slots.Any(s => s == null)) FillGaps();
     }
 
+    /// <summary>Goes up on every change to the club (menus redraw what they cached).</summary>
+    public int Rev;
+
     public void Save()
     {
+        Rev++;
         try
         {
             // Write a fresh file then swap it in, so a crash mid-write never loses the club.
