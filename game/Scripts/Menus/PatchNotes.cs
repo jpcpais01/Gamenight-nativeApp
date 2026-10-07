@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("1.14", "No touch controls on screen while the computer plays: watched league matches, coach 1v1 and SIMULATE REST FULL. The pause button stays; take your side back from the pause menu."),
         ("1.13", "Smoother menus: the squad page draws each player's card once and just moves it, instead of redrawing all of them every frame, and the patch notes stop re-measuring every word, so both run at full frame rate again."),
         ("1.12", "Skill moves now go on SPRINT: hold it on the ball and slide up, left, right or down for the move in that slot, whatever the stick does. Pick your four in SQUAD > SKILL MOVES, or leave slots empty. A player only does a move his skill stars allow."),
         ("1.11", "Goalkeepers rebuilt again. They read every shot as it's struck, step across for what their feet reach, dive only when they must and let wide ones go. Hard shots at them are held, parried, tipped or blocked, never through the gloves, and the hands go out to meet the ball."),
