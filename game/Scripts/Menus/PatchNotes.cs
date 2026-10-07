@@ -5,6 +5,7 @@ public static class PatchNotes
 {
     public static readonly (string v, string note)[] All =
     {
+        ("1.9", "The mini cards on the formation board and bench now show each player's skill stars under his name: gold for the stars he has, faint for the rest."),
         ("1.8", "After a goal's replay, a few seconds of LIVE feed round the ground before the new score goes up: a drone sweeping over the stadium or swooping at the celebrating end, a fan cam by the corner flag, the spidercam. Tap to skip, like replays."),
         ("1.7", "Skill moves: double tap SPRINT on the ball. The stick picks the move: to a side, forward, back, or none for a fake shot. Ten moves from Step Over to Elastico and Rainbow Flick. Every player now has 1-5 skill stars (see his card sheet): more stars, more moves. The computer uses them too."),
         ("1.6", "Livelier grounds: subs pull on bibs and warm up along the touchline with their fitness coach (jogs, high knees, heel flicks, side shuffles, sprints, stretches) and chat on the bench. Goals ripple round the stadium from the scoring end, some ends do the Poznan, quiet spells bring a Mexican wave, scarves go up at kick-off, and fans head home early when it's three down late on."),
