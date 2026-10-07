@@ -4,7 +4,7 @@ namespace GameNight.Sim;
 
 public enum Role { GK, DEF, MID, FWD }
 
-public enum ActionKind { None, Kick, Tackle, Slide, Dive, Stumble, Fall, Header, Throw, Catch, Celebrate, Stretch, Punch }
+public enum ActionKind { None, Kick, Tackle, Slide, Dive, Stumble, Fall, Header, Throw, Catch, Celebrate, Stretch, Punch, Parry }
 
 public enum KickType { Pass, Lob, Through, Shot, Clear, Cross }
 
@@ -137,6 +137,9 @@ public sealed class Player
     public double CatchY = 1, CatchF = 0.4, CatchL;
     /// <summary>A keeper's dive: seconds in the air before he comes down on his side.</summary>
     public double DiveFly = 0.6;
+    /// <summary>Keeper on his feet for a save: seconds until the ball reaches his hands (-1: none),
+    /// and where (his frame: forward, to his left, height), so the hands go to meet it.</summary>
+    public double ReachIn = -1, ReachF, ReachL, ReachY;
     /// <summary>Smoothed forward acceleration (m/s²), used for body inertia.</summary>
     public double AccelFwd;
     /// <summary>Seconds before this player can be knocked off balance again.</summary>
@@ -324,7 +327,7 @@ public sealed class Player
                 tx = Vel.X;
                 tz = Vel.Z;
             }
-            else if (a == ActionKind.Catch)
+            else if (a == ActionKind.Catch || a == ActionKind.Parry)
             {
                 tx = Vel.X * 0.4;
                 tz = Vel.Z * 0.4;
