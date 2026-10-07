@@ -314,8 +314,16 @@ public static class Art
         int ns = (int)(plate.Size.Y * 0.8f);
         if (ns >= 12) Px.TextC(ci, Px.Big, plate.GetCenter().X, plate.GetCenter().Y + ns * 0.36f, Px.Fit(Px.Big, name, ns, plate.Size.X - 4), ns, ink);
         else Px.TextC(ci, Px.Small, plate.GetCenter().X, plate.GetCenter().Y + 4, Px.Fit(Px.Small, name, 7, plate.Size.X - 2), 7, ink);
-        // Room under the plate for the skill-move stars (their own thread fills it); then the tier.
+        // Under the plate: his skill-move stars (gold, the rest dim); then the tier.
         float below = plate.End.Y + (ir.End.Y - plate.End.Y) * 0.72f;
+        {
+            int stars = SkillStars.Of(c);
+            float sr = Mathf.Clamp(u * 0.42f, 2, 6), sg = sr * 0.5f;
+            float sy = ir.End.Y - plate.End.Y >= 14 ? plate.End.Y + (below - 4 - plate.End.Y) * 0.55f : (plate.End.Y + ir.End.Y) / 2;
+            float sx = ir.GetCenter().X - (5 * sr * 2 + 4 * sg) / 2 + sr;
+            for (int i = 0; i < 5; i++)
+                Star(ci, new Vector2(sx + i * (sr * 2 + sg), sy), sr, i < stars ? Px.Gold : new Color(ink, 0.18f));
+        }
         string tier = ev?.Label ?? Cards.Label(c.Rarity).ToUpperInvariant();
         if (ir.End.Y - plate.End.Y >= 14)
             Px.TextC(ci, Px.Small, ir.GetCenter().X, below + 3, Px.Fit(Px.Small, tier, 6, ir.Size.X - 4), 6, ev != null ? acc : new Color(ink, 0.7f));
@@ -1017,5 +1025,21 @@ public static class Art
         Px.TextC(ci, Px.Big, inner.GetCenter().X, inner.Position.Y + inner.Size.Y * 0.8f, p.Emblem, es, c2.Darkened(0.3f));
         if (u >= 8) Px.TextC(ci, Px.Small, inner.GetCenter().X, inner.Position.Y + inner.Size.Y * 0.9f, $"{p.Cards} PLAYERS", Math.Max(8, (int)(u * 0.7f)), c2.Darkened(0.2f));
         if (charge > 0) ci.DrawRect(inner, new Color(1, 1, 1, 0.12f * charge));
+    }
+
+    /// <summary>A five-pointed star (skill moves), with a hard pixel shadow.</summary>
+    public static void Star(CanvasItem c, Vector2 centre, float r, Color col)
+    {
+        var pts = new Vector2[10];
+        var sh = new Vector2[10];
+        for (int j = 0; j < 10; j++)
+        {
+            float a = -Mathf.Pi / 2 + j * Mathf.Pi / 5;
+            float rr = j % 2 == 0 ? r : r * 0.45f;
+            pts[j] = centre + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * rr;
+            sh[j] = pts[j] + new Vector2(1, 1);
+        }
+        if (col.A > 0.5f) c.DrawColoredPolygon(sh, new Color(0, 0, 0, 0.5f));
+        c.DrawColoredPolygon(pts, col);
     }
 }

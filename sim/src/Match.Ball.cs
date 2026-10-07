@@ -507,7 +507,7 @@ public sealed partial class Match
         {
             if (p.TouchCooldown > 0) continue;
             var ac = p.Action;
-            if (ac == ActionKind.Stumble || ac == ActionKind.Fall || ac == ActionKind.Slide || ac == ActionKind.Dive || ac == ActionKind.Kick || ac == ActionKind.Throw) continue;
+            if (ac == ActionKind.Stumble || ac == ActionKind.Fall || ac == ActionKind.Slide || ac == ActionKind.Dive || ac == ActionKind.Kick || ac == ActionKind.Throw || ac == ActionKind.Trick) continue;
             // A keeper who may handle it waits for it to reach his hands (KeeperContact).
             if (p.Role == Role.GK && h < 2.6 && p.Plan == null && AI.CanHandle(p) && !(LastTouch == p && Time - LastKickTime < 0.6)) continue;
             double d = BallDist(p);

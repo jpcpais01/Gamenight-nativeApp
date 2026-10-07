@@ -13,9 +13,11 @@ namespace GameNight.Grounds;
 /// the twenty-two on the pitch, and a manager out in each technical area.
 ///
 /// The subs live their own small match day: mostly sat on the bench, each in his own way
-/// (upright, elbows on knees, leaning back with a leg out, legs wide, slouched), now and then
-/// getting up to stretch, walking out to watch from the front of the dugout, or jogging off
-/// toward the corner to warm up. They follow the game: on the edge of the seat when their side
+/// (upright, elbows on knees, leaning back with a leg out, legs wide, slouched), chatting with
+/// the man beside him, now and then getting up to stretch or walking out to watch from the front
+/// of the dugout. Every so often a few of them pull on bibs and warm up along the touchline with
+/// the fitness coach (BenchView.Warm): jogging, high knees, heel flicks, side shuffles, sprints,
+/// leg swings and stretches. They follow the game: on the edge of the seat when their side
 /// attacks, leaping up for a goal, hands on heads or slumped when they concede, clapping or
 /// sulking at the end. The managers drift along the line with the play, arms folded, hands in
 /// pockets, a hand on the chin, shouting, pointing, waving the team on; a goal brings the fist
@@ -28,6 +30,8 @@ namespace GameNight.Grounds;
 public sealed partial class BenchView
 {
     const int PerBench = 7, Subs = PerBench * 2, Count = Subs + 2;
+    // The two fitness coaches follow the bench (and managers); the photographers follow them.
+    const int FitBase = Count, PressBase = Count + 2;
     const float THIGH = 0.43f, SHIN = 0.42f, HIP_Y = 0.94f, HEAD_TOP = 0.24f;
     const float BASE_HEIGHT = HIP_Y + 0.04f + 0.6f + HEAD_TOP;
     const float PI = MathF.PI, TAU = MathF.Tau;
@@ -93,7 +97,7 @@ public sealed partial class BenchView
         public int Hair;
         public float SeatX, X, Z, Facing = PI / 2, Speed, Phi, HeadYaw;
         public Want Want;
-        public float Until, SpotX, SpotZ, StretchUntil;
+        public float Until, SpotX, SpotZ;
         public float Sit = 1;
         public int Style, Stand, Idle;
         public CoachTemper Temper;
@@ -102,6 +106,13 @@ public sealed partial class BenchView
         public int V;
         public readonly float[] Cur = new float[ShapeN], Tgt = new float[ShapeN];
         public float Lift, Clap;
+        // Warm-up: the drill he's on (and the side, for one-legged ones), the one his legs show
+        // and how far in they are, the pace, when to set off, where the fitness coach looks.
+        public bool Fit, Bib, HasLook;
+        public Drill Drill, Shown;
+        public int Side, ShownSide, Mate = -1;
+        public float DrillK, Pace, Go, LookX, LookZ, ChatUntil;
+        public readonly float[] ArmBuf = new float[8];
     }
 
     readonly Fig[] _f;
@@ -111,6 +122,8 @@ public sealed partial class BenchView
     readonly MultiMesh[] _mm = new MultiMesh[BodyMeshes.PartCount];
     readonly float[][] _buf = new float[BodyMeshes.PartCount][];
     readonly Random _rng = new();
+    readonly ShaderMaterial[] _mats = new ShaderMaterial[BodyMeshes.PartCount];
+    readonly Vector4[][] _ka = new Vector4[BodyMeshes.PartCount][], _kb = new Vector4[BodyMeshes.PartCount][];
     readonly float[] _edge = new float[2];
     float _t;
     int _score0 = -1, _score1 = -1;
@@ -119,16 +132,19 @@ public sealed partial class BenchView
 
     public BenchView(Node3D root, Kit home, Kit away, Coach coach = null, bool press = false)
     {
-        _n = Count + (press ? PressCount : 0);
+        _n = PressBase + (press ? PressCount : 0);
         _f = new Fig[_n];
         _pid = new int[_n];
         for (int i = 0; i < Count; i++) _pid[i] = i;
+        // The fitness coaches wear their manager's slot (trims only; their colours are their own).
+        _pid[FitBase] = Subs;
+        _pid[FitBase + 1] = Subs + 1;
         var meshes = BodyMeshes.Build(0.5f);
         var shader = GD.Load<Shader>("res://Shaders/body.gdshader");
         var shaderDouble = GD.Load<Shader>("res://Shaders/body_double.gdshader");
-        var mats = new ShaderMaterial[BodyMeshes.PartCount];
-        var ka = new Vector4[BodyMeshes.PartCount][];
-        var kb = new Vector4[BodyMeshes.PartCount][];
+        var ka = _ka;
+        var kb = _kb;
+        var mats = _mats;
         for (int k = 0; k < BodyMeshes.PartCount; k++)
         {
             mats[k] = new ShaderMaterial { Shader = k == (int)Part.ShortsLeg ? shaderDouble : shader };
@@ -186,13 +202,14 @@ public sealed partial class BenchView
             Shape(f, 0, false);
             Array.Copy(f.Tgt, f.Cur, ShapeN);
         }
+        WarmInit(home, away);
         if (press) PressInit(root, ka, kb);
         for (int k = 0; k < BodyMeshes.PartCount; k++)
         {
             mats[k].SetShaderParameter("ka", ka[k]);
             mats[k].SetShaderParameter("kb", kb[k]);
         }
-        for (int i = 0; i < Count; i++) Pose(i, _f[i], 0);
+        for (int i = 0; i < PressBase; i++) Pose(i, _f[i], 0);
         if (press) PressUpdate(null, 0, false);
         Upload();
     }
@@ -349,16 +366,18 @@ public sealed partial class BenchView
             float att = attacking ? Smooth(0.5f, 0.85f, s.Excitement) : 0;
             _edge[team] += (att - _edge[team]) * (1 - MathF.Exp(-dt * 2));
         }
-        for (int i = 0; i < Count; i++)
+        WarmUpdate(s, dt);
+        for (int i = 0; i < PressBase; i++)
         {
             var f = _f[i];
             bool reacting = f.React != React.None && _t >= f.ReactAt;
             if (f.React != React.None && _t >= f.ReactEnd) f.React = React.None;
-            if (!reacting && _t >= f.Until)
+            if (!reacting && _t >= f.Until && !f.Fit)
             {
                 if (f.Boss) DecideBoss(f);
                 else Decide(f);
             }
+            DrillBlend(f, dt);
             Move(f, dt, reacting);
             Shape(f, dt, reacting);
             Pose(i, f, dt);
@@ -380,11 +399,12 @@ public sealed partial class BenchView
         _score0 = s.Score[0];
         _score1 = s.Score[1];
         if (scored >= 0)
-            for (int i = 0; i < Count; i++)
+            for (int i = 0; i < PressBase; i++)
             {
                 var f = _f[i];
                 bool ours = f.Team == scored;
-                if (f.Boss)
+                if (f.Fit) Act(f, ours ? React.Fist : React.Slump, R(0.2f, 0.7f), R(2, 3.5f));
+                else if (f.Boss)
                 {
                     float sgn = f.Team == 0 ? -1 : 1;
                     if (ours)
@@ -412,12 +432,12 @@ public sealed partial class BenchView
                 {
                     Act(f, React.Cheer, R(0.05f, 0.5f), R(4, 7));
                     // A couple run out to the touchline.
-                    if (_rng.NextDouble() < 0.3 && !f.Gk) GoTo(f, Want.Stand, f.SeatX + R(-1.5f, 1.5f), FrontZ + R(0, 0.1f), R(7, 11));
+                    if (_rng.NextDouble() < 0.3 && !f.Gk && f.Want != Want.Warm) GoTo(f, Want.Stand, f.SeatX + R(-1.5f, 1.5f), FrontZ + R(0, 0.1f), R(7, 11));
                 }
                 else Act(f, _rng.NextDouble() < 0.7 ? React.Despair : React.Sulk, R(0.3f, 1.2f), R(3, 6));
             }
         if (s.Phase != _phase && s.Phase == Phase.Fulltime)
-            for (int i = 0; i < Count; i++)
+            for (int i = 0; i < PressBase; i++)
             {
                 var f = _f[i];
                 bool won = f.Team == 0 ? s.Score[0] >= s.Score[1] : s.Score[1] >= s.Score[0];
@@ -456,23 +476,40 @@ public sealed partial class BenchView
             return;
         }
         int up = 0;
-        for (int i = 0; i < Count; i++) if (_f[i] is var o && o != f && !o.Boss && o.Team == f.Team && o.Want != Want.Sit) up++;
+        for (int i = 0; i < Count; i++) if (_f[i] is var o && o != f && !o.Boss && o.Team == f.Team && o.Want == Want.Stand) up++;
         double r = _rng.NextDouble();
-        if (up >= 2 || r < 0.66)
+        int mate = Neighbour(f);
+        if (r < 0.62 && r >= 0.42 && mate >= 0 && _t >= f.ChatUntil)
+        {
+            // A word with the man beside him: they turn to each other a while.
+            float until = _t + R(4, 10);
+            f.Mate = mate;
+            _f[mate].Mate = Array.IndexOf(_f, f);
+            f.ChatUntil = _f[mate].ChatUntil = until;
+            f.Until = until + R(2, 8);
+        }
+        else if (up >= 2 || r < 0.62)
         {
             // Stay put; maybe shift into another way of sitting.
             if (_rng.NextDouble() < 0.6) f.Style = _rng.Next(Seats.Length);
             f.Until = _t + R(6, 22);
         }
-        else if (r < 0.79) GoTo(f, Want.Stand, f.SeatX + R(-0.25f, 0.25f), DugZ + R(0.1f, 0.4f), R(4, 10)); // up to stretch the legs
-        else if (r < 0.92 || f.Gk) GoTo(f, Want.Stand, cx + R(-4.5f, 4.5f), FrontZ + R(0, 0.12f), R(8, 18)); // out to watch
-        else
+        else if (r < 0.8) GoTo(f, Want.Stand, f.SeatX + R(-0.25f, 0.25f), DugZ + R(0.1f, 0.4f), R(4, 10)); // up to stretch the legs
+        else GoTo(f, Want.Stand, cx + R(-4.5f, 4.5f), FrontZ + R(0, 0.12f), R(8, 18)); // out to watch
+    }
+
+    /// <summary>A seated team-mate next along the bench, free to talk (-1 if none).</summary>
+    int Neighbour(Fig f)
+    {
+        int me = Array.IndexOf(_f, f), seat = me % PerBench;
+        foreach (int d in _rng.Next(2) == 0 ? new[] { -1, 1 } : new[] { 1, -1 })
         {
-            // Warm-up: jog out toward the corner, stretch, jog on, back after a while.
-            float sgn = f.Team == 0 ? -1 : 1;
-            GoTo(f, Want.Warm, cx + sgn * R(5, 11), DugZ + R(0.3f, 0.9f), R(18, 32));
-            f.StretchUntil = 0;
+            int s = seat + d;
+            if (s < 0 || s >= PerBench) continue;
+            var o = _f[me + d];
+            if (o.Want == Want.Sit && o.Sit > 0.9f && _t >= o.ChatUntil && f.Sit > 0.9f) return me + d;
         }
+        return -1;
     }
 
     /// <summary>A manager's: another stance, a step along the line with the play.</summary>
@@ -520,7 +557,7 @@ public sealed partial class BenchView
         }
         // On his feet: walk (or jog) to the spot, out and in through the front of the dugout.
         bool warm = want == Want.Warm;
-        if (warm && _t < f.StretchUntil)
+        if (warm && (_t < f.Go || reacting))
         {
             sx = f.X;
             sz = f.Z;
@@ -537,26 +574,19 @@ public sealed partial class BenchView
         float wantSpeed = 0, face;
         if (final && d < 0.12f)
         {
-            if (warm && _t >= f.StretchUntil && f.Speed < 0.3f)
-            {
-                // Arrived: stretch here a while, then jog on to the next spot.
-                f.StretchUntil = _t + R(4, 7);
-                f.V = _rng.Next(3);
-                float cx = (f.Team == 0 ? -1 : 1) * DugX, sgn = f.Team == 0 ? -1 : 1;
-                f.SpotX = cx + sgn * R(5, 12);
-                f.SpotZ = DugZ + R(0.3f, 0.9f);
-            }
-            // Stood: watch the ball (or face the pitch to sit down).
+            // Stood: watch the ball (or face the pitch to sit down; the fitness coach faces his group).
             face = want == Want.Sit ? PI / 2 : MathF.Atan2(_ballZ - f.Z, _ballX - f.X);
             if (want != Want.Sit) face = PI / 2 + Clamp(Wrap(face - PI / 2), -1.2f, 1.2f);
+            if (f.HasLook) face = MathF.Atan2(f.LookZ - f.Z, f.LookX - f.X);
         }
         else
         {
-            float pace = warm ? 3.2f : reacting && (f.React == React.Cheer || f.React == React.Fist) ? 4.5f : 1.35f;
-            wantSpeed = MathF.Min(pace, d * 2 + 0.3f);
-            face = MathF.Atan2(dz, dx);
+            float pace = warm ? f.Pace : reacting && (f.React == React.Cheer || f.React == React.Fist) ? 4.5f : f.Fit ? 1.6f : 1.35f;
+            wantSpeed = MathF.Min(pace, d * (warm && f.Drill == Drill.Sprint ? 1.2f : 2) + 0.3f);
+            // Side-steps keep the chest to the pitch.
+            face = warm && f.Drill == Drill.Shuffle ? PI / 2 : MathF.Atan2(dz, dx);
         }
-        f.Speed += Clamp(wantSpeed - f.Speed, -5 * dt, 4 * dt);
+        f.Speed += Clamp(wantSpeed - f.Speed, -5 * dt, (f.Speed > 3 ? 5.5f : 4) * dt);
         f.Facing += Wrap(face - f.Facing) * (1 - MathF.Exp(-dt * 6));
         f.Facing = Wrap(f.Facing);
         if (d > 0.01f)
@@ -565,7 +595,9 @@ public sealed partial class BenchView
             f.X += dx / d * step;
             f.Z += dz / d * step;
         }
-        f.Phi += f.Speed / (1.1f + 0.35f * f.Speed) * TAU * 0.5f * dt;
+        // The stride as the players' (the sim's step length); drills keep their own beat.
+        float beat = Cadence(f.Shown);
+        f.Phi += beat > 0 && f.DrillK > 0 ? beat * TAU * dt : f.Speed / (float)Player.StepLength(f.Speed, 1) * PI * dt;
         // At the seat and square to the pitch: down he goes.
         if (want == Want.Sit && final && d < 0.15f && f.Speed < 0.4f && MathF.Abs(Wrap(f.Facing - PI / 2)) < 0.25f) f.Sit = 0.001f;
     }
@@ -596,7 +628,7 @@ public sealed partial class BenchView
         }
         else if (standing > 0.5f)
         {
-            arms = f.Want == Want.Warm && t < f.StretchUntil ? null : Stands[f.Stand];
+            arms = f.Want == Want.Warm ? null : Stands[f.Stand];
             w = arms != null ? 1 - moving : 0;
         }
         else
@@ -654,28 +686,15 @@ public sealed partial class BenchView
         // Seated, the shoulders turn a little with the head toward the ball.
         float rel = Wrap(MathF.Atan2(_ballZ - f.Z, _ballX - f.X) - f.Facing);
         g[Tw] = -Clamp(rel * 0.35f, -0.4f, 0.4f) * st;
-        // Warm-up stretches on the spot: a hamstring reach, an overhead side bend, trunk twists.
-        if (f.Want == Want.Warm && t < f.StretchUntil && standing > 0.9f && !reacting)
+        // A word with his neighbour: shoulders and head turned to him, a nod, a laugh.
+        if (Chatting(f) is var mate && mate != null)
         {
-            float k = Smooth(0, 0.6f, f.StretchUntil - t);
-            float osc = MathF.Sin((t + f.Ph) * (f.V == 2 ? 2.2f : 1.5f));
-            if (f.V == 0)
-            {
-                g[Flex] += 0.65f * k;
-                arms = Reach;
-            }
-            else if (f.V == 1)
-            {
-                arms = Up;
-                g[Side] += 0.35f * osc * k;
-            }
-            else
-            {
-                arms = Hips;
-                g[Tw] += 0.55f * osc * k;
-            }
-            w = k;
+            float to = Wrap(MathF.Atan2(mate.Z - f.Z, mate.X - f.X) - f.Facing);
+            g[Tw] = -Clamp(to * 0.3f, -0.45f, 0.45f) * st;
+            g[Head] += (0.06f * MathF.Sin((t + f.Ph) * 2.3f) - 0.12f * Smooth(0.7f, 1, MathF.Sin((t + f.Ph) * 0.9f))) * st;
+            g[Flex] += 0.08f * st;
         }
+        if (f.Want == Want.Warm && standing > 0.9f && !reacting) WarmShape(f, g, t, ref arms, ref w);
         if (arms != null) Array.Copy(arms, 0, g, Arm, 8);
         else w = 0;
         // Little fidgets: a slow sway of the trunk and a hand shifting on the thigh.
@@ -702,16 +721,47 @@ public sealed partial class BenchView
         // Head: toward the ball unless it's down.
         float relB = Wrap(MathF.Atan2(_ballZ - f.Z, _ballX - f.X) - f.Facing);
         float wantY = c[Head] < 0.25f && MathF.Abs(relB) < 2.4f ? Clamp(-relB, -1.1f, 1.1f) : 0;
+        if (Chatting(f) is var mate && mate != null) wantY = Clamp(-Wrap(MathF.Atan2(mate.Z - f.Z, mate.X - f.X) - f.Facing), -1.1f, 1.1f);
         f.HeadYaw += (wantY - f.HeadYaw) * (1 - MathF.Exp(-dt * 5));
 
-        // Legs: walking ones and seated ones, blended by how far down he is.
+        // Legs first (walking, seated or in a drill): how they bend decides how high the hips ride.
         float hj = (SeatTop + 0.075f) / sc;
+        float sprint = Smooth(4, 6.5f, f.Speed), dk = Ease(f.DrillK);
+        Span<float> lHip = stackalloc float[2], lKnee = stackalloc float[2], lOut = stackalloc float[2], lFoot = stackalloc float[2];
+        float reach = 0;
+        for (int sd = 0; sd < 2; sd++)
+        {
+            // Walking: the thigh swings, the knee folds through the swing forward (further at a sprint).
+            float ph = phi + (sd == 0 ? 0 : PI);
+            float wHip = MathF.Sin(ph) * (0.32f + 0.3f * jog + 0.22f * sprint) * move;
+            float cs = MathF.Max(0, MathF.Cos(ph));
+            float wKnee = move * (0.06f + (0.75f + 0.7f * jog + 0.45f * sprint) * cs * cs) + 0.04f;
+            // Seated: the thigh rests on the seat, the shin finds the floor (feet forward or tucked).
+            float th = c[sd == 0 ? ThL : ThR], ft = c[sd == 0 ? FtL : FtR];
+            float kneeY = hj - THIGH * leg * MathF.Cos(th);
+            float a = MathF.Acos(Clamp((kneeY - 0.075f) / (SHIN * leg), -1, 1));
+            float sKnee = th - a * ft;
+            float hip = Lerp(wHip, th, st), knee = Lerp(wKnee, MathF.Max(0.05f, sKnee), st), outA = c[Lo];
+            float toe = -0.08f * jog - 0.3f * Smooth(0.6f, 1, a * ft) * st;
+            if (dk > 0)
+            {
+                var (dh, dkn, dout, dtoe) = DrillLeg(f, sd, ph);
+                hip = Lerp(hip, dh, dk);
+                knee = Lerp(knee, dkn, dk);
+                outA = Lerp(outA, dout, dk);
+                toe = Lerp(toe, dtoe, dk);
+            }
+            lHip[sd] = hip; lKnee[sd] = knee; lOut[sd] = outA; lFoot[sd] = toe;
+            reach = MathF.Max(reach, (THIGH * MathF.Cos(hip) + SHIN * MathF.Cos(hip - knee)) * MathF.Cos(outA));
+        }
         float seatHipY = hj + 0.03f;
         float standHipY = f.HipBase - (0.012f + 0.05f * jog) * MathF.Abs(MathF.Cos(phi)) * move;
+        // In a drill the hips sit as low as the longer leg lets them (a crouch, a lunge).
+        standHipY -= dk * MathF.Max(0, (THIGH + SHIN) - reach) * leg;
         float hipY = Lerp(standHipY, seatHipY, st);
 
         var root = new Transform3D(new Basis(Vector3.Up, PI / 2 - f.Facing).Scaled(new Vector3(sc, sc, sc)), new Vector3(f.X, 0, f.Z));
-        root = Chain(root, 0, f.Lift / sc, 0, 0.08f * jog, 0, 0);
+        root = Chain(root, 0, (f.Lift + dk * DrillBounce(f)) / sc, 0, 0.08f * jog + 0.12f * sprint, 0, 0);
         float pelvisYaw = -0.08f * MathF.Sin(phi) * move;
         var P = Chain(root, 0, hipY, 0, 0, pelvisYaw, 0);
         float torsoW = (float)b.TorsoW, torsoD = (float)b.TorsoD, torsoL = (float)b.TorsoL;
@@ -736,9 +786,11 @@ public sealed partial class BenchView
         for (int sd = 0; sd < 2; sd++)
         {
             float sideSign = sd == 0 ? 1 : -1;
-            float swing0 = (sd == 0 ? 1 : -1) * MathF.Sin(phi) * (0.3f + 0.4f * jog) * move + 0.1f * jog;
+            // Drills pump the arms hard; a sprint drives them.
+            float pump = dk * (f.Shown == Drill.Knees || f.Shown == Drill.Kicks ? 1 : 0);
+            float swing0 = (sd == 0 ? 1 : -1) * MathF.Sin(phi) * ((0.3f + 0.4f * jog + 0.35f * sprint) * move + 0.6f * pump) + 0.1f * jog;
             float swing = Lerp(swing0, c[Arm + sd], aw);
-            float elbow = Lerp(0.25f + 1.0f * jog, c[Arm + 2 + sd], aw);
+            float elbow = Lerp(Lerp(0.25f + 1.0f * jog + 0.2f * sprint, 1.55f, pump), c[Arm + 2 + sd], aw);
             float outA = Lerp(0.1f, c[Arm + 4 + sd] + f.Clap, aw);
             float rot = Lerp(0, c[Arm + 6 + sd], aw);
             float raise = MathF.Acos(Clamp(MathF.Cos(swing) * MathF.Cos(outA), -1, 1));
@@ -758,29 +810,16 @@ public sealed partial class BenchView
             float sideSign = sd == 0 ? 1 : -1;
             int fi = id * 2 + sd;
             float hipX = sideSign * 0.092f * (1 + (torsoW - 1) * 0.6f);
-            // Walking: the thigh swings, the knee folds through the swing forward.
-            float ph = phi + (sd == 0 ? 0 : PI);
-            float wHip = MathF.Sin(ph) * (0.32f + 0.3f * jog) * move;
-            float cs = MathF.Max(0, MathF.Cos(ph));
-            float wKnee = move * (0.06f + (0.75f + 0.7f * jog) * cs * cs) + 0.04f;
-            // Seated: the thigh rests on the seat, the shin finds the floor (feet forward or tucked).
-            float th = c[sd == 0 ? ThL : ThR], ft = c[sd == 0 ? FtL : FtR];
-            float kneeY = hj - THIGH * leg * MathF.Cos(th);
-            float a = MathF.Acos(Clamp((kneeY - 0.075f) / (SHIN * leg), -1, 1));
-            float sKnee = th - a * ft;
-            float hip = Lerp(wHip, th, st), knee = Lerp(wKnee, MathF.Max(0.05f, sKnee), st);
-            float outA = c[Lo];
-            float yaw = sideSign * c[Yw];
-            var j1 = Chain(P, hipX, -0.03f, 0, -hip, yaw, sideSign * outA);
+            float hip = lHip[sd], knee = lKnee[sd];
+            var j1 = Chain(P, hipX, -0.03f, 0, -hip, sideSign * c[Yw], sideSign * lOut[sd]);
             float soft = knee * 0.22f;
             var j2 = ChainX(j1, 0, 0, 0, soft);
             j2 = ChainX(j2, 0, -THIGH * leg, 0, knee - soft);
             Put(Part.ShortsLeg, fi, j1, thighW, 1, thighW);
             Put(Part.Thigh, fi, j1, thighW, leg, thighW, knee * 0.22f);
             Put(Part.Shin, fi, j2, calfW, leg, calfW);
-            // Feet flat (level with the ground), heels down for a leg stretched out.
-            float ankle = hip - knee - 0.08f * jog - 0.3f * Smooth(0.6f, 1, a * ft) * st;
-            var j3 = ChainX(j2, 0, -SHIN * leg, 0, ankle);
+            // Feet flat (level with the ground) unless the pose points or lifts the toes.
+            var j3 = ChainX(j2, 0, -SHIN * leg, 0, hip - knee + lFoot[sd]);
             Put(Part.Boot, fi, j3);
         }
     }

@@ -50,6 +50,10 @@ public partial class Main : Node
     Hud _hud;
     PauseMenu _pause;
     readonly Replay _replay = new();
+    /// <summary>After the replay: a few live shots round the ground while the scorers' end celebrates.</summary>
+    readonly LiveFeed _live = new();
+    /// <summary>The goal (by total score) whose live feed has been shown or skipped.</summary>
+    int _liveFor;
     /// <summary>The walk-out before kick-off (the stadium reads Cutscene.Hang for the giant tifo).</summary>
     public readonly Cutscene Cutscene = new();
     Letterbox _letterbox;
@@ -180,6 +184,7 @@ public partial class Main : Node
             _goalFx.Clear();
         };
         _replay.OnGoal = Explode;
+        _live.OnShot = _letterbox.Live;
         _replay.OnEvents = f =>
         {
             if (f.Net > 0) _goals.Impact(f.BallX, f.BallY, f.BallZ, f.Net, _time);
@@ -259,6 +264,7 @@ public partial class Main : Node
         _runner?.Stop();
         if (Directed) EndDirected();
         _replay.Reset();
+        _liveFor = 0;
         _officials.Reset();
         _invader.Clear(null);
         _goalLog.Clear();
@@ -359,7 +365,7 @@ public partial class Main : Node
     }
 
     /// <summary>A replay or the walk-out on screen: the match waits.</summary>
-    bool Directed => _replay.Active || Cutscene.Active;
+    bool Directed => _replay.Active || Cutscene.Active || _live.Active;
 
     /// <summary>The cut after a goal (or the walk-out): the match waits while it plays.</summary>
     void Direct(bool replay)
@@ -373,10 +379,26 @@ public partial class Main : Node
         _letterbox.Open(replay);
     }
 
+    /// <summary>The live feed's moment: a goal's replay is over (or there wasn't one), the score not up yet.</summary>
+    bool LiveDue() =>
+        _cur.Phase == Phase.Goal && _cur.PhaseT >= GoalSeq.Cut && _cur.PhaseT < GoalSeq.Back && _cur.Scorer >= 0
+        && _cur.Score[0] + _cur.Score[1] != _liveFor;
+
+    /// <summary>Debug: `-- --livefeed` rolls the live feed two seconds in.</summary>
+    bool DebugLive()
+    {
+        if (_time < 2 || _liveFor != 0 || Array.IndexOf(OS.GetCmdlineUserArgs(), "--livefeed") < 0) return false;
+        _liveFor = -1;
+        Direct(true);
+        _live.Start(1);
+        return false;
+    }
+
     /// <summary>Skipped or done: back to the match.</summary>
     void EndDirected()
     {
         _replay.Finish();
+        _live.Finish();
         _goalFx.Clear();
         Cutscene.Cancel();
         _players.Snap();
@@ -398,6 +420,8 @@ public partial class Main : Node
             return;
         }
         if (!Directed) return;
+        // Skipping the replay skips the live feed after it too.
+        _liveFor = _cur.Score[0] + _cur.Score[1];
         if (Cutscene.Active)
         {
             Cutscene.Next();
@@ -594,11 +618,18 @@ public partial class Main : Node
             Cutscene.Update(run, _camera);
             if (!Cutscene.Active) EndDirected();
         }
+        if (_live.Active)
+        {
+            _live.Update(run, _camera);
+            if (!_live.Active) EndDirected();
+        }
         _prof.Lap(Profiler.Sys.Camera);
         if (Cutscene.Active)
             _players.Update(Cutscene.Frame, Cutscene.Frame, 0, _time, 1);
         else if (_replay.Active)
             _players.Update(_replay.A, _replay.B, _replay.Alpha, _time, 1);
+        else if (_live.Active)
+            _players.Update(_prev, _cur, alpha, _time, 1);
         else
         {
             _camera.Follow = _invader.Focus;
@@ -608,6 +639,12 @@ public partial class Main : Node
             {
                 _replay.Record(_cur);
                 if (!_skipping && _replay.Start(_cur, GoalSeq.Cut)) Direct(true);
+                else if (!_skipping && (LiveDue() || DebugLive()))
+                {
+                    _liveFor = _cur.Score[0] + _cur.Score[1];
+                    Direct(true);
+                    _live.Start(Sound.Terraces.End(_match.All[_cur.Scorer].Team) == 1 ? 1 : -1);
+                }
             }
         }
         _delivery.Update(_cur);

@@ -43,6 +43,14 @@ public sealed partial class PlayerSheet : Modal
             }
             bx += 16;
         }
+        // Skill moves: his stars, and the moves they give him (double tap SPRINT on the ball).
+        int stars = SkillStars.Of(c);
+        y += 22;
+        Px.Text(this, Px.Small, new Vector2(x, y - 1), "SKILL MOVES", 8, Px.InkDim);
+        bx = x + Px.Width(Px.Small, "SKILL MOVES", 8) + 8;
+        for (int i = 0; i < 5; i++) Art.Star(this, new Vector2(bx + 7 + i * 15, y - 5), 6.5f, i < stars ? Px.Gold : new Color(1, 1, 1, 0.14f));
+        string knows = stars >= 5 ? "ALL 10 MOVES" : stars >= 3 ? "8 MOVES · UP TO 2-STAR" : "5 MOVES · 1-STAR";
+        Px.Text(this, Px.Small, new Vector2(bx + 84, y - 1), knows, 8, Px.Ink);
         var traits = Cards.Traits(c);
         if (traits.Count > 0)
         {

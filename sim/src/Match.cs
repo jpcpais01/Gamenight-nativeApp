@@ -109,6 +109,8 @@ public sealed class MatchEvents
     public int Offside;
     /// <summary>A substitution was made (see Match.Subs).</summary>
     public int Sub;
+    /// <summary>A skill move sold its dummy: the move's stars (one more when he left a man on the floor).</summary>
+    public double Skill;
 
     public void Clear()
     {
@@ -117,6 +119,7 @@ public sealed class MatchEvents
         Goal = -1;
         Post = Net = NetX = NetY = NetZ = Bounce = Save = Tackle = 0;
         Foul = Card = Offside = Sub = 0;
+        Skill = 0;
     }
 }
 
@@ -162,6 +165,8 @@ public sealed class Seat
     public double SwitchT;
     internal bool SprintWas;
     internal double LastTackleTap = -10;
+    /// <summary>Last SPRINT press on the ball (a second one quickly after is a skill move).</summary>
+    internal double LastSprintTap = -10;
     /// <summary>Sprint-swipe tackle: committed, waiting for the moment to strike.</summary>
     internal bool LungeOn, LungeSlide;
     internal double LungeUntil;
@@ -339,6 +344,8 @@ public sealed partial class Match
             Teams.Add(team);
         }
         All.AddRange(Players);
+        foreach (var p in Players)
+            if (p.Attrs.Skill <= 0) p.Attrs.Skill = Skills.StarsFrom(p.Attrs, p.Role);
         MakeBenches(seed, setup);
         AI = new AI(this);
         Seats[0].Controlled = Teams[0].Players[9];
@@ -800,19 +807,34 @@ public sealed partial class Match
         }
     }
 
+    SetPiece? viewFor;
+    (Player taker, double x, double z, SetPieceKind kind)? viewHeld;
+
     /// <summary>
-    /// A dead ball worth watching from behind the taker: your goal kicks, your free kicks and
-    /// penalties while you aim, and the other side's goal kicks, direct free kicks and penalties
-    /// once their taker has lined up. Null when there's nothing to show.
+    /// A dead ball worth watching from behind the taker: your goal kicks, corners, free kicks and
+    /// penalties while you aim, and the other side's once their taker has lined up. Held as it
+    /// was lined up through the run-up (Running), until the ball is struck. Null when there's
+    /// nothing to show.
     /// </summary>
-    public (Player taker, double x, double z, SetPieceKind kind)? DeadBallView
+    public (Player taker, double x, double z, SetPieceKind kind, bool running)? DeadBallView
     {
         get
         {
             var sp = SetPiece;
             if (sp == null || AutoPlay || Phase != Phase.SetPiece) return null;
             var t = sp.Taker;
-            if (t.Plan != null || t.Action != ActionKind.None || t.Speed > 0.8) return null;
+            if (t.Plan != null || t.Action != ActionKind.None || t.Speed > 0.8)
+                return viewFor == sp && viewHeld is { } h ? (h.taker, h.x, h.z, h.kind, true) : null;
+            viewFor = sp;
+            viewHeld = LinedUp(sp);
+            return viewHeld is { } v ? (v.taker, v.x, v.z, v.kind, false) : null;
+        }
+    }
+
+    (Player taker, double x, double z, SetPieceKind kind)? LinedUp(SetPiece sp)
+    {
+        {
+            var t = sp.Taker;
             bool human = HumanSide(sp.Team);
             if (human && t != Seats[sp.Team].Controlled) return null;
             double dir = Teams[sp.Team].Dir;
@@ -821,6 +843,13 @@ public sealed partial class Match
                 // Yours: eyes on the ring; theirs: upfield.
                 if (human && AimingGoalKick) return (t, sp.Target!.X, sp.Target.Z, sp.Kind);
                 return (t, sp.X + dir * 40, sp.Z * 0.3, sp.Kind);
+            }
+            if (sp.Kind == SetPieceKind.Corner)
+            {
+                // Yours: eyes on the ring; theirs: the penalty spot, once he's at the flag.
+                if (human && AimingCorner) return (t, sp.Target!.X, sp.Target.Z, sp.Kind);
+                if (human || JsMath.Hypot(t.Pos.X - sp.X, t.Pos.Z - sp.Z) > 3) return null;
+                return (t, dir * (Pitch.HalfL - 11), 0, sp.Kind);
             }
             if (sp.Kind != SetPieceKind.Penalty && !sp.Direct) return null;
             if (human)

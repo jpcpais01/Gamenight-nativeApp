@@ -705,6 +705,22 @@ public sealed partial class StadiumScreen : PxCanvas
                 ci.DrawRect(new Rect2(P(0.4f, 0.9f), new Vector2(2, h * 0.65f)), Px.Hex(0x8a8f96));
                 ci.DrawRect(new Rect2(P(0.37f, 0.92f), new Vector2(8, 4)), Px.Hex(0xfff2c8));
                 break;
+            case 20: // three tiers stacked high under a roof, a skin of stars
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.08f), P(0.3f, 0.3f), P(0.3f, 0.36f), P(0.52f, 0.56f), P(0.52f, 0.62f), P(0.74f, 0.86f), P(0.82f, 0.9f), P(0.82f, 0) }, c);
+                ci.DrawRect(new Rect2(P(0.28f, 0.36f), new Vector2(w * 0.04f, 2)), Px.Ink);
+                ci.DrawRect(new Rect2(P(0.5f, 0.62f), new Vector2(w * 0.04f, 2)), Px.Ink);
+                ci.DrawColoredPolygon(new[] { P(0.4f, 0.97f), P(0.4f, 0.93f), P(0.9f, 0.9f), P(0.9f, 0.95f) }, c.Darkened(0.4f));
+                for (int i = 0; i < 9; i++) ci.DrawRect(new Rect2(P(0.84f + (i % 3) * 0.045f, 0.12f + i * 0.08f), new Vector2(2, 2)), Px.Ink);
+                break;
+            case 21: // a purple stand, a pumpkin, a spire and a bat
+                ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.1f), P(0.62f, 0.5f), P(0.62f, 0.6f), P(0.72f, 0.6f), P(0.72f, 0) }, c);
+                ci.DrawRect(new Rect2(P(0.2f, 0.26f), new Vector2(w * 0.08f, 2)), Px.Hex(0xff7a1a));
+                ci.DrawCircle(P(0.3f, 0.3f), h * 0.07f, Px.Hex(0xe8701a));
+                ci.DrawRect(new Rect2(P(0.78f, 0.7f), new Vector2(w * 0.12f, h * 0.7f)), c.Darkened(0.2f));
+                ci.DrawColoredPolygon(new[] { P(0.76f, 0.7f), P(0.84f, 1), P(0.92f, 0.7f) }, Px.Hex(0x16121c));
+                ci.DrawRect(new Rect2(P(0.82f, 0.5f), new Vector2(3, 3)), Px.Hex(0xffc23a));
+                ci.DrawColoredPolygon(new[] { P(0.3f, 0.85f), P(0.38f, 0.8f), P(0.46f, 0.85f), P(0.38f, 0.78f) }, Px.Hex(0x16121c));
+                break;
             default: // walls, battlements and a keep
                 ci.DrawColoredPolygon(new[] { P(0, 0), P(0, 0.12f), P(0.62f, 0.55f), P(0.62f, 0.6f), P(0.7f, 0.6f), P(0.7f, 0) }, c);
                 for (int i = 0; i < 4; i++) ci.DrawRect(new Rect2(P(0.6f + (i % 2) * 0.06f, 0.68f), new Vector2(3, 3)), c);

@@ -15,6 +15,7 @@ public sealed partial class Letterbox : Control
 
     double _t, _capT = -1;
     bool _replay;
+    string _tag = "REPLAY";
     string _title = "", _sub = "";
 
     public Letterbox()
@@ -28,6 +29,7 @@ public sealed partial class Letterbox : Control
     public void Open(bool replay)
     {
         _replay = replay;
+        _tag = "REPLAY";
         _t = 0;
         _capT = -1;
         Visible = true;
@@ -35,6 +37,13 @@ public sealed partial class Letterbox : Control
     }
 
     public void Close() => Visible = false;
+
+    /// <summary>The live feed: the blinking dot with LIVE and the camera's name (bars already in).</summary>
+    public void Live(string camera)
+    {
+        _replay = true;
+        _tag = "LIVE · " + camera;
+    }
 
     /// <summary>A caption: a big title over a spaced subtitle (empty title: none).</summary>
     public void Caption(string title, string sub)
@@ -87,7 +96,7 @@ public sealed partial class Letterbox : Control
                 float d = fs * 0.5f;
                 DrawCircle(new Vector2(x + d / 2, y + fs * 0.55f), d / 2, new Color(0xe8322eff) { A = k });
             }
-            DrawString(f, new Vector2(x + fs * 0.95f, y + f.GetAscent(fs)), "REPLAY", HorizontalAlignment.Left, -1, fs, col);
+            DrawString(f, new Vector2(x + fs * 0.95f, y + f.GetAscent(fs)), _tag, HorizontalAlignment.Left, -1, fs, col);
         }
 
         if (_capT >= 0)

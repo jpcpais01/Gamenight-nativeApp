@@ -101,7 +101,7 @@ public sealed partial class BenchView
             foreach (int sz in new[] { -1, 1 })
                 for (int k = 0; k < PerCorner; k++, n++)
                 {
-                    int id = Count + n;
+                    int id = PressBase + n;
                     bool sits = _rng.Next(3) == 0;
                     var p = _p[n] = new Snap
                     {
@@ -299,7 +299,7 @@ public sealed partial class BenchView
             for (int n = 0; n < PressCount; n++)
             {
                 var p = _p[n];
-                var f = _f[Count + n];
+                var f = _f[PressBase + n];
                 f.X = p.SpotX = p.HomeX;
                 f.Z = p.SpotZ = p.HomeZ;
                 f.Speed = 0;
@@ -312,7 +312,7 @@ public sealed partial class BenchView
         if (s != null) PressEvents(s);
         for (int n = 0; n < PressCount; n++)
         {
-            int id = Count + n;
+            int id = PressBase + n;
             var f = _f[id];
             var p = _p[n];
             if (s != null) Think(p, s, dt);
@@ -481,7 +481,7 @@ public sealed partial class BenchView
         }
         float rate = f.Speed > 0.5f ? 8 : p.Down > 0.5f ? 1.8f : 4;
         f.Facing = dt <= 0 ? face : Wrap(f.Facing + Wrap(face - f.Facing) * (1 - MathF.Exp(-dt * rate)));
-        f.Phi += f.Speed / (1.1f + 0.35f * f.Speed) * TAU * 0.5f * dt;
+        f.Phi += f.Speed / (float)Player.StepLength(f.Speed, 1) * PI * dt;
     }
 
     void ShapePress(Snap p, float dt)
@@ -523,7 +523,7 @@ public sealed partial class BenchView
         float rel = Wrap(MathF.Atan2(p.TZ - rz, p.TX - rx) - f.Facing);
         float tw = -Clamp(rel * 0.6f, -0.6f, 0.6f) * (1 - move);
         float headTo = p.Idle == Idle.Chat && p.Aim < 0.5f && p.Mate >= 0 && p.Mate < PressCount
-            ? Wrap(MathF.Atan2(_f[Count + p.Mate].Z - rz, _f[Count + p.Mate].X - rx) - f.Facing) : rel;
+            ? Wrap(MathF.Atan2(_f[PressBase + p.Mate].Z - rz, _f[PressBase + p.Mate].X - rx) - f.Facing) : rel;
         float wantY = Clamp(-headTo, -1.3f, 1.3f) - tw;
         f.HeadYaw = dt <= 0 ? wantY : f.HeadYaw + (wantY - f.HeadYaw) * (1 - MathF.Exp(-dt * 5));
 
