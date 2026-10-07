@@ -59,6 +59,18 @@ public static class Body
         return s - System.Math.Floor(s);
     }
 
+    /// <summary>Facial hair, fixed per person (keyed on the name so it's the same on his card
+    /// and on the pitch, every match): 0 clean-shaven, 1 stubble, 2 a beard, 3 moustache and goatee.</summary>
+    public static int FacialHair(string name, int fallback = 0)
+    {
+        uint h = 2166136261;
+        if (string.IsNullOrEmpty(name)) h ^= (uint)fallback * 2654435761u;
+        else foreach (char ch in name) h = (h ^ ch) * 16777619;
+        h ^= h >> 13;
+        double r = (h % 1000) / 1000.0;
+        return r < 0.5 ? 0 : r < 0.74 ? 1 : r < 0.9 ? 2 : 3;
+    }
+
     public static BodyShape Shape(double heightM, double weightKg, double strength, double seed)
     {
         var type = TypeOf(heightM, weightKg, strength);

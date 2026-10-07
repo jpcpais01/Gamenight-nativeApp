@@ -38,7 +38,7 @@ public sealed partial class PlayersView
     static readonly int[] ShaderPart = { 1, 0, 0, 2, 0, 0, 0, 3, 4, 0, 5, 6, 7, 8 };
     /// <summary>Too small to show in the sun's shadow, or inside another part's.</summary>
     static readonly bool[] NoShadow = { false, false, true, false, true, true, true, false, true, true, true, false, false, true };
-    static readonly Part[] HairOfStyle = { Part.HairShort, Part.HairShort, Part.HairCurly, Part.HairBun };
+    static readonly Part[] HairOfStyle = { Part.HairShort, Part.HairShort, Part.HairCurly, Part.HairQuiff };
 
     /// <summary>Boots: a random pick per player each match (boot, sole).</summary>
     static readonly (int, int)[] Boots =
@@ -264,10 +264,12 @@ public sealed partial class PlayersView
             ka[(int)Part.Shin][id] = Lin4(gk ? kit.GkShirt : kit.Shirt2, 0);
             Set(Part.Neck, skin);
             Set(Part.Head, skin);
+            // The head's face: brows and facial hair in his hair colour.
+            ka[(int)Part.Head][id] = Lin4(hair, Body.FacialHair(p.Name, id * 31 + p.Index));
             Set(Part.Thigh, skin);
             Set(Part.HairShort, hair);
             Set(Part.HairCurly, hair);
-            Set(Part.HairBun, hair);
+            Set(Part.HairQuiff, hair);
             var (boot, sole) = Boots[_rng.Next(Boots.Length)];
             Set(Part.Boot, boot);
             ka[(int)Part.Boot][id] = Lin4(sole, 0);
@@ -1733,11 +1735,14 @@ public sealed partial class PlayersView
         float top = 0.075f * neckLen;
         var Hd = Chain(Nk, 0, top, 0, hP * 0.6f, hY * 0.7f, headRollA * 0.6f);
         Hd = ChainT(Hd, 0, 0.02f * torsoL + (neckLen - 1) * 0.08f - top, 0);
-        Put(Part.Head, id, Hd);
+        // (The head a touch bigger than the PWA's, in proportion to the shoulders.)
+        const float hk = 1.05f;
+        Put(Part.Head, id, Hd, hk, hk, hk);
         int style = _hair[id];
-        for (int hp = (int)Part.HairShort; hp <= (int)Part.HairBun; hp++) Hide((Part)hp, id);
-        if (style == 1) Put(Part.HairShort, id, Hd, 0.985f, 0.95f, 0.985f);
-        else Put(HairOfStyle[style], id, Hd);
+        for (int hp = (int)Part.HairShort; hp <= (int)Part.HairQuiff; hp++) Hide((Part)hp, id);
+        // A buzz cut: the crop's shape hugging the skull.
+        if (style == 1) Put(Part.HairShort, id, Hd, 0.985f * hk, 0.95f * hk, 0.985f * hk);
+        else Put(HairOfStyle[style], id, Hd, hk, hk, hk);
 
         // Arms (left = +x local; swing + = forward). The shoulder moves with the arm.
         float armLen = (float)bs.ArmLen, armW = (float)bs.Arm, shoulder = (float)bs.Shoulder;

@@ -27,7 +27,7 @@ public static class Art
     // ---------------------------------------------------------------- portrait
 
     /// <summary>Little portrait in a 100 x 100 box: kit, skin, hair. Same palette as the 3D player.</summary>
-    public static void Avatar(CanvasItem ci, Rect2 r, int skin, int hair, int hairStyle, int shirt, int trim)
+    public static void Avatar(CanvasItem ci, Rect2 r, int skin, int hair, int hairStyle, int shirt, int trim, int beard = 0)
     {
         int sk = TeamData.SkinTones[Math.Clamp(skin, 0, TeamData.SkinTones.Length - 1)];
         int hc = TeamData.HairColors[Math.Clamp(hair, 0, TeamData.HairColors.Length - 1)];
@@ -66,11 +66,20 @@ public static class Art
         var eye = Px.Hex(0x1b1410);
         ci.DrawRect(new Rect2(r.Position + new Vector2(41.6f, 42.2f) * k, new Vector2(3.8f, 3.8f) * k), eye);
         ci.DrawRect(new Rect2(r.Position + new Vector2(54.6f, 42.2f) * k, new Vector2(3.8f, 3.8f) * k), eye);
+        // Facial hair, as on the pitch (Body.FacialHair): stubble, a beard, moustache and goatee.
+        var fh = beard == 1 ? new Color(h, 0.3f) : h;
+        if (beard == 1 || beard == 2)
+            Poly(ci, r, fh, 31, 46, 34, 56, 42, 63, 50, 65, 58, 63, 66, 56, 69, 46, 66, 50, 58, 57, 50, 58, 42, 57, 34, 50);
+        if (beard >= 2)
+            Poly(ci, r, fh, 42, 52, 50, 50.5f, 58, 52, 57, 53.5f, 50, 52.5f, 43, 53.5f);
+        if (beard == 3)
+            Poly(ci, r, fh, 45, 58, 55, 58, 54, 63.5f, 50, 64.5f, 46, 63.5f);
         ci.DrawRect(new Rect2(r.Position + new Vector2(45, 54) * k, new Vector2(10, 1.8f) * k), sd);
     }
 
     public static void Avatar(CanvasItem ci, Rect2 r, Card c, Kit kit) =>
-        Avatar(ci, r, c.Skin, c.Hair, c.HairStyle, c.Position == Pos.GK ? kit.GkShirt : kit.Shirt, c.Position == Pos.GK ? kit.GkShorts : kit.Shirt2);
+        Avatar(ci, r, c.Skin, c.Hair, c.HairStyle, c.Position == Pos.GK ? kit.GkShirt : kit.Shirt, c.Position == Pos.GK ? kit.GkShorts : kit.Shirt2,
+            GameNight.Sim.Body.FacialHair(c.Name));
 
     // ---------------------------------------------------------------- cards
 

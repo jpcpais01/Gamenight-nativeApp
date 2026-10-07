@@ -245,6 +245,14 @@ public partial class Main : Node
         if (Array.IndexOf(OS.GetCmdlineUserArgs(), "--pause") >= 0) _pause.Open();
     }
 
+    /// <summary>Debug: `-- --seed=N` plays the same quick match every launch.</summary>
+    static double? DebugSeed()
+    {
+        foreach (var arg in OS.GetCmdlineUserArgs())
+            if (arg.StartsWith("--seed=")) return double.Parse(arg[7..], System.Globalization.CultureInfo.InvariantCulture);
+        return null;
+    }
+
     /// <summary>A fresh match (first launch, or Restart from the pause menu).</summary>
     void NewMatch()
     {
@@ -260,7 +268,7 @@ public partial class Main : Node
         _autopilot = false;
         _pause.Autopilot = false;
         while (_skipGoals.TryDequeue(out _)) { }
-        _match = Request != null ? new Match(Request.Seed, Request.Setup) : new Match(seed: DateTime.Now.Ticks % 2147483647);
+        _match = Request != null ? new Match(Request.Seed, Request.Setup) : new Match(seed: DebugSeed() ?? DateTime.Now.Ticks % 2147483647);
         PickExplosions();
         if (Request?.Demo == true || Request?.Watch == true || _coach) _match.AutoPlay = true;
         _match.Versus = _versus && !_coach;

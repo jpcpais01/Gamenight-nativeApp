@@ -160,7 +160,7 @@ public sealed partial class BenchView
                     Paint(id, Part.Head, skin);
                     Paint(id, Part.HairShort, hair);
                     Paint(id, Part.HairCurly, hair);
-                    Paint(id, Part.HairBun, hair);
+                    Paint(id, Part.HairQuiff, hair);
                     Paint(id, Part.Boot, shoes);
 
                     // The case: black, or now and then a silver one.

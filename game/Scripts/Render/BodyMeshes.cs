@@ -6,13 +6,14 @@ namespace GameNight.Render;
 
 /// <summary>
 /// The footballer's parts, built exactly as the PWA builds them (players.ts buildGeometries):
-/// lathed torso, pelvis, limbs and shorts, a shaped head, three haircuts, hands, boots. The
+/// lathed torso, pelvis, limbs and shorts, a sculpted head (brow, nose, cheekbones, jaw, ears),
+/// three haircuts, hands, boots. The
 /// geometry helpers follow three.js's own (lathe, sphere, capsule, icosahedron) so the uv
 /// layouts the kit shader paints on are the same.
 /// </summary>
 public static class BodyMeshes
 {
-    public enum Part { Torso, Pelvis, Neck, Head, HairShort, HairCurly, HairBun, UpperArm, Forearm, Hand, ShortsLeg, Thigh, Shin, Boot }
+    public enum Part { Torso, Pelvis, Neck, Head, HairShort, HairCurly, HairQuiff, UpperArm, Forearm, Hand, ShortsLeg, Thigh, Shin, Boot }
     public const int PartCount = 14;
 
     /// <summary>A mesh under construction, in three.js's conventions (counter-clockwise front faces).</summary>
@@ -246,6 +247,23 @@ public static class BodyMeshes
         return g;
     }
 
+    static float Smooth(float e0, float e1, float x)
+    {
+        float t = Math.Clamp((x - e0) / (e1 - e0), 0, 1);
+        return t * t * (3 - 2 * t);
+    }
+
+    /// <summary>0..1 hump of y between a and b (smooth both ends).</summary>
+    static float Bump(float y, float a, float b) => MathF.Sin(MathF.PI * Math.Clamp((y - a) / (b - a), 0, 1));
+
+    /// <summary>A soft round bump centred at (cx, cy), radii (rx, ry).</summary>
+    static float Blob(float u, float v, float cx, float cy, float rx, float ry)
+    {
+        float dx = (u - cx) / rx, dy = (v - cy) / ry;
+        float d = dx * dx + dy * dy;
+        return d >= 1 ? 0 : (1 - d) * (1 - d);
+    }
+
     static Geo Cap(float r, float theta, float tilt) => Sphere(r, 18, 9, theta).RotateX(-tilt);
 
     /// <summary>The parts. `detail` below 1 for figures that are only ever a few pixels tall
@@ -261,29 +279,71 @@ public static class BodyMeshes
     {
         var m = new ArrayMesh[PartCount];
 
-        m[(int)Part.Torso] = Lathe(new[] { (0f, -0.01f), (0.138f, 0f), (0.15f, 0.07f), (0.157f, 0.17f), (0.17f, 0.3f), (0.186f, 0.42f), (0.19f, 0.5f), (0.172f, 0.565f), (0.12f, 0.605f), (0.066f, 0.625f), (0f, 0.63f) }, 18)
-            .Scale(1.2f, 1, 0.68f).Commit();
+        // Torso: an athlete's V, narrow at the waist, the chest and shoulder blades full, the
+        // shoulders rounding over and the trapezius sloping up to the neck.
+        var torso = Lathe(new[] { (0f, -0.01f), (0.138f, 0f), (0.146f, 0.08f), (0.152f, 0.17f), (0.168f, 0.29f), (0.185f, 0.41f), (0.19f, 0.49f), (0.176f, 0.55f), (0.135f, 0.592f), (0.075f, 0.622f), (0f, 0.63f) }, 18)
+            .Scale(1.1f, 1, 0.66f);
+        for (int i = 0; i < torso.P.Count; i++)
+        {
+            var p = torso.P[i];
+            float chest = Bump(p.Y, 0.3f, 0.52f);
+            // Pecs in front, lats and blades behind: the chest is deeper than the waist.
+            float z = p.Z * (1 + (p.Z > 0 ? 0.1f : 0.06f) * chest);
+            // The shoulders drop away from the neck.
+            float wide = Math.Clamp(MathF.Abs(p.X) / 0.2f, 0, 1);
+            float y = p.Y - 0.035f * wide * wide * Smooth(0.5f, 0.62f, p.Y);
+            torso.P[i] = new Vector3(p.X, y, z);
+        }
+        torso.SmoothNormals();
+        m[(int)Part.Torso] = torso.Commit();
         m[(int)Part.Pelvis] = Lathe(new[] { (0f, 0.08f), (0.148f, 0.07f), (0.158f, 0f), (0.165f, -0.08f), (0.168f, -0.13f), (0f, -0.14f) }, 16)
             .Scale(1.1f, 1, 0.8f).Commit();
-        m[(int)Part.Neck] = Lathe(new[] { (0f, -0.055f), (0.058f, -0.055f), (0.052f, 0.055f), (0f, 0.055f) }, 10).Translate(0, 0.04f, 0).Commit();
+        // Neck: flaring into the trapezius at the base.
+        m[(int)Part.Neck] = Lathe(new[] { (0f, -0.055f), (0.07f, -0.055f), (0.056f, -0.01f), (0.05f, 0.055f), (0f, 0.055f) }, 10).Scale(1, 1, 0.92f).Translate(0, 0.04f, 0).Commit();
 
-        // Head: a jaw and a slightly longer face.
-        var head = Sphere(0.104f, 16, 12);
+        // Head: sculpted, at a fixed resolution (it fills the frame in the close-ups): skull,
+        // brow ridge, eye sockets, nose, cheekbones, a jaw and chin, and the ears. Front = +z.
+        float keep = _detail;
+        _detail = 1;
+        var head = Sphere(0.104f, 20, 16);
+        var ear = Sphere(0.026f, 6, 5).Scale(0.45f, 1.25f, 0.85f);
+        _detail = keep;
         for (int i = 0; i < head.P.Count; i++)
         {
             var p = head.P[i];
             float x = p.X, y = p.Y, z = p.Z;
             if (y < 0)
             {
+                // Jaw: narrower and longer below the cheekbones, a squarer chin.
                 float k = -y / 0.104f;
-                x *= 1 - 0.18f * k;
-                z *= 1 - 0.08f * k;
-                y *= 1.12f;
+                x *= 1 - 0.2f * k * k + 0.06f * k;
+                z *= 1 - 0.1f * k;
+                y *= 1.14f;
             }
-            if (z > 0) z *= 1.04f;
+            if (z > 0)
+            {
+                z *= 1.04f;
+                float u = x / 0.094f, v = y / 0.104f;
+                float front = Smooth(0.35f, 0.85f, z / 0.104f);
+                // Nose: a ridge down the middle of the face, fullest at the tip.
+                float nose = Blob(u, v, 0, -0.12f, 0.17f, 0.3f) * front;
+                // Brow ridge over the eyes, the sockets set in under it.
+                float brow = Blob(u, v, 0, 0.25f, 0.75f, 0.1f) * front;
+                float socket = (Blob(u, v, 0.36f, 0.1f, 0.2f, 0.12f) + Blob(u, v, -0.36f, 0.1f, 0.2f, 0.12f)) * front;
+                // Cheekbones and the chin.
+                float cheek = (Blob(u, v, 0.55f, -0.05f, 0.22f, 0.18f) + Blob(u, v, -0.55f, -0.05f, 0.22f, 0.18f)) * front;
+                float chin = Blob(u, v, 0, -0.98f, 0.32f, 0.16f) * front;
+                z += 0.017f * nose + 0.006f * brow - 0.008f * socket + 0.004f * cheek + 0.006f * chin;
+            }
             head.P[i] = new Vector3(x * 0.9f, y * 1.06f, z);
         }
         head.SmoothNormals();
+        for (int sd = -1; sd <= 1; sd += 2)
+        {
+            var e = new Geo().Merge(ear);
+            e.Translate(sd * 0.091f, 0.002f, -0.006f);
+            head.Merge(e);
+        }
         m[(int)Part.Head] = head.Translate(0, 0.13f, 0.008f).Commit();
 
         m[(int)Part.HairShort] = Cap(0.112f, MathF.PI * 0.56f, 0.32f).Scale(0.93f, 1.07f, 1.06f).Translate(0, 0.142f, -0.006f).Commit();
@@ -293,18 +353,20 @@ public static class BodyMeshes
             p *= n;
             return new Vector3(p.X * 0.95f, p.Y * 0.95f, p.Z);
         }).Translate(0, 0.165f, -0.015f).Commit();
-        m[(int)Part.HairBun] = Cap(0.112f, MathF.PI * 0.55f, 0.38f).Scale(0.93f, 1.06f, 1.06f).Translate(0, 0.142f, -0.006f)
-            .Merge(Sphere(0.048f, 10, 8).Translate(0, 0.235f, -0.07f)).Commit();
+        // Swept quiff: a short back and sides, the front brushed up and over.
+        m[(int)Part.HairQuiff] = Cap(0.11f, MathF.PI * 0.56f, 0.34f).Scale(0.94f, 1.05f, 1.05f).Translate(0, 0.142f, -0.008f)
+            .Merge(Sphere(0.062f, 10, 7).Scale(1.05f, 0.62f, 1.1f).RotateX(-0.35f).Translate(0, 0.228f, 0.035f)).Commit();
 
         // Arm: sleeve on top (uv.y < ~0.5), skin below; uv.y = 0 at the shoulder.
-        m[(int)Part.UpperArm] = Lathe(new[] { (0f, 0.03f), (0.06f, 0.02f), (0.068f, -0.04f), (0.066f, -0.12f), (0.067f, -0.155f), (0.05f, -0.17f), (0.05f, -0.22f), (0.044f, -0.29f), (0f, -0.31f) }, 12).Commit();
+        // (The deltoid rounds the top; the biceps shows below the sleeve.)
+        m[(int)Part.UpperArm] = Lathe(new[] { (0f, 0.035f), (0.062f, 0.022f), (0.07f, -0.035f), (0.067f, -0.11f), (0.068f, -0.155f), (0.053f, -0.17f), (0.055f, -0.205f), (0.046f, -0.285f), (0f, -0.31f) }, 12).Commit();
         // Forearm to the wrist; uv.y > ~0.85 is the wrist (keepers' glove cuffs).
-        m[(int)Part.Forearm] = Lathe(new[] { (0f, 0.02f), (0.044f, 0f), (0.046f, -0.06f), (0.037f, -0.2f), (0.03f, -0.24f), (0f, -0.255f) }, 10).Scale(1, 1, 0.85f).Commit();
+        m[(int)Part.Forearm] = Lathe(new[] { (0f, 0.02f), (0.046f, 0f), (0.05f, -0.055f), (0.038f, -0.19f), (0.031f, -0.24f), (0f, -0.255f) }, 10).Scale(1, 1, 0.85f).Commit();
         // Hand: a relaxed palm, fingers together, a thumb; origin at the wrist, thumb forward.
         var palm = Sphere(0.042f, 8, 6).Scale(0.62f, 1.05f, 1).Translate(0, -0.045f, 0.004f);
         var fingers = Capsule(0.024f, 0.045f, 2, 6).Scale(0.95f, 1, 1.45f).RotateX(0.25f).Translate(0, -0.1f, 0.012f);
         var thumb = Capsule(0.012f, 0.035f, 1, 5).RotateX(0.5f).Translate(0, -0.05f, 0.04f);
-        m[(int)Part.Hand] = palm.Merge(fingers).Merge(thumb).Commit();
+        m[(int)Part.Hand] = palm.Merge(fingers).Merge(thumb).Scale(1.1f, 1.08f, 1.1f).Commit();
         // Shorts leg: an open tube (drawn double-sided).
         m[(int)Part.ShortsLeg] = Lathe(new[] { (0.092f, 0.05f), (0.098f, -0.06f), (0.104f, -0.16f), (0.107f, -0.215f) }, 14).Commit();
         m[(int)Part.Thigh] = Lathe(new[] { (0f, 0.02f), (0.074f, 0f), (0.078f, -0.1f), (0.07f, -0.25f), (0.056f, -0.39f), (0.05f, -0.44f), (0f, -0.46f) }, 12).Commit();

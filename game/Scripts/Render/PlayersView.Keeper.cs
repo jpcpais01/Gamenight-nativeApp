@@ -28,7 +28,7 @@ public sealed partial class PlayersView
         float raise = MathF.Acos(Clamp(MathF.Cos(swing) * MathF.Cos(outA), -1, 1));
         float elev = Smooth(1.1f, 2.9f, raise);
         float protract = 0.028f * MathF.Sin(Clamp(swing, -1.5f, 1.5f)) * (1 - 0.5f * elev);
-        j1 = Chain(C, sideSign * (0.198f * shoulder - 0.014f * elev), 0.5f * torsoL + 0.045f * elev, protract, -swing, 0, sideSign * outA);
+        j1 = Chain(C, sideSign * (0.184f * shoulder - 0.014f * elev), 0.5f * torsoL + 0.045f * elev, protract, -swing, 0, sideSign * outA);
         j2 = Chain(j1, 0, -0.29f * armLen, 0, -elbow, sideSign * rot, 0);
     }
 

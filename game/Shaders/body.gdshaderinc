@@ -7,7 +7,8 @@
 
 uniform int part = 0;
 // Per player (linear colours): torso a = trim + number, b = number colour + pattern;
-// sleeve a = trim + captain's band, b = skin; forearm a = cuff; shorts, shin, boot a = trim.
+// sleeve a = trim + captain's band, b = skin; forearm a = cuff; shorts, shin, boot a = trim;
+// head a = hair colour + facial hair (0 none, 1 stubble, 2 beard, 3 moustache and goatee).
 uniform vec4 ka[22];
 uniform vec4 kb[22];
 
@@ -15,6 +16,8 @@ uniform vec4 kb[22];
 
 varying vec3 base;
 varying vec3 wpos;
+// The part's own (mesh) position: the face is painted by where things are on the skull.
+varying vec3 lp;
 varying flat int pid;
 
 mat3 bendRot(vec3 a) {
@@ -52,6 +55,7 @@ void vertex() {
 		NORMAL = toeRot(NORMAL, a);
 	}
 	wpos = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	lp = VERTEX;
 }
 
 float band(float x, float a, float b) { return step(a, x) * step(x, b); }
@@ -113,21 +117,48 @@ void fragment() {
 		float fold = 0.04 * sin(u * 60.0 + v * 9.0) * (1.0 - smoothstep(0.0, 0.25, v));
 		c *= 1.0 - fold - 0.06 * (1.0 - smoothstep(0.0, 0.08, v));
 	} else if (part == 2) {
-		// A calm face: brows, eyes, a hint of nose and mouth. The front is u = 0.25.
-		vec2 f = vec2((u - 0.25) * 4.0, v);
+		// The face, painted over the sculpted head (BodyMeshes): (fu, fv) across and up the
+		// face in head widths from its centre, fr = how far round to the front.
 		vec3 skin = c;
-		float eyes = blob(vec2(abs(f.x), f.y), vec2(0.17, 0.535), vec2(0.045, 0.022));
-		float brows = blob(vec2(abs(f.x), f.y), vec2(0.18, 0.6), vec2(0.07, 0.012));
-		float mouth = blob(f, vec2(0.0, 0.395), vec2(0.08, 0.008));
-		float nose = blob(f, vec2(0.0, 0.47), vec2(0.03, 0.05));
-		float cheek = blob(vec2(abs(f.x), f.y), vec2(0.27, 0.45), vec2(0.08, 0.06));
-		c *= 1.0 - nose * 0.12;
-		c = mix(c, skin * vec3(1.05, 0.92, 0.9), cheek * 0.25);
-		c = mix(c, skin * 0.45, brows * 0.85);
-		c = mix(c, vec3(0.08, 0.06, 0.05), eyes * 0.9);
-		c = mix(c, skin * vec3(0.7, 0.5, 0.48), mouth * 0.7);
-		float ear = blob(vec2(abs(u - 0.5), v), vec2(0.25, 0.5), vec2(0.04, 0.06));
-		c *= 1.0 - ear * 0.15;
+		vec4 hd = ka[pid];
+		vec3 hair = hd.rgb;
+		vec3 q = lp - vec3(0.0, 0.13, 0.008);
+		float fu = q.x / 0.094, fv = q.y / 0.104;
+		float ax = abs(fu);
+		float fr = smoothstep(0.25, 0.6, q.z / 0.104);
+		vec2 h = vec2(ax, fv);
+		// Shade in the sockets under the brow, under the nose and the lower lip, round the jaw.
+		c *= 1.0 - 0.13 * blob(h, vec2(0.36, 0.11), vec2(0.22, 0.14)) * fr;
+		c *= 1.0 - 0.28 * blob(h, vec2(0.0, -0.235), vec2(0.16, 0.045)) * fr;
+		c *= 1.0 - 0.15 * blob(h, vec2(0.0, -0.56), vec2(0.2, 0.05)) * fr;
+		// Eyes: the white, a dark iris looking ahead, the line of the upper lid.
+		float white = blob(h, vec2(0.36, 0.1), vec2(0.14, 0.06));
+		float iris = blob(h, vec2(0.345, 0.095), vec2(0.065, 0.065));
+		float lid = blob(h, vec2(0.36, 0.15), vec2(0.16, 0.028));
+		c = mix(c, mix(skin, vec3(0.92, 0.9, 0.86), 0.7), white * fr);
+		c = mix(c, vec3(0.06, 0.045, 0.035), iris * fr);
+		c = mix(c, skin * 0.3, lid * 0.85 * fr);
+		// Brows in his hair colour, lifting a little toward the outside.
+		float brow = blob(vec2(ax, fv - (ax - 0.36) * 0.18), vec2(0.37, 0.25), vec2(0.2, 0.045));
+		c = mix(c, mix(hair, skin * 0.4, 0.25), brow * 0.92 * fr);
+		// Lips: a touch redder and darker than the skin, a line where they meet.
+		float lips = blob(vec2(fu, fv), vec2(0.0, -0.45), vec2(0.27, 0.07));
+		float line = blob(vec2(fu, fv), vec2(0.0, -0.443), vec2(0.25, 0.018));
+		c = mix(c, skin * vec3(0.8, 0.56, 0.53), lips * 0.65 * fr);
+		c = mix(c, skin * 0.32, line * 0.85 * fr);
+		// Sideburns, by the ears.
+		float side = blob(h, vec2(0.93, 0.13), vec2(0.13, 0.26)) * step(-0.02, q.z);
+		// Facial hair.
+		float grain = 0.8 + 0.2 * fract(sin(dot(floor(lp * 260.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+		float jaw = smoothstep(-0.16, -0.34, fv) * (1.0 - smoothstep(0.9, 1.02, ax)) * smoothstep(-0.25, 0.15, q.z / 0.104);
+		float stache = blob(vec2(fu, fv), vec2(0.0, -0.35), vec2(0.3, 0.055));
+		float goatee = blob(vec2(fu, fv), vec2(0.0, -0.8), vec2(0.17, 0.2));
+		float fh = hd.a;
+		float amt = fh < 0.5 ? 0.0
+			: fh < 1.5 ? 0.38 * max(jaw, stache * 0.8)
+			: fh < 2.5 ? 0.92 * max(max(jaw, stache), side) * (1.0 - lips * 0.85)
+			: 0.92 * max(stache, goatee * (1.0 - lips));
+		c = mix(c, hair * grain, clamp(max(amt, side * 0.85), 0.0, 1.0));
 	} else if (part == 3) {
 		vec4 a = ka[pid];
 		c = mix(c, a.rgb, band(v, 0.43, 0.5));

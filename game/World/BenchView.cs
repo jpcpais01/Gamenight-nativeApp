@@ -38,7 +38,7 @@ public sealed partial class BenchView
     // The same tables as PlayersView: instances per player, shader part kinds.
     static readonly int[] PerPlayer = { 1, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2 };
     static readonly int[] ShaderPart = { 1, 0, 0, 2, 0, 0, 0, 3, 4, 0, 5, 6, 7, 8 };
-    static readonly Part[] HairOfStyle = { Part.HairShort, Part.HairShort, Part.HairCurly, Part.HairBun };
+    static readonly Part[] HairOfStyle = { Part.HairShort, Part.HairShort, Part.HairCurly, Part.HairQuiff };
     const int Stride = 20;
 
     // The pose's smoothed shape: seat thighs, feet (+1 forward, -1 tucked), legs apart, knees
@@ -275,9 +275,10 @@ public sealed partial class BenchView
         ka[(int)Part.Shin][id] = Lin4(sockTrim, 0);
         Set(Part.Neck, skin);
         Set(Part.Head, skin);
+        ka[(int)Part.Head][id] = Lin4(hair, 0);
         Set(Part.HairShort, hair);
         Set(Part.HairCurly, hair);
-        Set(Part.HairBun, hair);
+        Set(Part.HairQuiff, hair);
         Set(Part.Boot, boot);
         ka[(int)Part.Boot][id] = Lin4(sole, 0);
     }

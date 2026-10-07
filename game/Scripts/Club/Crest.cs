@@ -82,7 +82,7 @@ public sealed class Coach
 
     public static readonly int[] Skins = { 0xf1c9a5, 0xe0ac7e, 0xd9a77c, 0xc68a5c, 0x8d5a3b, 0x5e3a24 };
     public static readonly int[] Hairs = { 0x1b1410, 0x4a3324, 0x8a5a2e, 0xc9a25a, 0x8f8f8f, 0xd6d3cc, -1 };
-    public static readonly (int style, string name)[] HairStyles = { (0, "Short"), (2, "Curly"), (3, "Bun") };
+    public static readonly (int style, string name)[] HairStyles = { (0, "Short"), (2, "Curly"), (3, "Quiff") };
     public static readonly string[] Builds = { "Slim", "Average", "Heavy" };
     public static readonly string[] StyleNames = { "Suit", "Coat & scarf", "Tracksuit", "Puffer" };
     public static readonly (string name, string about)[] Tempers =
