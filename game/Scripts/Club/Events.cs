@@ -13,6 +13,9 @@ public sealed class EventDef
     public int Trim, Accent, Ink;
     /// <summary>Points added to every stat.</summary>
     public int Boost = 4;
+    /// <summary>An epic set: a premium finish (double gold frame, corner gems, foil), and every
+    /// card in its pack wears it.</summary>
+    public bool Epic;
 }
 
 public static class Events
@@ -54,9 +57,36 @@ public static class Events
             Id = "dragon", Name = "Dragon New Year", Label = "DRAGON",
             Face = new[] { 0xe8382c, 0xcc2220, 0xac1616, 0x8a0e12, 0x620a0c }, Trim = 0xffd447, Accent = 0xffeaa0, Ink = 0xfff4d0,
         },
+        // The epic sets.
+        new EventDef
+        {
+            Id = "royal", Name = "Crown Jewels", Label = "CROWN JEWELS", Epic = true, Boost = 6,
+            Face = new[] { 0x3448c4, 0x2434a0, 0x18247e, 0x111a62, 0x0b1046 }, Trim = 0xffd447, Accent = 0xff4a6a, Ink = 0xfff6dc,
+        },
+        new EventDef
+        {
+            Id = "shogun", Name = "Shogun", Label = "SHOGUN", Epic = true, Boost = 6,
+            Face = new[] { 0x34181c, 0x241014, 0x180a0e, 0x221014, 0x341418 }, Trim = 0xe8c060, Accent = 0xff3a3a, Ink = 0xfff2e6,
+        },
+        new EventDef
+        {
+            Id = "pharaoh", Name = "Pharaoh", Label = "PHARAOH", Epic = true, Boost = 6,
+            Face = new[] { 0xfff0b8, 0xf6d270, 0xe0ac40, 0xc08424, 0x8e5a14 }, Trim = 0x1e44b0, Accent = 0x23b6a6, Ink = 0x1a1030,
+        },
+        new EventDef
+        {
+            Id = "thunder", Name = "Thunder God", Label = "THUNDER GOD", Epic = true, Boost = 6,
+            Face = new[] { 0x40406a, 0x2e2e52, 0x20203e, 0x16162e, 0x0e0e20 }, Trim = 0xffe84a, Accent = 0xa88aff, Ink = 0xf4f6ff,
+        },
+        new EventDef
+        {
+            Id = "atlantis", Name = "Atlantis", Label = "ATLANTIS", Epic = true, Boost = 6,
+            Face = new[] { 0x2ee6d2, 0x14b2b8, 0x0a8098, 0x0a5674, 0x06304c }, Trim = 0xc8fff6, Accent = 0xffd447, Ink = 0xf0ffff,
+        },
     };
 
-    public static EventDef Of(Card c) => c?.Event == null ? null : Array.Find(All, e => e.Id == c.Event);
+    public static EventDef Of(Card c) => c?.Event == null ? null : Of(c.Event);
+    public static EventDef Of(string id) => Array.Find(All, e => e.Id == id);
 
     /// <summary>Turn a freshly drawn card into an event card: the theme, and every stat lifted.</summary>
     public static Card Make(Card c, EventDef e)

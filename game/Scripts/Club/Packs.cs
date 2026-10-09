@@ -34,6 +34,7 @@ public static class Packs
 {
     // Declared before All: static fields initialise in order.
     static readonly double[] EventOdds = { 0, 20, 50, 24, 6 };
+    static readonly double[] EpicOdds = { 0, 0, 68, 25, 7 };
 
     public static readonly PackDef[] All =
     {
@@ -62,6 +63,12 @@ public static class Packs
         new PackDef { Id = "ev-inferno", Name = "Inferno", Tagline = "4 players · cards forged in fire", Price = 30000, Cards = 4, Odds = EventOdds, Guarantee = Rarity.Epic, Colors = new[] { 0xff5a1a, 0x1a0a08, 0xffd23a }, Emblem = "INFERNO", Mark = "", Event = "inferno" },
         new PackDef { Id = "ev-neon", Name = "Neon City", Tagline = "4 players · synthwave cards", Price = 30000, Cards = 4, Odds = EventOdds, Guarantee = Rarity.Epic, Colors = new[] { 0xff3ad8, 0x14062e, 0x2ef2ff }, Emblem = "NEON", Mark = "", Event = "neon" },
         new PackDef { Id = "ev-dragon", Name = "Dragon New Year", Tagline = "4 players · lunar new year cards", Price = 30000, Cards = 4, Odds = EventOdds, Guarantee = Rarity.Epic, Colors = new[] { 0xcc2220, 0x600808, 0xffd447 }, Emblem = "DRAGON", Mark = "", Event = "dragon" },
+        // Epic sets: three cards, every one Epic or better and every one in the set's finish.
+        new PackDef { Id = "set-royal", Name = "Crown Jewels", Tagline = "3 epic+ players · all in the set", Price = 60000, Cards = 3, Odds = EpicOdds, Guarantee = Rarity.Epic, Colors = new[] { 0x2434a0, 0x0b1046, 0xffd447 }, Emblem = "ROYAL", Mark = "", Event = "royal" },
+        new PackDef { Id = "set-shogun", Name = "Shogun", Tagline = "3 epic+ players · all in the set", Price = 60000, Cards = 3, Odds = EpicOdds, Guarantee = Rarity.Epic, Colors = new[] { 0xc81e2a, 0x180a0e, 0xe8c060 }, Emblem = "SHOGUN", Mark = "", Event = "shogun" },
+        new PackDef { Id = "set-pharaoh", Name = "Pharaoh", Tagline = "3 epic+ players · all in the set", Price = 60000, Cards = 3, Odds = EpicOdds, Guarantee = Rarity.Epic, Colors = new[] { 0xe0ac40, 0x1e2c70, 0xfff0b8 }, Emblem = "PHARAOH", Mark = "", Event = "pharaoh" },
+        new PackDef { Id = "set-thunder", Name = "Thunder God", Tagline = "3 epic+ players · all in the set", Price = 60000, Cards = 3, Odds = EpicOdds, Guarantee = Rarity.Epic, Colors = new[] { 0x5a4ad8, 0x0e0e20, 0xffe84a }, Emblem = "THUNDER", Mark = "", Event = "thunder" },
+        new PackDef { Id = "set-atlantis", Name = "Atlantis", Tagline = "3 epic+ players · all in the set", Price = 60000, Cards = 3, Odds = EpicOdds, Guarantee = Rarity.Epic, Colors = new[] { 0x14b2b8, 0x06304c, 0xc8fff6 }, Emblem = "ATLANTIS", Mark = "", Event = "atlantis" },
     };
 
     static Rarity Roll(Rng rng, double[] odds)
@@ -112,7 +119,7 @@ public static class Packs
             for (int i = 1; i < cards.Count; i++)
                 if (cards[i].Rarity > cards[best].Rarity || cards[i].Rarity == cards[best].Rarity && cards[i].Overall > cards[best].Overall) best = i;
             for (int i = 0; i < cards.Count; i++)
-                if (i == best || rng.Next() < 0.4) Events.Make(cards[i], ev);
+                if (ev.Epic || i == best || rng.Next() < 0.4) Events.Make(cards[i], ev);
         }
         cards.Sort((a, b) => a.Rarity != b.Rarity ? a.Rarity.CompareTo(b.Rarity) : (a.Event != null) != (b.Event != null) ? (a.Event != null).CompareTo(b.Event != null) : a.Overall.CompareTo(b.Overall));
         return cards;

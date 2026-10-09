@@ -132,6 +132,12 @@ public static class Art
         ["inferno"] = new[] { 0, 0.11f, 0.06f, 0.04f, 0.1f, 0.08f, 0.17f, 0.01f, 0.25f, 0.075f, 0.33f, 0.02f, 0.42f, 0.06f, 0.5f, 0, 0.58f, 0.06f, 0.67f, 0.02f, 0.75f, 0.075f, 0.83f, 0.01f, 0.9f, 0.08f, 0.94f, 0.04f, 1, 0.11f, 1, 0.86f, 0.5f, 1, 0, 0.86f },
         // Chamfered corners and a notch, like a neon sign.
         ["neon"] = new[] { 0.09f, 0, 0.38f, 0, 0.42f, 0.03f, 0.58f, 0.03f, 0.62f, 0, 0.91f, 0, 1, 0.065f, 1, 0.9f, 0.88f, 0.97f, 0.12f, 0.97f, 0, 0.9f, 0, 0.065f },
+        // Epic sets: a crown; a kabuto crest; a stepped pyramid; lightning-cut sides; a wave crest.
+        ["royal"] = new[] { 0, 0.1f, 0.11f, 0.1f, 0.16f, 0.025f, 0.23f, 0.075f, 0.33f, 0.012f, 0.42f, 0.065f, 0.5f, 0, 0.58f, 0.065f, 0.67f, 0.012f, 0.77f, 0.075f, 0.84f, 0.025f, 0.89f, 0.1f, 1, 0.1f, 1, 0.86f, 0.5f, 1, 0, 0.86f },
+        ["shogun"] = new[] { 0, 0.1f, 0.1f, 0.05f, 0.3f, 0.05f, 0.37f, 0, 0.45f, 0.04f, 0.5f, 0.025f, 0.55f, 0.04f, 0.63f, 0, 0.7f, 0.05f, 0.9f, 0.05f, 1, 0.1f, 1, 0.87f, 0.92f, 0.92f, 0.5f, 1, 0.08f, 0.92f, 0, 0.87f },
+        ["pharaoh"] = new[] { 0, 0.12f, 0.12f, 0.12f, 0.12f, 0.08f, 0.24f, 0.08f, 0.24f, 0.045f, 0.36f, 0.045f, 0.36f, 0.015f, 0.5f, 0, 0.64f, 0.015f, 0.64f, 0.045f, 0.76f, 0.045f, 0.76f, 0.08f, 0.88f, 0.08f, 0.88f, 0.12f, 1, 0.12f, 1, 0.88f, 0.5f, 1, 0, 0.88f },
+        ["thunder"] = new[] { 0.06f, 0, 0.94f, 0, 1, 0.05f, 1, 0.3f, 0.965f, 0.34f, 1, 0.38f, 1, 0.6f, 0.965f, 0.64f, 1, 0.68f, 1, 0.86f, 0.5f, 1, 0, 0.86f, 0, 0.68f, 0.035f, 0.64f, 0, 0.6f, 0, 0.38f, 0.035f, 0.34f, 0, 0.3f, 0, 0.05f },
+        ["atlantis"] = new[] { 0, 0.08f, 0.05f, 0.04f, 0.12f, 0.025f, 0.2f, 0.04f, 0.25f, 0.07f, 0.3f, 0.04f, 0.38f, 0.015f, 0.46f, 0.03f, 0.5f, 0.055f, 0.54f, 0.03f, 0.62f, 0.015f, 0.7f, 0.04f, 0.75f, 0.07f, 0.8f, 0.04f, 0.88f, 0.025f, 0.95f, 0.04f, 1, 0.08f, 1, 0.86f, 0.5f, 1, 0, 0.86f },
         // A pagoda roof with upturned eaves.
         ["dragon"] = new[] { 0, 0.03f, 0.08f, 0.075f, 0.3f, 0.06f, 0.5f, 0, 0.7f, 0.06f, 0.92f, 0.075f, 1, 0.03f, 1, 0.86f, 0.5f, 1, 0, 0.86f },
     };
@@ -291,6 +297,7 @@ public static class Art
         Array.Copy(line, closed, line.Length);
         closed[^1] = line[0];
         ci.DrawPolyline(closed, new Color(tier == 3 && ev == null ? acc : trim, tier >= 2 || ev != null ? 0.85f : 0.45f), Mathf.Max(1, u * 0.12f));
+        if (ev?.Epic == true) EpicFrame(ci, ir, outline, shape, U, u, trim, acc);
 
         var ink = ev != null ? Px.Hex(ev.Ink) : CardInk(c.Rarity);
         // The portrait, on a soft halo.
@@ -446,6 +453,44 @@ public static class Art
                 for (int i = 0; i < 3; i++) ci.DrawRect(new Rect2(c.X - s, c.Y - s * 0.05f + i * s * 0.22f, s * 2, Mathf.Max(1, s * 0.07f + i * s * 0.03f)), dark);
                 ci.DrawRect(new Rect2(c.X - s * 1.2f, c.Y + s * 0.7f, s * 2.4f, Mathf.Max(1, u * 0.25f)), light);
                 for (int i = -2; i <= 2; i++) ci.DrawLine(c + new Vector2(i * s * 0.25f, s * 0.7f), c + new Vector2(i * s * 0.6f, s * 1.15f), light, Mathf.Max(1, u * 0.15f));
+                break;
+            }
+            case "royal":
+            {
+                var gold = Px.Hex(0xffd447);
+                ci.DrawColoredPolygon(new[] { c + new Vector2(-s, s * 0.5f), c + new Vector2(-s, -s * 0.55f), c + new Vector2(-s * 0.5f, -s * 0.05f), c + new Vector2(0, -s * 0.85f), c + new Vector2(s * 0.5f, -s * 0.05f), c + new Vector2(s, -s * 0.55f), c + new Vector2(s, s * 0.5f) }, gold);
+                ci.DrawRect(new Rect2(c.X - s, c.Y + s * 0.5f, s * 2, s * 0.3f), gold.Darkened(0.25f));
+                foreach (var (x, col) in new[] { (-0.55f, 0xff4a6a), (0f, 0x4aa3ff), (0.55f, 0x3ad87a) })
+                    ci.DrawColoredPolygon(Px.Ellipse(c + new Vector2(x * s, s * 0.2f), s * 0.14f, s * 0.14f, 8), Px.Hex(col));
+                break;
+            }
+            case "shogun":
+                ci.DrawColoredPolygon(Px.Ellipse(c, s * 0.85f, s * 0.85f, 22), Px.Hex(0xff3a3a));
+                ci.DrawLine(c + new Vector2(-s * 1.2f, s * 0.9f), c + new Vector2(s * 1.2f, -s * 0.9f), Px.Hex(0xe8eef4), Mathf.Max(2, u * 0.3f));
+                ci.DrawLine(c + new Vector2(-s * 1.2f, s * 0.9f), c + new Vector2(-s * 0.75f, s * 0.56f), Px.Hex(0xe8c060), Mathf.Max(3, u * 0.5f));
+                break;
+            case "pharaoh":
+            {
+                ci.DrawColoredPolygon(new[] { c + new Vector2(0, -s), c + new Vector2(s * 1.1f, s * 0.8f), c + new Vector2(-s * 1.1f, s * 0.8f) }, Px.Hex(0xe0ac40));
+                ci.DrawColoredPolygon(new[] { c + new Vector2(0, -s), c + new Vector2(s * 1.1f, s * 0.8f), c + new Vector2(s * 0.2f, s * 0.8f) }, Px.Hex(0xb37a1e));
+                ci.DrawColoredPolygon(Px.Ellipse(c + new Vector2(0, s * 0.15f), s * 0.42f, s * 0.2f, 12), Colors.White);
+                ci.DrawColoredPolygon(Px.Ellipse(c + new Vector2(0, s * 0.15f), s * 0.14f, s * 0.16f, 10), Px.Hex(0x1e44b0));
+                break;
+            }
+            case "thunder":
+                ci.DrawColoredPolygon(new[] { c + new Vector2(s * 0.2f, -s * 1.15f), c + new Vector2(-s * 0.6f, s * 0.1f), c + new Vector2(-s * 0.05f, s * 0.1f), c + new Vector2(-s * 0.3f, s * 1.15f), c + new Vector2(s * 0.6f, -s * 0.2f), c + new Vector2(s * 0.05f, -s * 0.2f) }, Px.Hex(0xffe84a));
+                break;
+            case "atlantis":
+            {
+                var gold = Px.Hex(0xffd447);
+                float w = Mathf.Max(2, u * 0.3f);
+                ci.DrawLine(c + new Vector2(0, s * 1.15f), c + new Vector2(0, -s * 0.9f), gold, w);
+                ci.DrawLine(c + new Vector2(-s * 0.6f, -s * 0.35f), c + new Vector2(s * 0.6f, -s * 0.35f), gold, w);
+                foreach (float x in new[] { -0.6f, 0f, 0.6f })
+                {
+                    ci.DrawLine(c + new Vector2(x * s, -s * 0.35f), c + new Vector2(x * s, -s * 0.9f), gold, w);
+                    ci.DrawColoredPolygon(new[] { c + new Vector2(x * s - w, -s * 0.85f), c + new Vector2(x * s, -s * 1.2f), c + new Vector2(x * s + w, -s * 0.85f) }, gold);
+                }
                 break;
             }
             case "dragon":
@@ -661,6 +706,189 @@ public static class Art
                 }
                 break;
             }
+            case "royal":
+            {
+                // Velvet damask, a small crown over the halo, jewels, and an ermine hem.
+                for (float d = -14; d < 14; d += 1.4f)
+                {
+                    Bar(U(d, 0), U(d + 14, 14), lw, new Color(trim, 0.09f));
+                    Bar(U(d + 14, 0), U(d, 14), lw, new Color(trim, 0.09f));
+                }
+                for (int i = 0; i < 20; i++)
+                {
+                    var c = U((i % 5) * 2.0f + ((i / 5) % 2) * 1.0f + 0.5f, 1.2f + (i / 5) * 3.1f);
+                    float w = u * 0.22f;
+                    Clip(ci, new[] { c + new Vector2(0, -w), c + new Vector2(w, 0), c + new Vector2(0, w), c + new Vector2(-w, 0) }, shape, new Color(trim, 0.22f));
+                }
+                Clip(ci, Px.Ellipse(U(6.5f, 4.9f), u * 3.3f, u * 3.3f, 26), shape, new Color(1, 0.9f, 0.55f, 0.13f));
+                var cr = U(6.5f, 1.25f);
+                float k = u * 0.55f;
+                Clip(ci, new[] { cr + new Vector2(-k * 1.4f, k * 0.6f), cr + new Vector2(-k * 1.4f, -k * 0.5f), cr + new Vector2(-k * 0.7f, 0), cr + new Vector2(0, -k * 0.9f), cr + new Vector2(k * 0.7f, 0), cr + new Vector2(k * 1.4f, -k * 0.5f), cr + new Vector2(k * 1.4f, k * 0.6f) }, shape, trim);
+                foreach (var (x, y, col) in new[] { (0.9f, 9.3f, 0xff4a6a), (9.1f, 9.3f, 0x3ad87a), (0.9f, 12.0f, 0x4aa3ff), (9.1f, 12.0f, 0xff4a6a) })
+                {
+                    var g = U(x, y);
+                    float w = u * 0.36f;
+                    Clip(ci, new[] { g + new Vector2(0, -w * 1.2f), g + new Vector2(w, 0), g + new Vector2(0, w * 1.2f), g + new Vector2(-w, 0) }, shape, Px.Hex(col));
+                    Clip(ci, new[] { g + new Vector2(0, -w * 1.2f), g + new Vector2(w * 0.5f, -w * 0.3f), g + new Vector2(-w * 0.5f, -w * 0.3f) }, shape, new Color(1, 1, 1, 0.6f));
+                }
+                Clip(ci, Quad(U(0, 13.1f).X, U(0, 13.1f).Y, U(10, 13.1f).X, U(0, 14).Y), shape, Px.Hex(0xf6f2e8));
+                for (int i = 0; i < 9; i++) Clip(ci, Quad(U(0.6f + i * 1.1f, 13.4f).X, U(0, 13.4f).Y, U(0.85f + i * 1.1f, 13.4f).X, U(0, 13.75f).Y), shape, Px.Hex(0x14121c));
+                break;
+            }
+            case "shogun":
+            {
+                // A red rising sun behind him, a seigaiha wave sea at the foot, blossom, a blade.
+                var sun = U(6.5f, 4.9f);
+                Clip(ci, Px.Ellipse(sun, u * 3.0f, u * 3.0f, 30), shape, new Color(acc, 0.85f));
+                for (int i = 0; i < 16; i++)
+                {
+                    float a0 = i * Mathf.Tau / 16, a1 = a0 + Mathf.Tau / 40;
+                    Clip(ci, new[] { sun, sun + new Vector2(Mathf.Cos(a0), Mathf.Sin(a0)) * u * 14, sun + new Vector2(Mathf.Cos(a1), Mathf.Sin(a1)) * u * 14 }, shape, new Color(acc, 0.13f));
+                }
+                for (int row = 0; row < 3; row++)
+                    for (int col = 0; col < 7; col++)
+                    {
+                        var c = U(col * 1.6f + (row % 2) * 0.8f, 12.0f + row * 0.7f);
+                        for (int ring = 3; ring >= 1; ring--)
+                            Clip(ci, Px.Ellipse(c, u * 0.27f * ring, u * 0.27f * ring, 14), shape, ring % 2 == 1 ? new Color(trim, 0.32f) : Px.Hex(0x180a0e));
+                    }
+                foreach (var (x, y, sz) in new[] { (1.2f, 1.0f, 0.42f), (2.6f, 0.6f, 0.3f), (8.9f, 8.6f, 0.38f), (1.0f, 8.9f, 0.3f), (9.2f, 1.6f, 0.26f) })
+                {
+                    var c = U(x, y);
+                    for (int i = 0; i < 5; i++)
+                    {
+                        float a = i * Mathf.Tau / 5 - Mathf.Pi / 2;
+                        Clip(ci, Px.Ellipse(c + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * u * sz * 0.7f, u * sz * 0.55f, u * sz * 0.55f, 8), shape, Px.Hex(0xffb3c8));
+                    }
+                    Clip(ci, Px.Ellipse(c, u * sz * 0.3f, u * sz * 0.3f, 8), shape, Px.Hex(0xffe08a));
+                }
+                Bar(U(0.4f, 11.6f), U(9.6f, 9.4f), Mathf.Max(1, u * 0.14f), new Color(Px.Hex(0xe8eef4), 0.55f));
+                Bar(U(0.2f, 11.65f), U(1.6f, 11.3f), Mathf.Max(2, u * 0.28f), new Color(trim, 0.85f));
+                break;
+            }
+            case "pharaoh":
+            {
+                // Lapis nemes stripes down the sides, a sun disc with rays, a pyramid, a glyph frieze.
+                foreach (float x0 in new[] { 0f, 9.45f })
+                    for (int i = 0; i < 9; i++)
+                        Clip(ci, Quad(U(x0, 1.6f + i * 1.25f).X, U(0, 1.6f + i * 1.25f).Y, U(x0 + 0.55f, 0).X, U(0, 2.2f + i * 1.25f).Y), shape, new Color(trim, 0.75f));
+                var sd = U(6.5f, 4.6f);
+                for (int i = 0; i < 18; i++)
+                {
+                    float a = i * Mathf.Tau / 18;
+                    Bar(sd + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * u * 3.0f, sd + new Vector2(Mathf.Cos(a), Mathf.Sin(a)) * u * 4.4f, Mathf.Max(1, u * 0.14f), new Color(1, 1, 1, 0.35f));
+                }
+                Clip(ci, Px.Ellipse(sd, u * 2.9f, u * 2.9f, 28), shape, new Color(1, 0.95f, 0.7f, 0.45f));
+                Clip(ci, new[] { U(1.5f, 9.2f), U(5.0f, 5.6f), U(8.5f, 9.2f) }, shape, new Color(Px.Hex(0x8e5a14), 0.28f));
+                Clip(ci, new[] { U(5.0f, 5.6f), U(8.5f, 9.2f), U(5.6f, 9.2f) }, shape, new Color(Px.Hex(0x5a3408), 0.2f));
+                // The frieze: little glyphs between gold rules, under the steps.
+                float fy = 1.15f;
+                Clip(ci, Quad(U(1.2f, fy).X, U(0, fy).Y, U(8.8f, fy).X, U(0, fy + 0.1f).Y), shape, new Color(trim, 0.9f));
+                Clip(ci, Quad(U(1.2f, fy + 0.85f).X, U(0, fy + 0.85f).Y, U(8.8f, fy + 0.85f).X, U(0, fy + 0.95f).Y), shape, new Color(trim, 0.9f));
+                for (int i = 0; i < 9; i++)
+                {
+                    var g = U(1.6f + i * 0.85f, fy + 0.48f);
+                    float w = u * 0.2f;
+                    switch (i % 4)
+                    {
+                        case 0: Clip(ci, Px.Ellipse(g, w, w * 0.6f, 8), shape, new Color(trim, 0.9f)); break;
+                        case 1: Bar(g + new Vector2(0, -w * 1.3f), g + new Vector2(0, w * 1.3f), Mathf.Max(1, u * 0.1f), new Color(trim, 0.9f)); break;
+                        case 2: Clip(ci, new[] { g + new Vector2(-w, w), g + new Vector2(0, -w), g + new Vector2(w, w) }, shape, new Color(trim, 0.9f)); break;
+                        default: Bar(g + new Vector2(-w, -w * 0.6f), g + new Vector2(w, w * 0.6f), Mathf.Max(1, u * 0.1f), new Color(acc, 1)); Bar(g + new Vector2(-w, w * 0.6f), g + new Vector2(w, -w * 0.6f), Mathf.Max(1, u * 0.1f), new Color(acc, 1)); break;
+                    }
+                }
+                break;
+            }
+            case "thunder":
+            {
+                // Storm clouds, a violet charge behind him, forked bolts, slanting rain.
+                Clip(ci, Px.Ellipse(U(6.5f, 4.9f), u * 3.6f, u * 3.6f, 26), shape, new Color(acc, 0.2f));
+                foreach (var (x, y, rx) in new[] { (1.0f, 0.6f, 2.2f), (4.2f, 0.2f, 2.6f), (8.4f, 0.5f, 2.4f), (2.6f, 1.2f, 1.8f), (7.0f, 1.3f, 2.0f) })
+                    Clip(ci, Px.Ellipse(U(x, y), u * rx, u * rx * 0.55f, 18), shape, new Color(Px.Hex(0x5a5a80), 0.75f));
+                for (int i = 0; i < 18; i++)
+                {
+                    var a = U(0.3f + (i * 37 % 95) / 10f, 2.5f + (i * 53 % 100) / 10f);
+                    Bar(a, a + new Vector2(-u * 0.25f, u * 0.8f), lw, new Color(0.75f, 0.8f, 1f, 0.22f));
+                }
+                void Bolt(Vector2[] pts, float w)
+                {
+                    for (int i = 0; i < pts.Length - 1; i++)
+                    {
+                        Bar(pts[i], pts[i + 1], w * 2.4f, new Color(acc, 0.35f));
+                        Bar(pts[i], pts[i + 1], w, new Color(trim, 0.95f));
+                    }
+                }
+                Bolt(new[] { U(2.6f, 1.4f), U(1.6f, 3.6f), U(2.4f, 3.7f), U(0.9f, 6.6f) }, Mathf.Max(1, u * 0.16f));
+                Bolt(new[] { U(8.6f, 1.5f), U(9.4f, 4.0f), U(8.7f, 4.1f), U(9.6f, 6.8f) }, Mathf.Max(1, u * 0.14f));
+                Bolt(new[] { U(1.6f, 3.6f), U(0.6f, 4.4f) }, Mathf.Max(1, u * 0.1f));
+                Bolt(new[] { U(3.0f, 13.6f), U(4.0f, 12.2f), U(3.4f, 12.1f), U(4.6f, 10.6f) }, Mathf.Max(1, u * 0.1f));
+                break;
+            }
+            case "atlantis":
+            {
+                // Light falling through water, a golden trident behind him, bubbles, kelp, scales.
+                for (int i = 0; i < 5; i++)
+                {
+                    float x = 0.5f + i * 2.3f;
+                    Clip(ci, new[] { U(x, 0), U(x + 0.9f, 0), U(x + 2.6f, 14), U(x + 0.8f, 14) }, shape, new Color(1, 1, 1, 0.09f));
+                }
+                var tb = U(6.5f, 8.2f);
+                Bar(tb, U(6.5f, 1.2f), Mathf.Max(1, u * 0.24f), new Color(acc, 0.55f));
+                Bar(U(5.2f, 2.6f), U(7.8f, 2.6f), Mathf.Max(1, u * 0.2f), new Color(acc, 0.55f));
+                foreach (float x in new[] { 5.2f, 6.5f, 7.8f })
+                {
+                    Bar(U(x, 2.6f), U(x, 0.9f), Mathf.Max(1, u * 0.2f), new Color(acc, 0.55f));
+                    Clip(ci, new[] { U(x - 0.3f, 1.0f), U(x, 0.35f), U(x + 0.3f, 1.0f) }, shape, new Color(acc, 0.7f));
+                }
+                for (int row = 0; row < 4; row++)
+                    for (int col = 0; col < 7; col++)
+                    {
+                        var c = U(col * 1.5f + (row % 2) * 0.75f, 10.4f + row * 0.85f);
+                        var arc = new Vector2[6];
+                        for (int i = 0; i < 6; i++)
+                        {
+                            float a = i / 5f * Mathf.Pi;
+                            arc[i] = c + new Vector2(-Mathf.Cos(a) * u * 0.75f, Mathf.Sin(a) * u * 0.5f);
+                        }
+                        for (int i = 0; i < 5; i++) Bar(arc[i], arc[i + 1], lw, new Color(trim, 0.2f));
+                    }
+                foreach (var (x, h) in new[] { (0.5f, 4.5f), (1.3f, 3.2f), (9.3f, 4.0f), (8.7f, 2.6f) })
+                    for (int i = 0; i < 6; i++)
+                    {
+                        float y0 = 14 - i * h / 6, y1 = 14 - (i + 1) * h / 6;
+                        Bar(U(x + (i % 2 == 0 ? -0.15f : 0.15f), y0), U(x + (i % 2 == 0 ? 0.15f : -0.15f), y1), Mathf.Max(1, u * 0.22f), new Color(Px.Hex(0x2ac48a), 0.7f));
+                    }
+                foreach (var (x, y, r) in new[] { (1.2f, 7.2f, 0.3f), (1.6f, 6.3f, 0.18f), (8.8f, 6.0f, 0.26f), (9.1f, 5.2f, 0.16f), (2.0f, 2.2f, 0.2f), (8.6f, 1.4f, 0.22f), (4.6f, 12.6f, 0.2f) })
+                {
+                    var b = U(x, y);
+                    var ring = Px.Ellipse(b, u * r, u * r, 12);
+                    for (int i = 0; i < ring.Length; i++) Bar(ring[i], ring[(i + 1) % ring.Length], lw, new Color(1, 1, 1, 0.6f));
+                    ci.DrawRect(new Rect2(b + new Vector2(-u * r * 0.5f, -u * r * 0.6f), Vector2.One * Mathf.Max(1, u * 0.1f)), new Color(1, 1, 1, 0.8f));
+                }
+                break;
+            }
+        }
+    }
+
+    /// <summary>The epic sets' finish: a second gold rule inside the first, a gem in each upper
+    /// corner and a pair of foil sheens across the face.</summary>
+    static void EpicFrame(CanvasItem ci, Rect2 ir, float[] outline, Vector2[] shape, Func<float, float, Vector2> U, float u, Color trim, Color acc)
+    {
+        foreach (float x in new[] { 1.2f, 4.6f })
+            Clip(ci, new[] { U(x, 0), U(x + 1.0f, 0), U(x - 3.4f, 14), U(x - 4.4f, 14) }, shape, new Color(1, 1, 1, 0.08f));
+        var line = Shape(ir.Grow(-u * 0.6f), outline);
+        var closed = new Vector2[line.Length + 1];
+        Array.Copy(line, closed, line.Length);
+        closed[^1] = line[0];
+        ci.DrawPolyline(closed, new Color(trim, 0.55f), Mathf.Max(1, u * 0.08f));
+        var gold = Px.Hex(0xffd447);
+        foreach (var g in new[] { U(0.55f, 1.7f), U(ir.Size.X / u - 0.55f, 1.7f) })
+        {
+            float w = Mathf.Max(2, u * 0.32f);
+            ci.DrawColoredPolygon(new[] { g + new Vector2(0, -w * 1.25f), g + new Vector2(w, 0), g + new Vector2(0, w * 1.25f), g + new Vector2(-w, 0) }, gold.Darkened(0.3f));
+            w *= 0.7f;
+            ci.DrawColoredPolygon(new[] { g + new Vector2(0, -w * 1.25f), g + new Vector2(w, 0), g + new Vector2(0, w * 1.25f), g + new Vector2(-w, 0) }, acc);
+            ci.DrawColoredPolygon(new[] { g + new Vector2(0, -w * 1.25f), g + new Vector2(w * 0.5f, -w * 0.35f), g + new Vector2(-w * 0.5f, -w * 0.35f) }, new Color(1, 1, 1, 0.65f));
         }
     }
 
